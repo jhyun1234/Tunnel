@@ -9,8 +9,8 @@ using UnityEngine.Rendering;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드 장치로 넣는다 — Player 는 사람 키보드와 같은 길(Keyboard.current)로 읽는다.
-// -sabotage floor|lamp|fog|thickfog 는 검사가 FAIL 을 내는지 확인하는 용도다.
-// -sweep 은 검사 대신 램프 세기·안개 밀도·안개 품질을 바꿔 가며 밝기·구조·fps 를 "SWEEP" 줄로 남긴다.
+// -sabotage floor|lamp|fog|thickfog|nodim 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
     public Player player;
@@ -21,6 +21,10 @@ public class M1Check : MonoBehaviour
     const float MinFps = 60f;
     // Godot 골든 캡처 play_09_lamp.png(직선 갱도, 램프 켬) 화면 평균 밝기. 같은 계산(sRGB 휘도 평균)으로 잰 참고값
     const float GodotLum = 0.063f;
+    const float BurntLum = 0.85f;                 // 이 밝기 위 픽셀 = 하얗게 탄 픽셀
+    // 벽 앞 화면에서 탄 픽셀 비율 상한. 실측(09-14 -sweep, 램프 75.2): 감광 없음 45 % · ref 2 = 9.4 % · pow 1.0 = 7.0 % · ref 3 = 2.8 % · ref 4 pow 1.4 = 1.3 %
+    const float MaxBurntNearWall = 0.05f;
+    static readonly Vector3 NearWallPos = new Vector3(2.75f, 0.1f, 15.75f);   // 오른쪽 벽에 몸이 닿는 자리, 기둥 사이
     readonly List<string> fails = new List<string>();
     string outDir;
 
@@ -53,8 +57,10 @@ public class M1Check : MonoBehaviour
             fog.density.value = 0f;
         if (sabotage == "thickfog")
             fog.density.value = 0.012f;          // Godot 값 그대로 — 갱도 끝이 흰 막이 되던 밀도
+        if (sabotage == "nodim")
+            lamp.nearPow = 0f;                   // 가까운 면 감광 끔 — 벽 앞이 하얗게 타던 상태
         Debug.Log($"CHECK start sabotage='{sabotage}' sweep={sweep} screen {Screen.width}x{Screen.height}");
-        StartCoroutine(sweep ? Sweep(fog) : Run(fog));
+        StartCoroutine(sweep ? Sweep() : Run(fog));
     }
 
     IEnumerator Run(VolumetricFogVolumeComponent fog)
@@ -104,19 +110,24 @@ public class M1Check : MonoBehaviour
             $"spotAngle={light.spotAngle} shadows={light.shadows}");
 
         // 5. 앞뒤 대칭: 갱도 가운데(조각 이음새 z 17.5)에서 +Z / -Z. 갱도가 대칭이라 밝기가 비슷해야 한다.
-        // 사용자 지적(09-14 "+Z 쪽으로 램프 빛이 안 보인다") — 실측 +Z 0.022 / -Z 0.130
+        // 사용자 지적(09-14 "+Z 쪽으로 램프 빛이 안 보인다") — 노멀맵 sRGB 임포트 때 +Z 0.022 / -Z 0.130
         Vector3 back = player.transform.position;
-        Vector2 plusZ = default, minusZ = default;
+        Vector3 plusZ = default, minusZ = default, nearWall = default;
         Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 0f);
         yield return Capture("4_mid_plusZ", v => plusZ = v);
         Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 180f);
         yield return Capture("5_mid_minusZ", v => minusZ = v);
         float sym = Mathf.Min(plusZ.x, minusZ.x) / Mathf.Max(Mathf.Max(plusZ.x, minusZ.x), 1e-5f);
         Check("lamp_symmetric_z", sym > 0.67f, $"+Z {plusZ.x:F4} -Z {minusZ.x:F4} (min/max {sym:F2})");
+
+        // 6. 벽 앞: 몸이 벽에 닿은 자리에서 벽을 본다. 사용자 지적(09-14 "벽에 가까이 붙으면 램프를 낮춰도 매우 밝다")
+        Teleport(cc, NearWallPos, 90f);
+        yield return Capture("6_near_wall", v => nearWall = v);
+        Check("near_wall_not_burnt", nearWall.z < MaxBurntNearWall, $"burnt {nearWall.z * 100f:F1} % (limit {MaxBurntNearWall * 100f:F0} %) lum {nearWall.x:F3} dim {lamp.nearDim:F3}");
         Teleport(cc, back, 0f);
 
-        // 6. 화면: 램프+안개 / 램프만 / 램프 끔. 밝기(lum)·구조(grad, 이웃 픽셀 차)·fps 는 사람이 보는 화면에서 잰다
-        Vector2 fogShot = default, noFogShot = default, darkShot = default;
+        // 7. 화면: 램프+안개 / 램프만 / 램프 끔. 밝기(lum)·구조(grad, 이웃 픽셀 차)·fps 는 사람이 보는 화면에서 잰다
+        Vector3 fogShot = default, noFogShot = default, darkShot = default;
         float fpsFog = 0f, fpsNoFog = 0f;
         yield return Capture("1_lamp_fog", v => fogShot = v);
         yield return MeasureFps(5f, v => fpsFog = v);
@@ -130,8 +141,7 @@ public class M1Check : MonoBehaviour
         yield return Capture("3_lamp_off", v => darkShot = v);
 
         Check("lamp_lights_screen", fogShot.x > 0.01f && fogShot.x > darkShot.x * 3f, $"on {fogShot.x:F4} off {darkShot.x:F4}");
-        // 기준 화면이 거의 검으면 아래 안개 구조 비교가 뜻이 없다 — 첫 빌드(램프 35, 밝기 0.003)에서 망가진 안개가 PASS 했다.
-        // 하한 0.008 = 사용자 판정 램프 146.8 의 실측(약 0.017)의 절반. Godot 비율은 참고로만 남긴다
+        // 기준 화면이 거의 검으면 아래 안개 구조 비교가 뜻이 없다 — 첫 빌드(램프 35, 밝기 0.003)에서 망가진 안개가 PASS 했다
         Check("lamp_not_black", noFogShot.x > 0.008f, $"nofog lum {noFogShot.x:F4} (Godot {GodotLum} 의 x{noFogShot.x / GodotLum:F2})");
         // 안개가 보여야 하고(밝기 +2 % 이상), 갱도 형태를 지우면 안 된다(구조 85 % 이상 남음 — 실측 0.012 는 70 % 로 끝이 흰 막이었다)
         Check("volfog_visible", fogShot.x > noFogShot.x * 1.02f, $"lum fog {fogShot.x:F4} nofog {noFogShot.x:F4}");
@@ -141,49 +151,23 @@ public class M1Check : MonoBehaviour
         Finish();
     }
 
-    // 값 고르기용 측정. 판정이 아니라 숫자 표를 남긴다
-    IEnumerator Sweep(VolumetricFogVolumeComponent fog)
+    // 값 고르기용 측정: 가까운 면 감광(기준 거리·지수)마다 갱도(z 17.5, +Z)와 벽 앞 화면. 판정이 아니라 숫자 표를 남긴다
+    IEnumerator Sweep()
     {
         yield return new WaitForSeconds(1.5f);
-        fog.enabled.value = false;
-        float bestEnergy = lamp.energy, bestErr = float.MaxValue;
-        foreach (float e in new[] { 35f, 70f, 140f, 280f, 560f, 1120f })
+        var cc = player.GetComponent<CharacterController>();
+        foreach (var (reference, pow) in new[] { (4f, 0f), (2f, 1.4f), (3f, 1.4f), (4f, 1.4f), (4f, 1.0f), (6f, 1.4f) })
         {
-            lamp.energy = e;
-            Vector2 shot = default;
-            yield return Capture($"sweep_lamp_{e:0}", v => shot = v);
-            float err = Mathf.Abs(Mathf.Log(Mathf.Max(shot.x, 1e-5f) / GodotLum));
-            if (err < bestErr) { bestErr = err; bestEnergy = e; }
-            Debug.Log($"SWEEP lamp {e,6:0} nofog lum {shot.x:F4} grad {shot.y:F2}");
+            lamp.nearRef = reference;
+            lamp.nearPow = pow;
+            Vector3 far = default, near = default;
+            Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 0f);
+            yield return Capture($"sweep_far_r{reference:0}_p{pow:0.0}", v => far = v);
+            float farDim = lamp.nearDim;
+            Teleport(cc, NearWallPos, 90f);
+            yield return Capture($"sweep_near_r{reference:0}_p{pow:0.0}", v => near = v);
+            Debug.Log($"SWEEP ref {reference:0} pow {pow:0.0} lamp {lamp.energy} | tunnel dim {farDim:F2} lum {far.x:F4} burnt {far.z * 100f:F1} % | near wall dim {lamp.nearDim:F3} lum {near.x:F3} burnt {near.z * 100f:F1} %");
         }
-        lamp.energy = bestEnergy;
-        Vector2 baseShot = default;
-        float baseFps = 0f;
-        yield return Capture("sweep_base", v => baseShot = v);
-        yield return MeasureFps(3f, v => baseFps = v);
-        Debug.Log($"SWEEP base lamp {bestEnergy:0} nofog lum {baseShot.x:F4} grad {baseShot.y:F2} fps {baseFps:F0}");
-
-        fog.enabled.value = true;
-        foreach (float d in new[] { 0.012f, 0.006f, 0.003f, 0.0015f, 0.0007f, 0.0003f })
-        {
-            fog.density.value = d;
-            Vector2 shot = default;
-            float fps = 0f;
-            yield return Capture($"sweep_fog_{d:0.0000}", v => shot = v);
-            yield return MeasureFps(3f, v => fps = v);
-            Debug.Log($"SWEEP fog {d:0.0000} lum {shot.x:F4} (x{shot.x / baseShot.x:F2}) grad {shot.y:F2} ({shot.y / baseShot.y * 100f:F0} %) fps {fps:F0} ({1000f / fps:F2} ms)");
-        }
-        fog.density.value = 0.0015f;
-        foreach (int steps in new[] { 128, 64, 32, 16 })
-            foreach (int blur in new[] { 2, 1 })
-            {
-                fog.maxSteps.value = steps;
-                fog.blurIterations.value = blur;
-                float fps = 0f;
-                yield return new WaitForSeconds(0.3f);
-                yield return MeasureFps(3f, v => fps = v);
-                Debug.Log($"SWEEP quality steps {steps,3} blur {blur} fps {fps:F0} ({1000f / fps:F2} ms)");
-            }
         Debug.Log("CHECK ALL PASS");
         Application.Quit(0);
     }
@@ -210,8 +194,8 @@ public class M1Check : MonoBehaviour
 
     static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
-    // x = 평균 밝기(sRGB 휘도 0~1), y = 구조(이웃 픽셀 밝기 차 평균 × 1000). 안개가 형태를 지우면 y 가 떨어진다
-    IEnumerator Capture(string name, Action<Vector2> result)
+    // x = 평균 밝기(sRGB 휘도 0~1), y = 구조(이웃 픽셀 밝기 차 평균 × 1000), z = 하얗게 탄 픽셀 비율(BurntLum 위)
+    IEnumerator Capture(string name, Action<Vector3> result)
     {
         yield return new WaitForSeconds(0.6f);        // 램프 페이드·안개 누적·램프 늦게 따라오기가 끝나게
         yield return new WaitForEndOfFrame();
@@ -221,17 +205,17 @@ public class M1Check : MonoBehaviour
         int w = tex.width, h = tex.height;
         Destroy(tex);
         double sum = 0, grad = 0;
-        int n = 0, g = 0;
+        int n = 0, burnt = 0;
         for (int y = 0; y < h - 1; y += 3)
             for (int x = 0; x < w - 1; x += 3)
             {
                 float l = Lum(px[y * w + x]);
                 sum += l;
                 n++;
+                if (l > BurntLum) burnt++;
                 grad += Mathf.Abs(Lum(px[y * w + x + 1]) - l) + Mathf.Abs(Lum(px[(y + 1) * w + x]) - l);
-                g++;
             }
-        result(new Vector2((float)(sum / n), (float)(grad / g * 1000.0)));
+        result(new Vector3((float)(sum / n), (float)(grad / n * 1000.0), (float)burnt / n));
     }
 
     static float Lum(Color32 c) => (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255f;

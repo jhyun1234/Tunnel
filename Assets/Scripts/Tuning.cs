@@ -38,9 +38,17 @@ public static class Tuning
     public const float LAMP_INNER_FRAC = 0.3f;     // Unity 전용: 안쪽 원뿔 = 전체각 × 이 값. Godot LAMP_ATTEN(0.45) 대응이 없어 대신한다
     public const float LAMP_RANGE = 14.0f;         // m
     // Unity 전용 값. Godot 5.0 은 거리 감쇠 0.6(거리^-0.6)이었고 URP 는 거리 제곱 고정이라 값이 옮겨지지 않는다.
-    // 사용자 판정(09-14 M1) 146.8 (= 560 ÷ 1.25^6). 노멀맵 임포트 버그 상태에서 골랐고, 고친 뒤(화면 밝기 0.096, Godot 골든 ×1.5)
-    // 사용자가 "이대로 간다"고 확정 (09-14). 첫 -sweep 표(35~1120)는 버그 상태 값이라 쓰지 않는다
-    public const float LAMP_ENERGY = 146.8f;
+    // 사용자 판정 146.8 (09-14 1차, 노멀맵 버그 상태) → 75.2 (= 146.8 ÷ 1.25^3, 09-14 재판정)
+    public const float LAMP_ENERGY = 75.2f;
+    // Unity 전용: 가까운 면 감광. URP 는 거리 제곱 감쇠라 벽에 붙으면 화면이 하얗게 탔다(사용자 09-14 "램프를 낮춰도 매우 밝다",
+    // 실측 벽 앞 탄 픽셀 45 %). 원뿔 안 광선 9개로 비춘 면까지 거리 d 를 재고 세기에 평균 min(1, (d/REF)^POW) 을 곱한다.
+    // POW 1.4 = 2 − Godot LAMP_DIST_ATTEN 0.6 — 가까운 면의 밝기 비율이 Godot 곡선과 같아진다. 충돌체가 있는 면만 잰다(갱목 기둥은 없음).
+    // 실측(09-14 -sweep, 램프 75.2, 벽 앞 탄 픽셀 · 갱도 밝기): 감광 없음 45.1 % · 0.0529 / REF 2 = 9.4 % · 0.0529 / REF 3 = 2.8 % · 0.0520 /
+    // REF 4 = 1.3 % · 0.0515 / REF 4 POW 1.0 = 7.0 % / REF 6 = 0.4 % · 0.0469(갱도가 10 % 어두워짐). Godot 에서 온 REF 4 · POW 1.4 로 둔다.
+    // (발광점을 카메라 뒤로 빼는 방법은 실측으로 기각: 뒤로 0.35 m 에서 탄 픽셀 45 → 55 %, 원뿔이 벽을 더 넓게 덮을 뿐)
+    public const float LAMP_NEAR_REF = 4.0f;       // m, 이보다 먼 면은 감광 없음
+    public const float LAMP_NEAR_POW = 1.4f;
+    public const float LAMP_NEAR_TIME = 0.15f;     // 초, 감광이 따라가는 시간 — 광선이 기둥 가장자리를 넘을 때 깜빡이지 않게
     public static readonly Color LAMP_COLOR = new Color(1.00f, 0.96f, 0.88f);
     public const bool LAMP_SHADOW = true;
     public const float LAMP_FOLLOW_TIME = 0.10f;   // 초, 램프가 시점을 늦게 따라온다
