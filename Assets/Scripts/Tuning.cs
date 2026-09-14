@@ -38,8 +38,8 @@ public static class Tuning
     public const float LAMP_INNER_FRAC = 0.3f;     // Unity 전용: 안쪽 원뿔 = 전체각 × 이 값. Godot LAMP_ATTEN(0.45) 대응이 없어 대신한다
     public const float LAMP_RANGE = 14.0f;         // m
     // Unity 전용 값. Godot 5.0 은 거리 감쇠 0.6(거리^-0.6)이었고 URP 는 거리 제곱 고정이라 값이 옮겨지지 않는다.
-    // 사용자 판정(09-14 M1 실행 파일) 146.8 (= 560 ÷ 1.25^6). 단, 이 판정과 첫 -sweep 표(35~1120)는 노멀맵이 sRGB 로 잘못
-    // 임포트된 상태(+Z 쪽이 6배 어두움)에서 나왔다. 고친 뒤 146.8 의 화면 밝기 0.096 (Godot 골든 0.063 의 ×1.5) — 재판정 필요
+    // 사용자 판정(09-14 M1) 146.8 (= 560 ÷ 1.25^6). 노멀맵 임포트 버그 상태에서 골랐고, 고친 뒤(화면 밝기 0.096, Godot 골든 ×1.5)
+    // 사용자가 "이대로 간다"고 확정 (09-14). 첫 -sweep 표(35~1120)는 버그 상태 값이라 쓰지 않는다
     public const float LAMP_ENERGY = 146.8f;
     public static readonly Color LAMP_COLOR = new Color(1.00f, 0.96f, 0.88f);
     public const bool LAMP_SHADOW = true;
@@ -54,7 +54,7 @@ public static class Tuning
     public const float FOG_DENSITY = 0.03f;        // 거리 안개 (Exponential)
     public static readonly Color FOG_COLOR = new Color(0.006f, 0.008f, 0.008f);
     // 부피 안개 (패키지 com.cqf.urpvolumetricfog). Godot 0.012 는 단위가 달라 옮겨지지 않는다 (0.012 = 갱도 끝이 흰 막).
-    // 사용자 판정(09-14 M1 실행 파일, 램프 146.8) 0.00089 (= 0.003 ÷ 1.5^3). 노멀맵 임포트 버그 상태에서 고른 값 — 재판정 필요
+    // 사용자 판정(09-14 M1, 램프 146.8) 0.00089 (= 0.003 ÷ 1.5^3). 노멀맵 버그를 고친 뒤에도 "이대로 간다"고 확정 (09-14)
     public const float VOLFOG_DENSITY = 0.00089f;
     public const float VOLFOG_ANISOTROPY = 0.6f;
     public const float VOLFOG_SCATTERING = 1.0f;   // Unity 전용: 패키지 VolumetricAdditionalLight 기본값
