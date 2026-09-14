@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// 1인칭 이동 · 마우스 시점 · 점프 · 세 자세 · 스태미나. Godot Player.gd _physics_process 를 옮겼다.
-// 입력은 키보드·마우스 장치에서만 읽는다 — 검사(M1Check)도 가상 키보드로 같은 길을 지난다.
+// 1인칭 이동 · 마우스 시점 · 점프 · 세 자세 · 스태미나 · 광석 수 · 화면 흔들림. Godot Player.gd 를 옮겼다.
+// 입력은 키보드·마우스 장치에서만 읽는다 — 검사(M1Check)도 가상 장치로 같은 길을 지난다.
 [RequireComponent(typeof(CharacterController))]
 public class Player : MonoBehaviour
 {
@@ -10,11 +10,26 @@ public class Player : MonoBehaviour
     public float stamina = Tuning.STAMINA_MAX;
     public bool exhausted;                 // 0 에서 Shift 를 계속 눌렀다 — 100 찰 때까지 못 움직인다 (시점·숙이기는 됨)
     public string stance = "walk";         // crouch / walk / run
+    [System.NonSerialized] public int ore; // 캔 광석 수
 
     CharacterController cc;
     Vector3 velocity;
     float pitch;
     float eye = Tuning.EYE_HEIGHT;
+    float shakeLeft, shakeAmount, shakeSpan;
+
+    public CharacterController Controller => cc;
+    public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
+
+    public void AddOre(int count) => ore += count;
+
+    // 화면을 짧게 흔든다. 카메라가 아니라 머리 위치만 — 조준은 그대로다
+    public void Shake(float amount, float span)
+    {
+        shakeAmount = amount;
+        shakeSpan = span;
+        shakeLeft = span;
+    }
 
     void Awake()
     {
@@ -90,6 +105,14 @@ public class Player : MonoBehaviour
 
         if ((cc.Move(velocity * dt) & CollisionFlags.Above) != 0 && velocity.y > 0f)
             velocity.y = 0f;
+
+        Vector3 shake = Vector3.zero;
+        if (shakeLeft > 0f)
+        {
+            shakeLeft -= dt;
+            shake = new Vector3(Random.Range(-1f, 1f), Random.Range(-1f, 1f), 0f) * shakeAmount * Mathf.Max(shakeLeft, 0f) / shakeSpan;
+        }
+        head.localPosition = new Vector3(0f, eye, 0f) + shake;
     }
 
     // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다
@@ -99,7 +122,6 @@ public class Player : MonoBehaviour
         if (Mathf.Approximately(eye, target))
             return;
         eye = Mathf.MoveTowards(eye, target, (Tuning.EYE_HEIGHT - Tuning.CROUCH_EYE) / Tuning.CROUCH_TIME * dt);
-        head.localPosition = new Vector3(0f, eye, 0f);
         SetHeight(Tuning.BODY_HEIGHT - (Tuning.EYE_HEIGHT - eye));
     }
 

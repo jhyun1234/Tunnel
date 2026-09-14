@@ -16,6 +16,10 @@ public static class BuildM1
     const string ProfilePath = "Assets/Settings/M1_Volume.asset";
     const string RendererPath = "Assets/Settings/PC_Renderer.asset";
     const string ExePath = "build/Tunnel/Tunnel.exe";
+    const string PickPath = "Assets/Tunnel/Pieces/pick.gltf";
+    const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
+    const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
+    const string DustMatPath = "Assets/Settings/M2_Dust.mat";
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
     public static void MakeScene()
@@ -30,6 +34,16 @@ public static class BuildM1
         if (piece == null)
         {
             Debug.LogError($"{PiecePath} 를 못 읽었다 (glTFast 임포트 확인)");
+            EditorApplication.Exit(3);
+            return;
+        }
+
+        var pick = AssetDatabase.LoadAssetAtPath<GameObject>(PickPath);
+        var ore = AssetDatabase.LoadAssetAtPath<GameObject>(OrePath);
+        var chips = AssetDatabase.LoadAssetAtPath<GameObject>(ChipsPath);
+        if (pick == null || ore == null || chips == null)
+        {
+            Debug.LogError("pick / ore / mine_chips glTF 를 못 읽었다 (glTFast 임포트 확인)");
             EditorApplication.Exit(3);
             return;
         }
@@ -67,6 +81,31 @@ public static class BuildM1
         EndWall(pieces, "End_S", -Tuning.GRID_CELL * 0.5f);
         EndWall(pieces, "End_N", (PieceCount - 0.5f) * Tuning.GRID_CELL);
 
+        // 광맥 포켓: 조각의 SLOT_Pocket_* 자리마다 POCKET_CHANCE 로 (Godot PocketSpawner.gd). 통로 쪽 = 자리에서 조각 원점 쪽
+        var rng = new System.Random(Tuning.MAP_SEED + 100);
+        var pocketsRoot = new GameObject("Pockets").transform;
+        foreach (var slot in pieces.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Pocket_")).ToArray())
+        {
+            if (rng.NextDouble() >= Tuning.POCKET_CHANCE)
+                continue;
+            var pieceRoot = slot;
+            while (pieceRoot.parent != pieces)
+                pieceRoot = pieceRoot.parent;
+            Vector3 outDir = pieceRoot.position - slot.position;
+            outDir.y = 0f;
+            outDir.Normalize();
+            var go = new GameObject("OrePocket");
+            go.transform.SetParent(pocketsRoot);
+            go.transform.SetPositionAndRotation(slot.position + outDir * Tuning.POCKET_WALL_OUT,
+                Quaternion.Euler((float)rng.NextDouble() * 360f, (float)rng.NextDouble() * 360f, (float)rng.NextDouble() * 360f));
+            go.AddComponent<SphereCollider>().radius = Tuning.POCKET_RADIUS;
+            var pocketMesh = Instance(ore, go.transform);
+            pocketMesh.transform.localScale = Vector3.one * Tuning.POCKET_MESH_SCALE;
+            var pocket = go.AddComponent<OrePocket>();
+            pocket.mesh = pocketMesh.transform;
+            pocket.outDir = outDir;
+        }
+
         // 플레이어
         var player = new GameObject("Player");
         player.transform.position = new Vector3(0f, 0.1f, 0f);
@@ -85,6 +124,14 @@ public static class BuildM1
         cam.backgroundColor = Tuning.BACKGROUND;
         camGo.AddComponent<UniversalAdditionalCameraData>().renderPostProcessing = true;
         camGo.AddComponent<AudioListener>();
+
+        // 곡괭이 뷰모델 (카메라 밑). 자세·배율은 Pickaxe.Awake 가 Tuning 에서 넣는다
+        var pickGo = new GameObject("Pickaxe");
+        pickGo.transform.SetParent(camGo.transform, false);
+        var pickaxe = pickGo.AddComponent<Pickaxe>();
+        pickaxe.cam = camGo.transform;
+        pickaxe.player = p;
+        pickaxe.mesh = Instance(pick, pickGo.transform).transform;
 
         var lampGo = new GameObject("Headlamp");
         Headlamp.Apply(lampGo.AddComponent<Light>());
@@ -109,6 +156,16 @@ public static class BuildM1
         check.lamp = lamp;
         check.volume = volume;
         check.pieces = pieces;
+        check.pickaxe = pickaxe;
+
+        var mining = new GameObject("Mining");
+        var fx = mining.AddComponent<MiningFx>();
+        fx.player = p;
+        fx.orePrefab = ore;
+        fx.chipMeshes = chips.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh).ToArray();
+        fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
+        fx.dustMaterial = MakeDustMaterial();
+        mining.AddComponent<MiningHud>().player = p;
 
         EditorSceneManager.SaveScene(scene, ScenePath);
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
@@ -129,6 +186,25 @@ public static class BuildM1
         });
         Debug.Log($"BUILD {report.summary.result} errors={report.summary.totalErrors} size={report.summary.totalSize / 1048576} MB");
         EditorApplication.Exit(report.summary.result == BuildResult.Succeeded ? 0 : 1);
+    }
+
+    static GameObject Instance(GameObject prefab, Transform parent)
+    {
+        var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+        PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+        return go;
+    }
+
+    // 먼지 재질: URP 기본 파티클 재질(반투명)을 복사해 조명을 받는 Simple Lit 으로 — 램프 밖 먼지가 어둠에서 빛나지 않게
+    static Material MakeDustMaterial()
+    {
+        AssetDatabase.DeleteAsset(DustMatPath);
+        var urp = (UniversalRenderPipelineAsset)(QualitySettings.renderPipeline ?? GraphicsSettings.defaultRenderPipeline);
+        var mat = new Material(urp.defaultParticleMaterial) { name = "M2_Dust" };
+        mat.shader = Shader.Find("Universal Render Pipeline/Particles/Simple Lit");
+        BaseShaderGUI.SetupMaterialBlendMode(mat);
+        AssetDatabase.CreateAsset(mat, DustMatPath);
+        return mat;
     }
 
     static void EndWall(Transform parent, string name, float z)

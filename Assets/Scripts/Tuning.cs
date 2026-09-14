@@ -70,6 +70,55 @@ public static class Tuning
     public const float ADJ_SATURATION = 0.75f;
     public const float VIGNETTE = 0.35f;
 
+    // ---- 채굴 (M2). Godot Tuning.gd 채굴·자갈·광맥 포켓·곡괭이·소음 절 ----
+    public const int MAP_SEED = 7;                 // 포켓 회전 난수는 MAP_SEED + 100
+    public const float MINE_DAMAGE = 25.0f;        // 1회 타격
+    public const float POCKET_HEALTH = 50.0f;      // 2타 — 첫 타에 자갈, 둘째 타에 덩이가 빠진다
+    public const float MINE_RANGE = 3.0f;          // m
+    public const float MINE_COOLDOWN = 0.35f;      // 초, 연타해도 이보다 빠르지 않다
+    public const float HIT_RECOIL = 0.12f;         // m, 맞은 포켓이 밀리는 거리
+    public const float HIT_RECOIL_TIME = 0.10f;
+    public const float CHUNK_SPIN = 4.0f;          // rad/s
+    public const float CHUNK_FADE = 0.5f;          // 초, 자갈이 줄어들며 사라지는 시간
+    public const int CHUNK_LIMIT = 40;             // 살아 있는 자갈 상한
+    public const int HIT_DUST = 12;                // 알, 평타 먼지
+    public const int BREAK_DUST = 60;              // 알, 덩이가 빠질 때 먼지
+    public const float SHAKE_AMOUNT = 0.06f;       // m, 덩이가 빠질 때만 흔든다
+    public const float SHAKE_TIME = 0.15f;
+    public const int CHIP_PER_HIT = 2;
+    public const float CHIP_POP = 2.4f;            // m/s
+    public const float CHIP_LIFE = 1.2f;           // 초
+    // 자리당 켜질 확률. Godot 0.10 — M2 판정용 갱도(자리 24)는 전부 켠다 (사용자 09-14)
+    public const float POCKET_CHANCE = 1.0f;
+    public const float POCKET_WALL_OUT = 0.12f;    // m, 자리에서 통로 쪽으로 내미는 거리 — 벽 요철에 파묻히지 않게
+    public const float POCKET_MESH_SCALE = 1.2f;   // Godot OrePocket.tscn Mesh 배율
+    public const float POCKET_RADIUS = 0.16f;      // Godot OrePocket.tscn 충돌 구
+    public const float ORE_RADIUS = 0.12f;         // Godot Ore.tscn 충돌 구
+    public const float POCKET_POP_OUT = 1.4f;      // m/s, 통로 쪽으로 튀는 속도
+    public const float ORE_POP_UP = 2.2f;          // m/s
+    public const float ORE_POP_SIDE = 0.6f;        // m/s
+    public const float ORE_SPIN = 4.0f;            // rad/s
+    public const float ORE_ROLL_DAMP = 4.0f;       // 구르기 감쇠 — 1~1.5 m 에서 멎게 (Godot 실측)
+    public const float ORE_MAGNET_DELAY = 1.5f;    // 초, 튀어나온 뒤 이만큼은 안 빨려온다 — 구르는 것을 볼 새
+    public const float ORE_MAGNET_RANGE = 1.8f;    // m
+    public const float ORE_PULL_SPEED = 6.0f;      // m/s
+    public const float ORE_COLLECT_DIST = 0.35f;   // m
+    // 곡괭이 뷰모델. Unity 는 카메라 앞이 +Z 라 Godot PICK_POS z(-0.60)와 X 축 회전 부호를 뒤집었다
+    public static readonly Vector3 PICK_POS = new Vector3(0.32f, -0.42f, 0.60f);
+    public const float PICK_SCALE = 0.75f;
+    public const float PICK_TILT_DEG = 12.0f;      // Godot -12, 앞으로 눕힌 각
+    public const float PICK_YAW_DEG = 90.0f;       // 머리 긴 축(X)을 앞뒤로 세운다
+    public const float PICK_ROLL_DEG = 10.0f;      // 자루 끝을 앞으로 기울인 각
+    public const float PICK_SWING_DEG = 55.0f;     // 내려치는 각
+    public const float PICK_DOWN_TIME = 0.12f;     // 초, 내려치기 — 끝나는 순간이 타격
+    public const float PICK_UP_TIME = 0.23f;       // 초, 되돌리기. 합쳐서 MINE_COOLDOWN
+    public const float PICK_BOB_AMOUNT = 0.02f;    // m
+    public const float PICK_BOB_SPEED = 12.0f;     // rad/s
+    // 소음. 반경 m
+    public const float NOISE_PICK = 25.0f;         // 곡괭이가 포켓에 닿은 타격
+    public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간
+    public const float NOISE_HUD_PX_PER_M = 2.0f;  // 반경 1 m 당 지름 px
+
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;
     public static float JumpVelocity => Mathf.Sqrt(2.0f * GRAVITY * JUMP_HEIGHT);

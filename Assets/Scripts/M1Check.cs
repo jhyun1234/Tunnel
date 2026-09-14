@@ -9,7 +9,7 @@ using UnityEngine.Rendering;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드 장치로 넣는다 — Player 는 사람 키보드와 같은 길(Keyboard.current)로 읽는다.
-// -sabotage floor|lamp|fog|thickfog|nodim 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -17,6 +17,7 @@ public class M1Check : MonoBehaviour
     public Headlamp lamp;
     public Volume volume;
     public Transform pieces;
+    public Pickaxe pickaxe;
 
     const float MinFps = 60f;
     // Godot 골든 캡처 play_09_lamp.png(직선 갱도, 램프 켬) 화면 평균 밝기. 같은 계산(sRGB 휘도 평균)으로 잰 참고값
@@ -42,6 +43,7 @@ public class M1Check : MonoBehaviour
         outDir = Path.Combine(Path.GetDirectoryName(Application.dataPath), "check");
         Directory.CreateDirectory(outDir);
         Application.runInBackground = true;     // 창이 포커스를 잃어도 멈추지 않게
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;   // 포커스를 잃어도 가상 장치 입력을 막지 않게
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = -1;
         var hud = GetComponent<DevHud>();
@@ -59,6 +61,18 @@ public class M1Check : MonoBehaviour
             fog.density.value = 0.012f;          // Godot 값 그대로 — 갱도 끝이 흰 막이 되던 밀도
         if (sabotage == "nodim")
             lamp.nearPow = 0f;                   // 가까운 면 감광 끔 — 벽 앞이 하얗게 타던 상태
+        if (sabotage == "bury")                  // 포켓을 벽 속으로 0.4 m — 묻힌 포켓
+            foreach (var pk in FindObjectsByType<OrePocket>(FindObjectsSortMode.None))
+                pk.transform.position -= pk.outDir * 0.4f;
+        if (sabotage == "onehit")
+            pickaxe.damage = Tuning.POCKET_HEALTH;
+        if (sabotage == "spam")                  // 간격 없이 빠르게 휘두른다
+        {
+            pickaxe.cooldownTime = 0f;
+            pickaxe.swingTimeMul = 0.2f;
+        }
+        if (sabotage == "nomagnet")
+            Ore.MagnetRange = 0f;
         Debug.Log($"CHECK start sabotage='{sabotage}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? Sweep() : Run(fog));
     }
@@ -148,7 +162,93 @@ public class M1Check : MonoBehaviour
         Check("volfog_keeps_structure", fogShot.y >= noFogShot.y * 0.85f, $"grad fog {fogShot.y:F2} nofog {noFogShot.y:F2} ({fogShot.y / noFogShot.y * 100f:F0} %)");
         Check("fps_fog_min60", fpsFog >= MinFps, $"fog {fpsFog:F0} fps ({1000f / fpsFog:F2} ms) · nofog {fpsNoFog:F0} fps ({1000f / fpsNoFog:F2} ms) · {SystemInfo.graphicsDeviceName}");
 
+        yield return Mining(cc);
         Finish();
+    }
+
+    // 8. 채굴 (M2): 포켓 24자리 · 묻힘 · 채굴 거리 눈부심 · 두 번에 캐짐 · 소음 · 광석 구르기 · 줍기 · 휘두르기 간격
+    IEnumerator Mining(CharacterController cc)
+    {
+        var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
+        Check("pockets_24", pockets.Count == 24, $"{pockets.Count}");
+
+        // 묻힘: 통로 쪽 2 m 에서 포켓 가운데로 쏜 광선이 조각 바위 면보다 포켓에 먼저 닿아야 한다. 바위 면 충돌체는 이 검사 동안만 붙인다
+        var temp = new List<MeshCollider>();
+        foreach (var r in pieces.GetComponentsInChildren<MeshRenderer>())
+            if (r.name.StartsWith("SHL_"))
+            {
+                var mc = r.gameObject.AddComponent<MeshCollider>();
+                mc.sharedMesh = r.GetComponent<MeshFilter>().sharedMesh;
+                temp.Add(mc);
+            }
+        Physics.SyncTransforms();
+        int visible = 0;
+        foreach (var pk in pockets)
+        {
+            var hits = Physics.RaycastAll(pk.transform.position + pk.outDir * 2f, -pk.outDir, 2.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            if (hits.Length > 0 && hits[0].collider.GetComponent<OrePocket>() == pk) visible++;
+        }
+        foreach (var mc in temp) Destroy(mc);
+        yield return null;
+        Check("pockets_not_buried", pockets.Count > 0 && visible == pockets.Count, $"{visible}/{pockets.Count} visible");
+
+        pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
+        OrePocket first = pockets[0], second = pockets[1];
+        var mouse = InputSystem.AddDevice<Mouse>("CheckMouse");
+        lamp.lampOn = true;                      // 7 단계가 램프를 끄고 끝났다
+
+        // 채굴 거리(1.8 m)에서 포켓을 본 화면
+        StandAt(cc, first);
+        Vector3 view = default;
+        yield return Capture("7_mining_view", v => view = v);
+        Check("mining_view_not_burnt", view.z < MaxBurntNearWall, $"burnt {view.z * 100f:F1} % lum {view.x:F3} dim {lamp.nearDim:F2}");
+
+        // 누르고 있으면 두 번째 타격에 캐진다
+        int noise0 = NoiseBus.Total, ore0 = player.ore;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return null;
+        yield return null;
+        Debug.Log($"CHECK INFO aim target={pickaxe.HasTarget} mouseCurrent={Mouse.current == mouse} pressed={Mouse.current?.leftButton.isPressed} " +
+                  $"player {player.transform.position:F2} fwd {player.head.forward:F2} pocket {first.transform.position:F2} out {first.outDir:F2}");
+        float t = 0f;
+        while (first != null && t < 2f) { t += Time.deltaTime; yield return null; }
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        int strikes = NoiseBus.Total - noise0;
+        Check("pocket_breaks_on_2nd_hit", first == null && strikes == 2, $"strikes {strikes}, broke {first == null} after {t:F2} s");
+        Check("pick_noise_25m", NoiseBus.LastKind == "pick" && Mathf.Approximately(NoiseBus.LastRadius, Tuning.NOISE_PICK), $"{NoiseBus.LastKind} {NoiseBus.LastRadius} m");
+
+        // 광석: 1.4 초(자석 전)까지 구르고 멈춰 있다, 그 뒤 빨려와 줍힌다
+        var ore = FindAnyObjectByType<Ore>();
+        yield return Capture("8_mining_break", v => { });
+        while (ore != null && ore.Age < 1.4f) yield return null;
+        bool rolled = ore != null && !ore.Pulled;
+        float roll = ore != null ? Flat(ore.transform.position - ore.spawnPos) : -1f;
+        float oreY = ore != null ? ore.transform.position.y : -99f;
+        Check("ore_rolls_and_waits", rolled && roll > 0.5f && roll < 2.5f && oreY > -0.1f, $"roll {roll:F2} m y {oreY:F2} at 1.4 s, waited {rolled}");
+        t = 0f;
+        while (player.ore == ore0 && t < 4f) { t += Time.deltaTime; yield return null; }
+        Check("ore_picked_up", player.ore == ore0 + 1, $"ore {player.ore} (+{t:F1} s)");
+
+        // 안 캐지는 포켓을 1초 누르고 있으면 휘두르기는 3번 이하 (간격 0.35 s)
+        StandAt(cc, second);
+        yield return new WaitForSeconds(0.6f);
+        second.health = 1e6f;
+        noise0 = NoiseBus.Total;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(1f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        strikes = NoiseBus.Total - noise0;
+        Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s");
+    }
+
+    static readonly Vector3 MidTunnel = new Vector3(0f, 1.9f, 17.5f);
+
+    void StandAt(CharacterController cc, OrePocket pk)
+    {
+        Vector3 at = pk.transform.position + pk.outDir * 1.8f;
+        at.y = 0.1f;
+        Teleport(cc, at, Quaternion.LookRotation(-pk.outDir).eulerAngles.y);
     }
 
     // 값 고르기용 측정: 가까운 면 감광(기준 거리·지수)마다 갱도(z 17.5, +Z)와 벽 앞 화면. 판정이 아니라 숫자 표를 남긴다
