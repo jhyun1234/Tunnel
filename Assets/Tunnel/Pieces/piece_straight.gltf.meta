@@ -1,0 +1,76 @@
+fileFormatVersion: 2
+guid: a3d6d96b9aa7e814988aaa7860ada355
+ScriptedImporter:
+  internalIDToNameTable: []
+  externalObjects: {}
+  serializedVersion: 2
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+  script: {fileID: 11500000, guid: 715df9372183c47e389bb6e19fbc3b52, type: 3}
+  editorImportSettings:
+    generateSecondaryUVSet: 0
+  importSettings:
+    nodeNameMethod: 1
+    animationMethod: 2
+    generateMipMaps: 1
+    texturesReadable: 0
+    defaultMinFilterMode: 9729
+    defaultMagFilterMode: 9729
+    anisotropicFilterLevel: 1
+  instantiationSettings:
+    mask: -1
+    layer: 0
+    skinUpdateWhenOffscreen: 1
+    lightIntensityFactor: 1
+    sceneObjectCreation: 2
+  assetDependencies:
+  - type: 0
+    originalUri: Assets\Tunnel\Pieces\piece_straight.bin
+    assetPath: Assets\Tunnel\Pieces\piece_straight.bin
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\rusty_metal_02_nor_gl.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\rusty_metal_02_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\rusty_metal_02_Diffuse.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\rusty_metal_02_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\rusty_metal_02_Rough.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\rusty_metal_02_Rough.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\dark_rock_02_nor_gl.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\dark_rock_02_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\dark_rock_02_Diffuse.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\dark_rock_02_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\dark_rock_02_Rough.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\dark_rock_02_Rough.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\rock_face_04_nor_gl.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\rock_face_04_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\rock_face_04_Diffuse.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\rock_face_04_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\rock_face_04_Rough.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\rock_face_04_Rough.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\brown_mud_rocks_01_nor_gl.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\brown_mud_rocks_01_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\brown_mud_rocks_01_Diffuse.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\brown_mud_rocks_01_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\brown_mud_rocks_01_Rough.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\brown_mud_rocks_01_Rough.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\dark_wooden_planks_nor_gl.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\dark_wooden_planks_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\dark_wooden_planks_Diffuse.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\dark_wooden_planks_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Pieces\textures\dark_wooden_planks_Rough.jpg
+    assetPath: Assets\Tunnel\Pieces\textures\dark_wooden_planks_Rough.jpg
+  reportItems: []

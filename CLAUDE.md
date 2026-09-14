@@ -6,15 +6,15 @@
 천장을 기어 다니는 괴물에게 들키지 않고 살아남는다.
 Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 
-**재미의 정체**: [미정 — 사용자에게 확인. 후보: "소리를 내야 하는 일(채굴·수리)과 들키지 않는 일 사이의 긴장"]
-이 문장에 기여하지 않는 기능은 제안하지 않는다.
+**재미의 정체**: "소리를 내야 돈이 벌리고, 소리를 내면 죽는다."
+이 문장에 기여하지 않는 기능은 제안하지 않는다. 기능 판정 예: 소음·정비 스킬체크·광차는 강화, 배움 카드는 애매, 동물은 무관.
 
 ## 엔진
 
 - 엔진: Unity 6000.4.7f1, **URP** (템플릿 `3d-cross-platform`)
 - 최소 사양 목표(잠정): GTX 1650 / 1080p / 60fps
 - 명령어는 `game-engine` 스킬에 있다. 경로를 추측하지 말고 그 스킬을 읽는다.
-- 빌드: `bash tools/build.sh` (아직 없음)
+- 빌드·배포물 검사: `bash tools/build.sh` (사보타주: `-sabotage floor|lamp|fog|thickfog`)
 - 산출물: `build/`
 
 ## Godot판 참조 (읽기 전용)
@@ -29,7 +29,9 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 
 - 감각 수치(이동·램프·안개·괴물)는 Godot `Tuning.gd` 값이 출발점이다. 옮길 때 이름을 유지해 대조할 수 있게 한다.
 - 이 저장소는 **Public**이다. API 키·토큰·개인 경로 밖 비밀을 커밋하지 않는다.
-- 에셋을 넣기 전에 라이선스를 확인한다. Hunyuan 2.0·2.1 산출물은 한국 제외 라이선스(MIGRATION_NOTES 7-2 #20), Mixamo 원본 FBX는 단독 재배포 불가.
+- 에셋을 넣기 전에 출처를 확인한다. Hunyuan 2.0·2.1 산출물(`Documents/MineTunnel/mesh/*_s50_o512.glb`, `miner_painted.glb`, `blender/mixamo_v2_hunyuan/`)은 넣지 않는다 — 라이선스가 한국 제외.
+- 괴물 `miner_rigged.glb`(md5 `16442855…`)는 TRELLIS.2(MIT) 산출물로 확인됨(2026-09-14, 몸·머리 base color 텍스처가 `trellis2_v1.glb`·`trellis2_head_512.glb`와 바이트 일치, 갱목·쇠는 Blender 기본 도형 + Poly Haven CC0). GLB를 다시 뽑으면 다시 확인한다.
+- Mixamo 원본 FBX는 저장소에 올리지 않는다. GLB에 구워 넣은 클립만 된다.
 - 큰 바이너리(fbx·glb·png·wav 등)는 Git LFS로 간다 (`.gitattributes`). `.meta`는 반드시 커밋한다.
 
 ## 하지 말 것
