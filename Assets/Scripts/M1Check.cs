@@ -9,7 +9,7 @@ using UnityEngine.Rendering;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드 장치로 넣는다 — Player 는 사람 키보드와 같은 길(Keyboard.current)로 읽는다.
-// -sabotage floor|lamp|fog 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 램프 세기·안개 밀도·안개 품질을 바꿔 가며 밝기·구조·fps 를 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -94,7 +94,7 @@ public class M1Check : MonoBehaviour
         float ran = Flat(player.transform.position - p0);
         InputSystem.QueueStateEvent(kb, new KeyboardState());
         yield return new WaitForSeconds(0.5f);
-        Check("run_1s_m", ran > 6.3f && ran < 7.6f, $"{ran:F2} (expect 6.4~7.1, frame timing)");
+        Check("run_1s_m", ran > 6.3f && ran < 7.6f, $"{ran:F2} (expect 6.3~7.1, frame timing)");
         player.transform.rotation = Quaternion.identity;
 
         // 4. 램프 설정
@@ -103,7 +103,19 @@ public class M1Check : MonoBehaviour
             && light.shadows != LightShadows.None && lamp.GetComponent<VolumetricAdditionalLight>() != null,
             $"spotAngle={light.spotAngle} shadows={light.shadows}");
 
-        // 5. 화면: 램프+안개 / 램프만 / 램프 끔. 밝기(lum)·구조(grad, 이웃 픽셀 차)·fps 는 사람이 보는 화면에서 잰다
+        // 5. 앞뒤 대칭: 갱도 가운데(조각 이음새 z 17.5)에서 +Z / -Z. 갱도가 대칭이라 밝기가 비슷해야 한다.
+        // 사용자 지적(09-14 "+Z 쪽으로 램프 빛이 안 보인다") — 실측 +Z 0.022 / -Z 0.130
+        Vector3 back = player.transform.position;
+        Vector2 plusZ = default, minusZ = default;
+        Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 0f);
+        yield return Capture("4_mid_plusZ", v => plusZ = v);
+        Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 180f);
+        yield return Capture("5_mid_minusZ", v => minusZ = v);
+        float sym = Mathf.Min(plusZ.x, minusZ.x) / Mathf.Max(Mathf.Max(plusZ.x, minusZ.x), 1e-5f);
+        Check("lamp_symmetric_z", sym > 0.67f, $"+Z {plusZ.x:F4} -Z {minusZ.x:F4} (min/max {sym:F2})");
+        Teleport(cc, back, 0f);
+
+        // 6. 화면: 램프+안개 / 램프만 / 램프 끔. 밝기(lum)·구조(grad, 이웃 픽셀 차)·fps 는 사람이 보는 화면에서 잰다
         Vector2 fogShot = default, noFogShot = default, darkShot = default;
         float fpsFog = 0f, fpsNoFog = 0f;
         yield return Capture("1_lamp_fog", v => fogShot = v);
@@ -118,8 +130,9 @@ public class M1Check : MonoBehaviour
         yield return Capture("3_lamp_off", v => darkShot = v);
 
         Check("lamp_lights_screen", fogShot.x > 0.01f && fogShot.x > darkShot.x * 3f, $"on {fogShot.x:F4} off {darkShot.x:F4}");
-        // 기준 화면이 거의 검으면 아래 안개 구조 비교가 뜻이 없다 — 램프 밝기가 Godot 의 절반~두 배 안이어야 한다
-        Check("lamp_near_godot", noFogShot.x > GodotLum * 0.5f && noFogShot.x < GodotLum * 2f, $"nofog lum {noFogShot.x:F4} / Godot {GodotLum} = x{noFogShot.x / GodotLum:F2}");
+        // 기준 화면이 거의 검으면 아래 안개 구조 비교가 뜻이 없다 — 첫 빌드(램프 35, 밝기 0.003)에서 망가진 안개가 PASS 했다.
+        // 하한 0.008 = 사용자 판정 램프 146.8 의 실측(약 0.017)의 절반. Godot 비율은 참고로만 남긴다
+        Check("lamp_not_black", noFogShot.x > 0.008f, $"nofog lum {noFogShot.x:F4} (Godot {GodotLum} 의 x{noFogShot.x / GodotLum:F2})");
         // 안개가 보여야 하고(밝기 +2 % 이상), 갱도 형태를 지우면 안 된다(구조 85 % 이상 남음 — 실측 0.012 는 70 % 로 끝이 흰 막이었다)
         Check("volfog_visible", fogShot.x > noFogShot.x * 1.02f, $"lum fog {fogShot.x:F4} nofog {noFogShot.x:F4}");
         Check("volfog_keeps_structure", fogShot.y >= noFogShot.y * 0.85f, $"grad fog {fogShot.y:F2} nofog {noFogShot.y:F2} ({fogShot.y / noFogShot.y * 100f:F0} %)");
@@ -175,6 +188,13 @@ public class M1Check : MonoBehaviour
         Application.Quit(0);
     }
 
+    void Teleport(CharacterController cc, Vector3 pos, float yaw)
+    {
+        cc.enabled = false;
+        player.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+        cc.enabled = true;
+    }
+
     void Finish()
     {
         string summary = fails.Count == 0 ? "CHECK ALL PASS" : "CHECK FAILED: " + string.Join(", ", fails);
@@ -193,7 +213,7 @@ public class M1Check : MonoBehaviour
     // x = 평균 밝기(sRGB 휘도 0~1), y = 구조(이웃 픽셀 밝기 차 평균 × 1000). 안개가 형태를 지우면 y 가 떨어진다
     IEnumerator Capture(string name, Action<Vector2> result)
     {
-        yield return new WaitForSeconds(0.6f);        // 램프 페이드·안개 누적이 끝나게
+        yield return new WaitForSeconds(0.6f);        // 램프 페이드·안개 누적·램프 늦게 따라오기가 끝나게
         yield return new WaitForEndOfFrame();
         var tex = ScreenCapture.CaptureScreenshotAsTexture();
         File.WriteAllBytes(Path.Combine(outDir, name + ".png"), tex.EncodeToPNG());
