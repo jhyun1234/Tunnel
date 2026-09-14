@@ -75,14 +75,27 @@ public static class Tuning
     public const float MINE_DAMAGE = 25.0f;        // 1회 타격
     public const float POCKET_HEALTH = 50.0f;      // 2타 — 첫 타에 자갈, 둘째 타에 덩이가 빠진다
     public const float MINE_RANGE = 3.0f;          // m
-    public const float MINE_COOLDOWN = 0.35f;      // 초, 연타해도 이보다 빠르지 않다
+    // 초, 휘두르기 한 번 전체(들기 + 내려치기 + 멈춤 + 되돌리기). 연타해도 이보다 빠르지 않다. Godot 0.35 = 내려치기 + 되돌리기
+    public static float MINE_COOLDOWN => PICK_WINDUP_TIME + PICK_DOWN_TIME + PICK_HITSTOP_TIME + PICK_UP_TIME;
     public const float HIT_RECOIL = 0.12f;         // m, 맞은 포켓이 밀리는 거리
     public const float HIT_RECOIL_TIME = 0.10f;
     public const float CHUNK_SPIN = 4.0f;          // rad/s
     public const float CHUNK_FADE = 0.5f;          // 초, 자갈이 줄어들며 사라지는 시간
     public const int CHUNK_LIMIT = 40;             // 살아 있는 자갈 상한
-    public const int HIT_DUST = 12;                // 알, 평타 먼지
-    public const int BREAK_DUST = 60;              // 알, 덩이가 빠질 때 먼지
+    // 먼지. Godot(0.22 m 알 12·60개)을 그대로 옮기니 밝은 점으로 보여 "먼지인지 모르겠다"(사용자 09-14) →
+    // Unity 전용: 크고 옅은 뭉게가 천천히 퍼지며 커진다. 알이 커진 만큼 수는 줄였다
+    public const int HIT_DUST = 6;                 // 알, 평타 먼지
+    public const int BREAK_DUST = 24;              // 알, 덩이가 빠질 때 먼지
+    public const float DUST_SIZE_MIN = 0.35f;      // m
+    public const float DUST_SIZE_MAX = 0.8f;
+    public const float DUST_GROW = 2.0f;           // 수명 끝의 크기 배율
+    public const float DUST_LIFE_MIN = 1.6f;       // 초
+    public const float DUST_LIFE_MAX = 2.4f;
+    public const float DUST_SPEED_MIN = 0.2f;      // m/s
+    public const float DUST_SPEED_MAX = 0.9f;
+    public const float DUST_GRAVITY = 0.03f;       // 중력 배율 — 떠 있다가 아주 천천히 가라앉는다
+    public const float DUST_DRAG = 1.5f;
+    public static readonly Color DUST_COLOR = new Color(0.40f, 0.37f, 0.33f, 0.30f);
     public const float SHAKE_AMOUNT = 0.06f;       // m, 덩이가 빠질 때만 흔든다
     public const float SHAKE_TIME = 0.15f;
     public const int CHIP_PER_HIT = 2;
@@ -111,7 +124,23 @@ public static class Tuning
     public const float PICK_ROLL_DEG = 10.0f;      // 자루 끝을 앞으로 기울인 각
     public const float PICK_SWING_DEG = 55.0f;     // 내려치는 각
     public const float PICK_DOWN_TIME = 0.12f;     // 초, 내려치기 — 끝나는 순간이 타격
-    public const float PICK_UP_TIME = 0.23f;       // 초, 되돌리기. 합쳐서 MINE_COOLDOWN
+    public const float PICK_UP_TIME = 0.23f;       // 초, 되돌리기
+    // 무게 (사용자 09-14 "휘두르기 가볍다"). Unity 전용: 치기 전에 뒤로 들고, 맞는 순간 잠깐 멈추고, 매 타격 화면을 작게 흔든다
+    public const float PICK_WINDUP_DEG = 20.0f;    // 뒤로 드는 각
+    public const float PICK_WINDUP_TIME = 0.08f;   // 초 — 누르고 타격까지 = 들기 + 내려치기 0.20 초
+    public const float PICK_HITSTOP_TIME = 0.06f;  // 초, 벽에 박힌 채 멈춤
+    public const float PICK_HIT_SHAKE_AMOUNT = 0.02f;   // m, 평타 흔들림 (덩이가 빠질 때는 SHAKE_AMOUNT)
+    public const float PICK_HIT_SHAKE_TIME = 0.08f;
+    // 조준 보정 (사용자 09-14 "정확하게 캐는 게 쉽지 않다"). Unity 전용: 곡괭이 판정을 이 반지름의 구로 쏜다 — 포켓 가장자리에서 이만큼 빗나가도 맞는다
+    public const float PICK_AIM_RADIUS = 0.12f;    // m
+    // 곡괭이 전용 등 (사용자 09-14 "곡괭이가 하얗게 뜨는 게 거슬린다"). Unity 전용: 헤드램프는 곡괭이를 안 비추고, 이 약한 등만 비춘다
+    public const float PICK_LIGHT_ENERGY = 3.0f;
+    public const float PICK_LIGHT_RANGE = 2.0f;    // m
+    // 타격음 (Kenney Impact Sounds, CC0). 3D 소리, 소음 반경(NOISE_PICK)에서 0 이 된다
+    public const float HIT_VOLUME = 0.8f;
+    public const float HIT_PITCH_JITTER = 0.07f;   // 매번 같은 소리로 안 들리게
+    public const float HIT_BREAK_PITCH = 0.8f;     // 덩이가 빠지는 타격은 낮고 크게
+    public const float HIT_MIN_DISTANCE = 2.0f;    // m, 이 안에서는 최대 음량
     public const float PICK_BOB_AMOUNT = 0.02f;    // m
     public const float PICK_BOB_SPEED = 12.0f;     // rad/s
     // 소음. 반경 m

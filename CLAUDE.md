@@ -32,6 +32,7 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 - 에셋을 넣기 전에 출처를 확인한다. Hunyuan 2.0·2.1 산출물(`Documents/MineTunnel/mesh/*_s50_o512.glb`, `miner_painted.glb`, `blender/mixamo_v2_hunyuan/`)은 넣지 않는다 — 라이선스가 한국 제외.
 - 괴물 `miner_rigged.glb`(md5 `16442855…`)는 TRELLIS.2(MIT) 산출물로 확인됨(2026-09-14, 몸·머리 base color 텍스처가 `trellis2_v1.glb`·`trellis2_head_512.glb`와 바이트 일치, 갱목·쇠는 Blender 기본 도형 + Poly Haven CC0). GLB를 다시 뽑으면 다시 확인한다.
 - Mixamo 원본 FBX는 저장소에 올리지 않는다. GLB에 구워 넣은 클립만 된다.
+- 소리는 재배포 가능한 라이선스만 넣고, 라이선스 파일을 소리와 같은 폴더에 둔다. 지금: `Assets/Audio/PickHit/` Kenney Impact Sounds (CC0, 2026-09-14 kenney.nl에서 받음).
 - 큰 바이너리(fbx·glb·png·wav 등)는 Git LFS로 간다 (`.gitattributes`). `.meta`는 반드시 커밋한다.
 
 ## 하지 말 것

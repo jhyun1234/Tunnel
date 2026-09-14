@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-// 마일스톤 1 씬 만들기와 Windows 빌드. 배치 모드에서 부른다 (명령은 docs/HANDOFF.md, tools/build.sh).
+// 마일스톤 1·2 씬 만들기와 Windows 빌드. 배치 모드에서 부른다 (명령은 docs/HANDOFF.md, tools/build.sh).
 public static class BuildM1
 {
     const string ScenePath = "Assets/Scenes/M1_Tunnel.unity";
@@ -20,6 +20,7 @@ public static class BuildM1
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
+    const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
     public static void MakeScene()
@@ -31,20 +32,21 @@ public static class BuildM1
             return;
         }
         var piece = AssetDatabase.LoadAssetAtPath<GameObject>(PiecePath);
-        if (piece == null)
-        {
-            Debug.LogError($"{PiecePath} 를 못 읽었다 (glTFast 임포트 확인)");
-            EditorApplication.Exit(3);
-            return;
-        }
-
         var pick = AssetDatabase.LoadAssetAtPath<GameObject>(PickPath);
         var ore = AssetDatabase.LoadAssetAtPath<GameObject>(OrePath);
         var chips = AssetDatabase.LoadAssetAtPath<GameObject>(ChipsPath);
-        if (pick == null || ore == null || chips == null)
+        if (piece == null || pick == null || ore == null || chips == null)
         {
-            Debug.LogError("pick / ore / mine_chips glTF 를 못 읽었다 (glTFast 임포트 확인)");
+            Debug.LogError("piece_straight / pick / ore / mine_chips glTF 를 못 읽었다 (glTFast 임포트 확인)");
             EditorApplication.Exit(3);
+            return;
+        }
+        var hitClips = AssetDatabase.FindAssets("t:AudioClip", new[] { HitSoundDir })
+            .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g))).ToArray();
+        if (hitClips.Length == 0)
+        {
+            Debug.LogError($"{HitSoundDir} 에 소리 파일이 없다");
+            EditorApplication.Exit(4);
             return;
         }
 
@@ -67,8 +69,7 @@ public static class BuildM1
         var pieces = new GameObject("Pieces").transform;
         for (int i = 0; i < PieceCount; i++)
         {
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(piece, pieces);
-            PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            var go = Instance(piece, pieces);
             go.name = $"piece_straight_{i}";
             go.transform.position = new Vector3(0f, 0f, i * Tuning.GRID_CELL);
             foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
@@ -122,8 +123,25 @@ public static class BuildM1
         cam.nearClipPlane = 0.05f;
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = Tuning.BACKGROUND;
-        camGo.AddComponent<UniversalAdditionalCameraData>().renderPostProcessing = true;
+        cam.cullingMask = ~(1 << Pickaxe.ViewModelLayer);
+        var camData = camGo.AddComponent<UniversalAdditionalCameraData>();
+        camData.renderPostProcessing = true;
         camGo.AddComponent<AudioListener>();
+
+        // 곡괭이는 오버레이 카메라가 따로 그린다 — 벽 속으로 파고들어도 늘 벽 위에 보이게 (사용자 09-14 "곡괭이가 벽 안으로 들어간다")
+        var vmGo = new GameObject("ViewModelCamera");
+        vmGo.transform.SetParent(camGo.transform, false);
+        var vmCam = vmGo.AddComponent<Camera>();
+        vmCam.fieldOfView = Tuning.CAMERA_FOV;
+        vmCam.nearClipPlane = 0.01f;
+        vmCam.farClipPlane = 5f;
+        vmCam.clearFlags = CameraClearFlags.Depth;
+        vmCam.cullingMask = 1 << Pickaxe.ViewModelLayer;
+        var vmData = vmGo.AddComponent<UniversalAdditionalCameraData>();
+        vmData.renderType = CameraRenderType.Overlay;
+        vmData.renderShadows = false;
+        vmData.renderPostProcessing = false;     // 켜면 부피 안개 패스가 오버레이 카메라에서 한 번 더 돈다
+        camData.cameraStack.Add(vmCam);
 
         // 곡괭이 뷰모델 (카메라 밑). 자세·배율은 Pickaxe.Awake 가 Tuning 에서 넣는다
         var pickGo = new GameObject("Pickaxe");
@@ -132,15 +150,35 @@ public static class BuildM1
         pickaxe.cam = camGo.transform;
         pickaxe.player = p;
         pickaxe.mesh = Instance(pick, pickGo.transform).transform;
+        foreach (var t in pickGo.GetComponentsInChildren<Transform>(true))
+            t.gameObject.layer = Pickaxe.ViewModelLayer;
+        foreach (var r in pickGo.GetComponentsInChildren<Renderer>(true))
+            r.renderingLayerMask = Pickaxe.ViewModelRenderingLayer;
 
         var lampGo = new GameObject("Headlamp");
-        Headlamp.Apply(lampGo.AddComponent<Light>());
+        var lampLight = lampGo.AddComponent<Light>();
+        Headlamp.Apply(lampLight);
         lampGo.transform.SetPositionAndRotation(camGo.transform.TransformPoint(Tuning.LAMP_OFFSET), camGo.transform.rotation);
         var lamp = lampGo.AddComponent<Headlamp>();
         lamp.cam = camGo.transform;
         var vol = lampGo.AddComponent<VolumetricAdditionalLight>();
         vol.Anisotropy = Tuning.VOLFOG_ANISOTROPY;
         vol.Scattering = Tuning.VOLFOG_SCATTERING;
+        lampLight.GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer;   // 곡괭이는 안 비춘다
+
+        // 곡괭이 전용 약한 등 — 램프와 같이 켜지고 꺼진다 (사용자 09-14 "곡괭이가 하얗게 뜨는 게 거슬린다")
+        var pickLightGo = new GameObject("PickLight");
+        pickLightGo.transform.SetParent(camGo.transform, false);
+        pickLightGo.transform.localPosition = Tuning.LAMP_OFFSET;
+        var pickLight = pickLightGo.AddComponent<Light>();
+        pickLight.type = LightType.Spot;
+        pickLight.spotAngle = Tuning.LAMP_ANGLE_DEG * 2f;
+        pickLight.range = Tuning.PICK_LIGHT_RANGE;
+        pickLight.color = Tuning.LAMP_COLOR;
+        pickLight.intensity = Tuning.PICK_LIGHT_ENERGY;
+        pickLight.shadows = LightShadows.None;
+        pickLight.GetUniversalAdditionalLightData().renderingLayers = Pickaxe.ViewModelRenderingLayer;
+        lamp.pickLight = pickLight;
 
         var volume = new GameObject("Global Volume").AddComponent<Volume>();
         volume.isGlobal = true;
@@ -165,6 +203,7 @@ public static class BuildM1
         fx.chipMeshes = chips.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh).ToArray();
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
         fx.dustMaterial = MakeDustMaterial();
+        fx.hitClips = hitClips;
         mining.AddComponent<MiningHud>().player = p;
 
         EditorSceneManager.SaveScene(scene, ScenePath);

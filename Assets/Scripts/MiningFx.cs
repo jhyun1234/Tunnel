@@ -2,9 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// 채굴 연출 한 곳: 먼지(Godot Dust.gd), 자갈(WallChunk.gd), 광석 생성(Ore.spawn).
+// 채굴 연출 한 곳: 먼지(Godot Dust.gd), 자갈(WallChunk.gd), 광석 생성(Ore.spawn), 타격음.
 // 에셋 참조는 씬 생성기(BuildM1)가 넣는다 — 실행 파일에 에셋이 따라 들어가게.
-// 자갈과 광석은 Ignore Raycast 레이어(2)에 둔다 — 곡괭이 레이·램프 감광 레이를 막지 않게. 플레이어와는 안 부딪친다.
+// 자갈과 광석은 Ignore Raycast 레이어(2)에 둔다 — 곡괭이 판정·램프 감광 광선을 막지 않게. 플레이어와는 안 부딪친다.
 public class MiningFx : MonoBehaviour
 {
     public static MiningFx I;
@@ -14,13 +14,14 @@ public class MiningFx : MonoBehaviour
     public Mesh[] chipMeshes;
     public Material chipMaterial;
     public Material dustMaterial;
+    public AudioClip[] hitClips;                        // Kenney Impact Sounds impactMining_* (CC0)
 
     const int IgnoreRaycastLayer = 2;
     readonly List<GameObject> chips = new List<GameObject>();
 
     void Awake() => I = this;
 
-    // 한 번 터지고 스스로 사라지는 먼지. 벽에서 플레이어 쪽(facing)으로 뿜는다
+    // 한 번 터지고 스스로 사라지는 먼지 뭉게. 벽에서 플레이어 쪽(facing)으로 퍼져 나와 떠 있다가 커지며 옅어진다
     public void Dust(Vector3 at, Vector3 facing, int count)
     {
         var go = new GameObject("Dust");
@@ -30,25 +31,32 @@ public class MiningFx : MonoBehaviour
         var main = ps.main;
         main.duration = 0.1f;
         main.loop = false;
-        main.startLifetime = 1.2f;
-        main.startSpeed = new ParticleSystem.MinMaxCurve(0.8f, 2.6f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.22f * 0.4f, 0.22f);
-        main.startColor = new Color(0.58f, 0.55f, 0.5f, 0.75f);
-        main.gravityModifier = 2.5f / 9.81f;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(Tuning.DUST_LIFE_MIN, Tuning.DUST_LIFE_MAX);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(Tuning.DUST_SPEED_MIN, Tuning.DUST_SPEED_MAX);
+        main.startSize = new ParticleSystem.MinMaxCurve(Tuning.DUST_SIZE_MIN, Tuning.DUST_SIZE_MAX);
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        main.startColor = Tuning.DUST_COLOR;
+        main.gravityModifier = Tuning.DUST_GRAVITY;
         main.stopAction = ParticleSystemStopAction.Destroy;
         var emission = ps.emission;
         emission.rateOverTime = 0f;
         emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)count) });
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 60f;
-        shape.radius = 0.25f;
+        shape.angle = 45f;
+        shape.radius = 0.15f;
         var drag = ps.limitVelocityOverLifetime;
         drag.enabled = true;
-        drag.drag = 2.25f;                                  // Godot damping 1.5~3
+        drag.drag = Tuning.DUST_DRAG;
         var size = ps.sizeOverLifetime;
         size.enabled = true;
-        size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.35f), new Keyframe(0.3f, 1f), new Keyframe(1f, 0f)));
+        size.size = new ParticleSystem.MinMaxCurve(Tuning.DUST_GROW, AnimationCurve.EaseInOut(0f, 1f / Tuning.DUST_GROW, 1f, 1f));
+        var color = ps.colorOverLifetime;                  // 금방 짙어졌다가 천천히 옅어진다
+        color.enabled = true;
+        var gradient = new Gradient();
+        gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                         new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.15f), new GradientAlphaKey(0f, 1f) });
+        color.color = gradient;
         go.GetComponent<ParticleSystemRenderer>().sharedMaterial = dustMaterial;
         ps.Play();
     }
@@ -94,6 +102,25 @@ public class MiningFx : MonoBehaviour
         var ore = go.AddComponent<Ore>();
         ore.player = player;
         ore.spawnPos = at;
+    }
+
+    // 곡괭이 타격음. 맞은 자리에서 나는 3D 소리 — 소음 반경(NOISE_PICK)에서 0 이 된다
+    public void HitSound(Vector3 at, bool breaking)
+    {
+        if (hitClips == null || hitClips.Length == 0)
+            return;
+        var go = new GameObject("HitSound");
+        go.transform.position = at;
+        var src = go.AddComponent<AudioSource>();
+        src.clip = hitClips[Random.Range(0, hitClips.Length)];
+        src.spatialBlend = 1f;
+        src.rolloffMode = AudioRolloffMode.Linear;
+        src.minDistance = Tuning.HIT_MIN_DISTANCE;
+        src.maxDistance = Tuning.NOISE_PICK;
+        src.volume = breaking ? 1f : Tuning.HIT_VOLUME;
+        src.pitch = breaking ? Tuning.HIT_BREAK_PITCH : 1f + Random.Range(-Tuning.HIT_PITCH_JITTER, Tuning.HIT_PITCH_JITTER);
+        src.Play();
+        Destroy(go, src.clip.length / src.pitch + 0.1f);
     }
 
     IEnumerator FadeOut(GameObject go, float life)

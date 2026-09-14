@@ -6,10 +6,12 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
-// 입력은 가상 키보드 장치로 넣는다 — Player 는 사람 키보드와 같은 길(Keyboard.current)로 읽는다.
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
+// -only m1|mining 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -25,9 +27,12 @@ public class M1Check : MonoBehaviour
     const float BurntLum = 0.85f;                 // 이 밝기 위 픽셀 = 하얗게 탄 픽셀
     // 벽 앞 화면에서 탄 픽셀 비율 상한. 실측(09-14 -sweep, 램프 75.2): 감광 없음 45 % · ref 2 = 9.4 % · pow 1.0 = 7.0 % · ref 3 = 2.8 % · ref 4 pow 1.4 = 1.3 %
     const float MaxBurntNearWall = 0.05f;
+    const float MaxBurntPick = 0.05f;             // 곡괭이 화면 영역의 탄 픽셀 비율 상한
     static readonly Vector3 NearWallPos = new Vector3(2.75f, 0.1f, 15.75f);   // 오른쪽 벽에 몸이 닿는 자리, 기둥 사이
+    static readonly Vector3 MidTunnel = new Vector3(0f, 1.9f, 17.5f);
     readonly List<string> fails = new List<string>();
     string outDir;
+    string only = "";
 
     void Start()
     {
@@ -38,6 +43,8 @@ public class M1Check : MonoBehaviour
             enabled = false;
             return;
         }
+        int o = Array.IndexOf(args, "-only");
+        if (o >= 0 && o + 1 < args.Length) only = args[o + 1];
         int s = Array.IndexOf(args, "-sabotage");
         string sabotage = s >= 0 && s + 1 < args.Length ? args[s + 1] : "";
         outDir = Path.Combine(Path.GetDirectoryName(Application.dataPath), "check");
@@ -73,11 +80,31 @@ public class M1Check : MonoBehaviour
         }
         if (sabotage == "nomagnet")
             Ore.MagnetRange = 0f;
-        Debug.Log($"CHECK start sabotage='{sabotage}' sweep={sweep} screen {Screen.width}x{Screen.height}");
+        if (sabotage == "noassist")
+            pickaxe.aimRadius = 0f;
+        if (sabotage == "noviewmodel")           // 곡괭이를 기본 레이어로 — 벽 속으로 파고들던 상태
+            foreach (var t in pickaxe.GetComponentsInChildren<Transform>(true))
+                t.gameObject.layer = 0;
+        if (sabotage == "picklamp")              // 헤드램프가 곡괭이도 비춘다 — 하얗게 뜨던 상태
+            lamp.GetComponent<Light>().GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer | Pickaxe.ViewModelRenderingLayer;
+        if (sabotage == "mute")
+            MiningFx.I.hitClips = new AudioClip[0];
+        Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? Sweep() : Run(fog));
     }
 
     IEnumerator Run(VolumetricFogVolumeComponent fog)
+    {
+        var cc = player.GetComponent<CharacterController>();
+        yield return new WaitForSeconds(1.5f);   // 바닥에 내려앉는다
+        if (only == "" || only == "m1")
+            yield return M1(cc, fog);
+        if (only == "" || only == "mining")
+            yield return Mining(cc);
+        Finish();
+    }
+
+    IEnumerator M1(CharacterController cc, VolumetricFogVolumeComponent fog)
     {
         // 1. 조각 크기와 이음새 — glTFast 가 축·배율을 바꿨으면 여기서 걸린다
         var shells = new List<Renderer>();
@@ -92,8 +119,6 @@ public class M1Check : MonoBehaviour
         Check("seam_gap_under_5mm", gap < 0.005f, $"{gap * 1000f:F2} mm, pieces {shells.Count}");
 
         // 2. 바닥에 선다
-        yield return new WaitForSeconds(1.5f);
-        var cc = player.GetComponent<CharacterController>();
         Check("grounded", cc.isGrounded && Mathf.Abs(player.transform.position.y) < 0.2f, $"y={player.transform.position.y:F3}");
 
         // 3. 걷기 2초 · 달리기 1초 (가상 키보드)
@@ -153,6 +178,7 @@ public class M1Check : MonoBehaviour
         fog.density.value = density;
         lamp.lampOn = false;
         yield return Capture("3_lamp_off", v => darkShot = v);
+        lamp.lampOn = true;
 
         Check("lamp_lights_screen", fogShot.x > 0.01f && fogShot.x > darkShot.x * 3f, $"on {fogShot.x:F4} off {darkShot.x:F4}");
         // 기준 화면이 거의 검으면 아래 안개 구조 비교가 뜻이 없다 — 첫 빌드(램프 35, 밝기 0.003)에서 망가진 안개가 PASS 했다
@@ -161,12 +187,9 @@ public class M1Check : MonoBehaviour
         Check("volfog_visible", fogShot.x > noFogShot.x * 1.02f, $"lum fog {fogShot.x:F4} nofog {noFogShot.x:F4}");
         Check("volfog_keeps_structure", fogShot.y >= noFogShot.y * 0.85f, $"grad fog {fogShot.y:F2} nofog {noFogShot.y:F2} ({fogShot.y / noFogShot.y * 100f:F0} %)");
         Check("fps_fog_min60", fpsFog >= MinFps, $"fog {fpsFog:F0} fps ({1000f / fpsFog:F2} ms) · nofog {fpsNoFog:F0} fps ({1000f / fpsNoFog:F2} ms) · {SystemInfo.graphicsDeviceName}");
-
-        yield return Mining(cc);
-        Finish();
     }
 
-    // 8. 채굴 (M2): 포켓 24자리 · 묻힘 · 채굴 거리 눈부심 · 두 번에 캐짐 · 소음 · 광석 구르기 · 줍기 · 휘두르기 간격
+    // 8. 채굴 (M2): 포켓 24자리 · 묻힘 · 곡괭이 오버레이·밝기 · 조준 보정 · 채굴 거리 눈부심 · 두 번에 캐짐 · 소음 · 타격음 · 광석 구르기 · 줍기 · 휘두르기 간격
     IEnumerator Mining(CharacterController cc)
     {
         var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
@@ -196,27 +219,62 @@ public class M1Check : MonoBehaviour
         pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
         OrePocket first = pockets[0], second = pockets[1];
         var mouse = InputSystem.AddDevice<Mouse>("CheckMouse");
-        lamp.lampOn = true;                      // 7 단계가 램프를 끄고 끝났다
+        lamp.lampOn = true;
+
+        // 곡괭이는 ViewModel 레이어 → 오버레이 카메라가 그린다 (사용자 09-14 "곡괭이가 벽 안으로 들어간다")
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var stack = mainCam.GetUniversalAdditionalCameraData().cameraStack;
+        Camera vm = stack.Count > 0 ? stack[0] : null;
+        int vmBit = 1 << Pickaxe.ViewModelLayer;
+        var pickRenderers = pickaxe.GetComponentsInChildren<Renderer>(true);
+        bool pickOnLayer = pickRenderers.Length > 0;
+        foreach (var r in pickRenderers) pickOnLayer &= r.gameObject.layer == Pickaxe.ViewModelLayer;
+        Check("viewmodel_overlay", pickOnLayer && (mainCam.cullingMask & vmBit) == 0 && vm != null && vm.cullingMask == vmBit,
+            $"pick on layer {pickOnLayer}, main culls it {(mainCam.cullingMask & vmBit) == 0}, overlay {(vm != null ? vm.name : "none")}");
+
+        // 곡괭이 화면 영역이 하얗게 타지 않고, 어둡지도 않다 (사용자 09-14 "곡괭이가 하얗게 뜨는 게 거슬린다").
+        // 두 자리에서 본다: 갱도 가운데(램프 감광 없음 — 곡괭이가 가장 밝게 뜨는 곳)와 벽에 몸이 닿은 자리(곡괭이가 벽 위에 보이는지)
+        Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 0f);
+        yield return null;
+        Rect pickRect = ScreenRect(mainCam, pickRenderers);
+        Vector3 pickTunnel = default, pickWall = default;
+        yield return Capture("10_pick_in_tunnel", v => pickTunnel = v, pickRect);
+        Teleport(cc, NearWallPos, 90f);
+        yield return Capture("9_pick_at_wall", v => pickWall = v, pickRect);
+        Check("pick_not_burnt", pickRect.width > 0f && Mathf.Max(pickTunnel.z, pickWall.z) < MaxBurntPick && pickTunnel.x > 0.03f,
+            $"tunnel burnt {pickTunnel.z * 100f:F1} % lum {pickTunnel.x:F3} · wall burnt {pickWall.z * 100f:F1} % lum {pickWall.x:F3} · in {pickRect.width:F0}x{pickRect.height:F0} px");
+
+        // 조준 보정: 포켓 가장자리(구 0.16)에서 조금 빗나가도(가운데에서 0.22 m) 맞고, 0.5 m 빗나가면 안 맞는다 (사용자 09-14 "정확하게 캐는 게 쉽지 않다")
+        StandAt(cc, first);
+        Vector3 at = player.transform.position;
+        float baseYaw = Quaternion.LookRotation(-first.outDir).eulerAngles.y;
+        float eyeGap = first.transform.position.y - pickaxe.cam.position.y;
+        float horizNear = Mathf.Sqrt(Mathf.Max(0.22f * 0.22f - eyeGap * eyeGap, 0f));
+        Teleport(cc, at, baseYaw + Mathf.Asin(horizNear / 1.8f) * Mathf.Rad2Deg);
+        bool nearHit = pickaxe.HasTarget;
+        Teleport(cc, at, baseYaw + Mathf.Asin(0.5f / 1.8f) * Mathf.Rad2Deg);
+        bool farHit = pickaxe.HasTarget;
+        Teleport(cc, at, baseYaw);
+        Check("aim_assist", nearHit && !farHit, $"0.22 m off hits {nearHit}, 0.5 m off hits {farHit}");
 
         // 채굴 거리(1.8 m)에서 포켓을 본 화면
-        StandAt(cc, first);
         Vector3 view = default;
         yield return Capture("7_mining_view", v => view = v);
         Check("mining_view_not_burnt", view.z < MaxBurntNearWall, $"burnt {view.z * 100f:F1} % lum {view.x:F3} dim {lamp.nearDim:F2}");
 
-        // 누르고 있으면 두 번째 타격에 캐진다
+        // 누르고 있으면 두 번째 타격에 캐진다. 그동안 귀(AudioListener)에 들어온 소리 크기를 잰다
         int noise0 = NoiseBus.Total, ore0 = player.ore;
+        var audio = new float[512];
+        float loudest = 0f;
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        yield return null;
-        yield return null;
-        Debug.Log($"CHECK INFO aim target={pickaxe.HasTarget} mouseCurrent={Mouse.current == mouse} pressed={Mouse.current?.leftButton.isPressed} " +
-                  $"player {player.transform.position:F2} fwd {player.head.forward:F2} pocket {first.transform.position:F2} out {first.outDir:F2}");
         float t = 0f;
-        while (first != null && t < 2f) { t += Time.deltaTime; yield return null; }
+        while (first != null && t < 2f) { t += Time.deltaTime; loudest = Mathf.Max(loudest, ListenerRms(audio)); yield return null; }
         InputSystem.QueueStateEvent(mouse, new MouseState());
+        for (float u = 0f; u < 0.3f; u += Time.deltaTime) { loudest = Mathf.Max(loudest, ListenerRms(audio)); yield return null; }
         int strikes = NoiseBus.Total - noise0;
         Check("pocket_breaks_on_2nd_hit", first == null && strikes == 2, $"strikes {strikes}, broke {first == null} after {t:F2} s");
         Check("pick_noise_25m", NoiseBus.LastKind == "pick" && Mathf.Approximately(NoiseBus.LastRadius, Tuning.NOISE_PICK), $"{NoiseBus.LastKind} {NoiseBus.LastRadius} m");
+        Check("pick_hit_audible", loudest > 0.005f, $"listener rms max {loudest:F4}");
 
         // 광석: 1.4 초(자석 전)까지 구르고 멈춰 있다, 그 뒤 빨려와 줍힌다
         var ore = FindAnyObjectByType<Ore>();
@@ -230,7 +288,7 @@ public class M1Check : MonoBehaviour
         while (player.ore == ore0 && t < 4f) { t += Time.deltaTime; yield return null; }
         Check("ore_picked_up", player.ore == ore0 + 1, $"ore {player.ore} (+{t:F1} s)");
 
-        // 안 캐지는 포켓을 1초 누르고 있으면 휘두르기는 3번 이하 (간격 0.35 s)
+        // 안 캐지는 포켓을 1초 누르고 있으면 휘두르기는 3번 이하 (한 번에 MINE_COOLDOWN)
         StandAt(cc, second);
         yield return new WaitForSeconds(0.6f);
         second.health = 1e6f;
@@ -239,10 +297,8 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(1f);
         InputSystem.QueueStateEvent(mouse, new MouseState());
         strikes = NoiseBus.Total - noise0;
-        Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s");
+        Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s (swing {Tuning.MINE_COOLDOWN:F2} s)");
     }
-
-    static readonly Vector3 MidTunnel = new Vector3(0f, 1.9f, 17.5f);
 
     void StandAt(CharacterController cc, OrePocket pk)
     {
@@ -294,8 +350,37 @@ public class M1Check : MonoBehaviour
 
     static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
-    // x = 평균 밝기(sRGB 휘도 0~1), y = 구조(이웃 픽셀 밝기 차 평균 × 1000), z = 하얗게 탄 픽셀 비율(BurntLum 위)
-    IEnumerator Capture(string name, Action<Vector3> result)
+    static float ListenerRms(float[] buffer)
+    {
+        AudioListener.GetOutputData(buffer, 0);
+        double sum = 0;
+        foreach (float v in buffer) sum += v * v;
+        return Mathf.Sqrt((float)(sum / buffer.Length));
+    }
+
+    // 렌더러들이 화면에서 차지하는 사각형 (픽셀, 왼쪽 아래 원점)
+    static Rect ScreenRect(Camera cam, Renderer[] renderers)
+    {
+        Vector2 min = new Vector2(float.MaxValue, float.MaxValue), max = new Vector2(float.MinValue, float.MinValue);
+        foreach (var r in renderers)
+        {
+            Bounds b = r.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) * 2 - 1, (i >> 1 & 1) * 2 - 1, (i >> 2 & 1) * 2 - 1));
+                Vector3 p = cam.WorldToScreenPoint(corner);
+                if (p.z <= 0f) continue;
+                min = Vector2.Min(min, p);
+                max = Vector2.Max(max, p);
+            }
+        }
+        min = Vector2.Max(min, Vector2.zero);
+        max = Vector2.Min(max, new Vector2(Screen.width, Screen.height));
+        return max.x > min.x && max.y > min.y ? Rect.MinMaxRect(min.x, min.y, max.x, max.y) : default;
+    }
+
+    // x = 평균 밝기(sRGB 휘도 0~1), y = 구조(이웃 픽셀 밝기 차 평균 × 1000), z = 하얗게 탄 픽셀 비율(BurntLum 위). region 이 있으면 그 안만
+    IEnumerator Capture(string name, Action<Vector3> result, Rect region = default)
     {
         yield return new WaitForSeconds(0.6f);        // 램프 페이드·안개 누적·램프 늦게 따라오기가 끝나게
         yield return new WaitForEndOfFrame();
@@ -304,10 +389,18 @@ public class M1Check : MonoBehaviour
         Color32[] px = tex.GetPixels32();
         int w = tex.width, h = tex.height;
         Destroy(tex);
+        int x0 = 0, y0 = 0, x1 = w - 1, y1 = h - 1;
+        if (region.width > 0f)
+        {
+            x0 = Mathf.Clamp((int)region.xMin, 0, w - 2);
+            y0 = Mathf.Clamp((int)region.yMin, 0, h - 2);
+            x1 = Mathf.Clamp((int)region.xMax, x0 + 1, w - 1);
+            y1 = Mathf.Clamp((int)region.yMax, y0 + 1, h - 1);
+        }
         double sum = 0, grad = 0;
         int n = 0, burnt = 0;
-        for (int y = 0; y < h - 1; y += 3)
-            for (int x = 0; x < w - 1; x += 3)
+        for (int y = y0; y < y1; y += 3)
+            for (int x = x0; x < x1; x += 3)
             {
                 float l = Lum(px[y * w + x]);
                 sum += l;
@@ -315,6 +408,7 @@ public class M1Check : MonoBehaviour
                 if (l > BurntLum) burnt++;
                 grad += Mathf.Abs(Lum(px[y * w + x + 1]) - l) + Mathf.Abs(Lum(px[(y + 1) * w + x]) - l);
             }
+        n = Mathf.Max(n, 1);
         result(new Vector3((float)(sum / n), (float)(grad / n * 1000.0), (float)burnt / n));
     }
 

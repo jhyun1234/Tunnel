@@ -5,10 +5,14 @@ using UnityEngine.Rendering;
 
 // 화면에 들린 곡괭이(뷰모델)와 채굴. Godot Pickaxe.gd + Miner.gd.
 // 좌클릭을 누르고 있는 동안, 카메라 정면 MINE_RANGE 안에 광맥 포켓이 있으면 휘두른다. 허공에는 안 휘두른다.
-// 내려치기가 끝나는 순간(곡괭이 머리가 벽에 닿을 때) 다시 쏴서 맞은 것을 친다 — 휘두르는 사이 시점이 돌았을 수 있다.
-// 휘두르기는 코드로 각도를 흔든다(리깅 애니메이션 아님). 충돌 없는 그림이라 벽을 뚫고 보일 수 있다.
+// 휘두르기: 뒤로 들기 → 내려치기 → 끝나는 순간 다시 쏴서 맞은 것을 친다(휘두르는 사이 시점이 돌았을 수 있다) → 박힌 채 잠깐 멈춤 → 되돌리기.
+// 곡괭이는 ViewModel 레이어라 오버레이 카메라가 그린다(벽 속으로 들어가도 벽 위에 보인다). 헤드램프는 안 비추고 PickLight 만 비춘다.
 public class Pickaxe : MonoBehaviour
 {
+    public const int ViewModelLayer = 8;                 // ProjectSettings/TagManager "ViewModel"
+    public const uint DefaultRenderingLayer = 1u;        // 조명 레이어: 갱도·헤드램프
+    public const uint ViewModelRenderingLayer = 2u;      // 조명 레이어: 곡괭이·PickLight
+
     public Transform cam;
     public Player player;
     public Transform mesh;
@@ -16,7 +20,9 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public float damage = Tuning.MINE_DAMAGE;
     [System.NonSerialized] public float cooldownTime = Tuning.MINE_COOLDOWN;
     [System.NonSerialized] public float swingTimeMul = 1f;
+    [System.NonSerialized] public float aimRadius = Tuning.PICK_AIM_RADIUS;
 
+    static readonly RaycastHit[] Hits = new RaycastHit[16];
     float cooldown, bob;
     bool swinging;
 
@@ -57,15 +63,15 @@ public class Pickaxe : MonoBehaviour
 
     public bool HasTarget => Target(out _, out _);   // 검사가 읽는다
 
-    // 레이 위 가장 가까운 포켓. 벽 충돌체는 무시한다 — Godot MineRay 가 포켓 레이어만 봤다(mask 4).
-    // 포켓 앞면은 벽 충돌 상자보다 몇 cm 만 나와 있어서, 벽에 막히게 두면 포켓 가운데 아래를 조준했을 때 안 맞았다(09-14 검사)
-    static readonly RaycastHit[] Hits = new RaycastHit[16];
-
+    // 판정 구(aimRadius) 위 가장 가까운 포켓. 벽 충돌체는 무시한다 — Godot MineRay 가 포켓 레이어만 봤다(mask 4).
+    // 포켓 앞면은 벽 충돌 상자보다 몇 cm 만 나와 있어서, 벽에 막히게 두면 포켓 아래를 조준했을 때 안 맞았다(09-14 검사)
     bool Target(out OrePocket pocket, out RaycastHit hit)
     {
         pocket = null;
         hit = default;
-        int n = Physics.RaycastNonAlloc(cam.position, cam.forward, Hits, Tuning.MINE_RANGE, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        int n = aimRadius > 0f
+            ? Physics.SphereCastNonAlloc(cam.position, aimRadius, cam.forward, Hits, Tuning.MINE_RANGE, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+            : Physics.RaycastNonAlloc(cam.position, cam.forward, Hits, Tuning.MINE_RANGE, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < n; i++)
         {
             var candidate = Hits[i].collider.GetComponent<OrePocket>();
@@ -75,30 +81,32 @@ public class Pickaxe : MonoBehaviour
                 hit = Hits[i];
             }
         }
+        if (pocket != null && hit.distance <= 0f)
+            hit.point = pocket.transform.position;      // 구가 처음부터 겹치면 닿은 점이 없다
         return pocket != null;
     }
 
     IEnumerator Swing()
     {
         swinging = true;
-        float rest = Tuning.PICK_TILT_DEG, down = rest + Tuning.PICK_SWING_DEG;
-        float time = Tuning.PICK_DOWN_TIME * swingTimeMul;
-        for (float t = 0f; t < time; t += Time.deltaTime)
-        {
-            float u = t / time;
-            SetTilt(Mathf.Lerp(rest, down, u * u));                          // 가속하며 내려친다
-            yield return null;
-        }
-        SetTilt(down);
+        float rest = Tuning.PICK_TILT_DEG, up = rest - Tuning.PICK_WINDUP_DEG, down = rest + Tuning.PICK_SWING_DEG;
+        yield return Tilt(rest, up, Tuning.PICK_WINDUP_TIME, u => Mathf.Sin(u * Mathf.PI * 0.5f));   // 뒤로 든다
+        yield return Tilt(up, down, Tuning.PICK_DOWN_TIME, u => u * u);                              // 가속하며 내려친다
         Strike();
-        time = Tuning.PICK_UP_TIME * swingTimeMul;
+        yield return new WaitForSeconds(Tuning.PICK_HITSTOP_TIME * swingTimeMul);                  // 박힌 채 멈춤
+        yield return Tilt(down, rest, Tuning.PICK_UP_TIME, u => Mathf.Sin(u * Mathf.PI * 0.5f));     // 감속하며 되돌린다
+        swinging = false;
+    }
+
+    IEnumerator Tilt(float from, float to, float time, System.Func<float, float> ease)
+    {
+        time *= swingTimeMul;
         for (float t = 0f; t < time; t += Time.deltaTime)
         {
-            SetTilt(Mathf.Lerp(down, rest, Mathf.Sin(t / time * Mathf.PI * 0.5f)));   // 감속하며 되돌린다
+            SetTilt(Mathf.Lerp(from, to, ease(t / time)));
             yield return null;
         }
-        SetTilt(rest);
-        swinging = false;
+        SetTilt(to);
     }
 
     void Strike()
@@ -107,8 +115,11 @@ public class Pickaxe : MonoBehaviour
             return;
         pocket.TakeHit(damage, cam.forward, hit.point);
         NoiseBus.Make(hit.point, Tuning.NOISE_PICK, "pick", player);   // 포켓에 닿은 타격만 소음. 허공은 위에서 걸러진다
+        MiningFx.I.HitSound(hit.point, pocket.Breaking);
         if (pocket.Breaking)
-            player.Shake(Tuning.SHAKE_AMOUNT, Tuning.SHAKE_TIME);      // 덩이가 빠질 때만 — 평타마다 흔들면 빠지는 순간이 안 특별해진다
+            player.Shake(Tuning.SHAKE_AMOUNT, Tuning.SHAKE_TIME);      // 덩이가 빠질 때 크게
+        else
+            player.Shake(Tuning.PICK_HIT_SHAKE_AMOUNT, Tuning.PICK_HIT_SHAKE_TIME);
     }
 
     void SetTilt(float deg) => transform.localRotation = Quaternion.Euler(deg, 0f, 0f);
