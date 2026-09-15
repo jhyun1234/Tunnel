@@ -210,8 +210,9 @@ public static class BuildM1
         body.transform.SetParent(stalkerGo.transform);
         body.transform.localPosition = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
         body.transform.localScale = new Vector3(Tuning.STALKER_R * 2f, Tuning.STALKER_H * 0.5f, Tuning.STALKER_R * 2f);  // 기본 캡슐 = 반지름 0.5 · 높이 2
-        var bodyMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M3_StalkerBody", color = new Color(0.12f, 0.10f, 0.09f) };
-        bodyMat.SetFloat("_Smoothness", 0.6f);
+        // 자리표시 캡슐 색. 검정(0.12)은 램프 앞 7 m 에서 밝기 0.055 = 갱도 바탕 0.05 과 같아 "절대 보이지 않는다"(사용자 09-15) → 밝은 회갈색
+        var bodyMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M3_StalkerBody", color = new Color(0.40f, 0.36f, 0.32f) };
+        bodyMat.SetFloat("_Smoothness", 0.25f);
         AssetDatabase.DeleteAsset(StalkerMatPath);
         AssetDatabase.CreateAsset(bodyMat, StalkerMatPath);
         body.GetComponent<MeshRenderer>().sharedMaterial = bodyMat;

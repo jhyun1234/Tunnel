@@ -123,7 +123,7 @@ public class Stalker : MonoBehaviour
         transform.position = pos;
         cc.enabled = true;
         hasTarget = false;
-        pause = 0f;
+        pause = Tuning.STALKER_WANDER_PAUSE_S;      // 놓인 자리에서 한 번 멈춘다 (검사 캡처도 이 틈에 찍는다)
         hits = 0;
         noiseTime = -99f;
         spots.Clear();

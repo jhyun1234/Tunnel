@@ -152,7 +152,7 @@ public static class Tuning
     public const float STALKER_R = 0.6f;               // m, 충돌 캡슐 반지름
     public const float STALKER_H = 2.8f;               // m, 충돌 캡슐 높이
     public const float STALKER_SPEED_WANDER = 2.5f;    // m/s, Godot STALKER_SPEED["wander"]
-    public const float STALKER_SPEED_INVESTIGATE = 4.0f;
+    public const float STALKER_SPEED_INVESTIGATE = 5.0f;   // Godot 4.0. 사용자 판정(09-15) "모델이 들어가고 5.0 이면 무섭겠다" → 5.0
     public const float STALKER_SPEED_SEARCH = 2.5f;
     public const float STALKER_EAR_MUL = 1.0f;         // 소음 반경에 곱함 — 반경 안이면 듣는다
     public const int STALKER_SEARCH_CELLS = 3;         // 수색 범위 (격자 칸)

@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|stalker 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -29,6 +29,10 @@ public class M1Check : MonoBehaviour
     // 벽 앞 화면에서 탄 픽셀 비율 상한. 실측(09-14 -sweep, 램프 75.2): 감광 없음 45 % · ref 2 = 9.4 % · pow 1.0 = 7.0 % · ref 3 = 2.8 % · ref 4 pow 1.4 = 1.3 %
     const float MaxBurntNearWall = 0.05f;
     const float MaxBurntPick = 0.05f;             // 곡괭이 화면 영역의 탄 픽셀 비율 상한
+    // 램프 안 괴물 캡슐 영역의 평균 밝기 하한 (사용자 09-15 "절대 보이지 않는다"). 갱도 바탕 0.05. 램프 사거리 14 m 라 13 m 는 0.01 이 맞다.
+    // 실측(09-15): 검정 재질(0.12) 3 m 0.159 · 7 m 0.055 = 바탕과 같음 → 회갈색(0.40) 3 m 0.303 · 7 m 0.127. 안 그리면(ghost) 0.077 · 0.009
+    const float MinStalkerLum3m = 0.20f;
+    const float MinStalkerLum7m = 0.09f;
     static readonly Vector3 NearWallPos = new Vector3(2.75f, 0.1f, 15.75f);   // 오른쪽 벽에 몸이 닿는 자리, 기둥 사이
     static readonly Vector3 MidTunnel = new Vector3(0f, 1.9f, 17.5f);
     readonly List<string> fails = new List<string>();
@@ -94,6 +98,8 @@ public class M1Check : MonoBehaviour
             stalker.earMul = 0.4f;
         if (sabotage == "bigears")              // 귀 ×2 = 50 m — 30 m 밖에서도 온다
             stalker.earMul = 2f;
+        if (sabotage == "ghost")                // 괴물 몸을 안 그린다 — 보임 검사가 잡는지
+            foreach (var r in stalker.GetComponentsInChildren<Renderer>()) r.enabled = false;
         Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? Sweep() : Run(fog));
     }
@@ -319,6 +325,24 @@ public class M1Check : MonoBehaviour
         var mouse = InputSystem.AddDevice<Mouse>("StalkerMouse");
         lamp.lampOn = true;
 
+        // 0. 보이는가 (사용자 09-15 "절대 보이지 않는다"). 갱도 가운데서 앞 3·7·13 m 에 세우고 캡슐 화면 영역 밝기를 잰다
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var bodyR = st.GetComponentsInChildren<Renderer>();
+        Teleport(cc, new Vector3(0f, 0.1f, 3.5f), 0f);
+        var vis = new Dictionary<float, Vector3>();
+        float minRect = 1e9f;
+        foreach (float dist in new[] { 3f, 7f, 13f })
+        {
+            st.Teleport(new Vector3(0f, 0.1f, 3.5f + dist));   // 놓인 뒤 1 s 는 서 있다 (STALKER_WANDER_PAUSE_S)
+            Rect r = default;
+            Vector3 v = default;
+            yield return Capture($"12_stalker_at_{dist:0}m", x => v = x, default, () => r = ScreenRect(mainCam, bodyR));
+            vis[dist] = v;
+            minRect = Mathf.Min(minRect, r.width);
+            Debug.Log($"STALKER_VIS {dist:0} m lum {v.x:F4} burnt {v.z * 100f:F1} % rect {r.width:F0}x{r.height:F0}");
+        }
+        Check("stalker_visible_in_lamp", minRect > 0f && vis[3f].x > MinStalkerLum3m && vis[7f].x > MinStalkerLum7m, $"lum 3 m {vis[3f].x:F3} (min {MinStalkerLum3m}) · 7 m {vis[7f].x:F3} (min {MinStalkerLum7m}) · 13 m {vis[13f].x:F3} (램프 14 m 밖은 안 보이는 게 맞다)");
+
         // 1. 30 m 밖 1타 → 안 듣는다
         StandAt(cc, south);
         st.Teleport(new Vector3(0f, 0.1f, st.zMax));
@@ -451,9 +475,11 @@ public class M1Check : MonoBehaviour
     }
 
     // x = 평균 밝기(sRGB 휘도 0~1), y = 구조(이웃 픽셀 밝기 차 평균 × 1000), z = 하얗게 탄 픽셀 비율(BurntLum 위). region 이 있으면 그 안만
-    IEnumerator Capture(string name, Action<Vector3> result, Rect region = default)
+    // regionAt 은 찍는 순간에 영역을 다시 잰다 — 움직이는 것(괴물)은 0.6 s 기다리는 동안 자리가 바뀐다
+    IEnumerator Capture(string name, Action<Vector3> result, Rect region = default, Func<Rect> regionAt = null)
     {
         yield return new WaitForSeconds(0.6f);        // 램프 페이드·안개 누적·램프 늦게 따라오기가 끝나게
+        if (regionAt != null) region = regionAt();
         yield return new WaitForEndOfFrame();
         var tex = ScreenCapture.CaptureScreenshotAsTexture();
         File.WriteAllBytes(Path.Combine(outDir, name + ".png"), tex.EncodeToPNG());
