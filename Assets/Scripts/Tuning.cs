@@ -70,8 +70,9 @@ public static class Tuning
     // 눈의 어둠 적응 (Godot #32 수정 2, Atmosphere.gd). 램프를 끄면 환경광이 DARK_ADAPT_TIME 에 걸쳐 DARK_ADAPT_AMBIENT 로 오르고
     // 거리 안개가 DARK_ADAPT_FOG 로 짙어진다(환경광은 거리가 없어 먼 곳은 안개로 잠근다). 켜면 즉시 평소(눈부심).
     // 사용자 09-15 M4 판정 "램프를 끄면 아무것도 안 보여 물러나는 것을 볼 수 없다" → 옮긴다. Godot 값 그대로 출발
-    // Godot 3.0 은 Unity 에서 화면 밝기 0.003 (Godot 실측 0.025 의 1/8, 09-15 스윕: 1.5 → 0.0004 · 3.0 → 0.0030 · 6.0 → 0.0101). Unity 전용 제안값 8.0 ≈ 0.014. 사용자가 캡처 14_dark_adapt_* 로 고른다
-    public const float DARK_ADAPT_AMBIENT = 8.0f;
+    // Godot 3.0 은 Unity 에서 화면 밝기 0.0012 (Godot 실측 0.025 의 1/20, 09-15 스윕: 3.0 → 0.0012 · 8.0 → 0.0241 · 16.0 → 0.1269).
+    // 사용자 판정(09-15) 실행 파일에서 1/2 키로 직접 찾음 → 6.4
+    public const float DARK_ADAPT_AMBIENT = 6.4f;
     public const float DARK_ADAPT_TIME = 4.0f;     // 초
     public const float DARK_ADAPT_FOG = 0.45f;     // 적응했을 때 거리 안개 밀도 — 2 m 41 %·4 m 17 %·6 m 7 % 만 보인다
     public const float ADJ_SATURATION = 0.75f;
