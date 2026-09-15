@@ -7,6 +7,7 @@ using UnityEngine.Rendering;
 // 좌클릭을 누르고 있는 동안, 카메라 정면 MINE_RANGE 안에 광맥 포켓이나 괴물이 있으면 휘두른다. 허공에는 안 휘두른다.
 // 휘두르기: 뒤로 들기 → 내려치기 → 끝나는 순간 다시 쏴서 맞은 것을 친다(휘두르는 사이 시점이 돌았을 수 있다) → 박힌 채 잠깐 멈춤 → 되돌리기.
 // 곡괭이는 ViewModel 레이어라 오버레이 카메라가 그린다(벽 속으로 들어가도 벽 위에 보인다). 헤드램프는 안 비추고 PickLight 만 비춘다.
+// 우클릭 = 던지기 (M6). 곡괭이는 하나뿐 — 던지면 hasPick 이 false 라 못 캐고, ThrownPick 옆에서 E 로 주워야(Return) 다시 캔다.
 public class Pickaxe : MonoBehaviour
 {
     public const int ViewModelLayer = 8;                 // ProjectSettings/TagManager "ViewModel"
@@ -16,11 +17,14 @@ public class Pickaxe : MonoBehaviour
     public Transform cam;
     public Player player;
     public Transform mesh;
+    public ThrownPick thrown;                            // 씬에 하나. 던지면 켜고 주우면 끈다
     // 검사가 실행 중에 바꾼다. 값은 Tuning 한 곳
     [System.NonSerialized] public float damage = Tuning.MINE_DAMAGE;
     [System.NonSerialized] public float cooldownTime = Tuning.MINE_COOLDOWN;
     [System.NonSerialized] public float swingTimeMul = 1f;
     [System.NonSerialized] public float aimRadius = Tuning.PICK_AIM_RADIUS;
+    [System.NonSerialized] public bool oneOnly = true;   // 사보타주 twopicks 가 끈다 — 던져도 손에 남는 상태
+    [System.NonSerialized] public bool hasPick = true;
 
     static readonly RaycastHit[] Hits = new RaycastHit[16];
     float cooldown, bob;
@@ -41,12 +45,17 @@ public class Pickaxe : MonoBehaviour
     {
         cooldown = Mathf.Max(0f, cooldown - Time.deltaTime);
         var mouse = Mouse.current;
-        if (cooldown <= 0f && !swinging && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
+        if (!swinging && hasPick && mouse != null && mouse.rightButton.wasPressedThisFrame && !player.frozen)
+        {
+            Throw();
+            return;
+        }
+        if (cooldown <= 0f && !swinging && hasPick && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
         {
             cooldown = cooldownTime;
             StartCoroutine(Swing());
         }
-        if (swinging)
+        if (swinging || !hasPick)
             return;
         // 걸을 때만 흔들린다. 서 있으면 멎는다
         if (player.Speed < 0.2f)
@@ -138,6 +147,28 @@ public class Pickaxe : MonoBehaviour
             player.Shake(Tuning.SHAKE_AMOUNT, Tuning.SHAKE_TIME);      // 덩이가 빠질 때 크게
         else
             player.Shake(Tuning.PICK_HIT_SHAKE_AMOUNT, Tuning.PICK_HIT_SHAKE_TIME);
+    }
+
+    // 던지기: 뷰모델을 숨기고 ThrownPick 을 카메라 앞에서 던진다. 방향은 카메라 앞을 오른쪽 축으로 THROW_UP_DEG 올린 것
+    void Throw()
+    {
+        if (thrown == null)
+            return;
+        if (oneOnly)
+        {
+            hasPick = false;
+            mesh.gameObject.SetActive(false);
+        }
+        Vector3 dir = Quaternion.AngleAxis(-Tuning.THROW_UP_DEG, cam.right) * cam.forward;
+        thrown.Launch(cam.position + cam.forward * 0.6f, dir * Tuning.THROW_SPEED, cam.right * 8f);
+    }
+
+    // ThrownPick 이 E 로 주워졌다
+    public void Return()
+    {
+        hasPick = true;
+        mesh.gameObject.SetActive(true);
+        thrown.gameObject.SetActive(false);
     }
 
     void SetTilt(float deg) => transform.localRotation = Quaternion.Euler(deg, 0f, 0f);

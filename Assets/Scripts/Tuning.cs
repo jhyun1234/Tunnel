@@ -209,6 +209,13 @@ public static class Tuning
     public const float STALKER_RETREAT_MAX_M = 14.0f;
     public const float STALKER_REGEN_S = 90.0f;         // s, 제안값. 숨었다가 체력 100 으로 재등장 (층마다 −25 % 는 층이 생길 때)
     public const float STALKER_SQUASH_S = 0.3f;         // s, Unity 전용: 맞으면 몸이 납작해지는 시간 (캡슐용 휘청 표시)
+    // ---- M6 곡괭이 던지기 (#34, 규칙 개정 4). Godot Tuning.gd 그대로. 설계서 v2 Step 4 "착지 소음은 유인" · Step 6 "던지기도 25 + 스턴" ----
+    public const float THROW_SPEED = 14.0f;             // m/s. Unity 중력 9.81(Godot 24 이 아님)이라 사거리는 검사 실측 → HANDOFF
+    public const float THROW_UP_DEG = 10.0f;            // 카메라 앞에서 위로
+    public const float THROW_BODY_R = 0.15f;            // m, 던진 곡괭이 충돌 구
+    public const float NOISE_PICK_LAND = 20.0f;         // m, 착지 소음 (광차와 같은 급). 유인 — 배회·수색 중에만 먹힌다 (Stalker.OnNoise)
+    public const float THROW_STUCK_S = 3.0f;            // s, 착지 뒤 이만큼 지나면 얼린다 (틈에 끼지 않게)
+    public const float CARRY_REACH = 2.5f;              // m, E 가 먹는 거리 (줍기)
     // Unity 전용 제안값: 괴물 눈 두 개가 약하게 빛난다 — 램프를 꺼도 괴물 자리는 보인다 (사용자 09-15 A+C 결정)
     public const float STALKER_EYE_GLOW = 0.6f;    // Unlit 색 배율
     public static readonly Color STALKER_EYE_COLOR = new Color(0.90f, 0.80f, 0.60f);

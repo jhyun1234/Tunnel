@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase|retreat 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase|retreat|throw 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -114,6 +114,12 @@ public class M1Check : MonoBehaviour
             stalker.retreatArmor = false;
         if (sabotage == "stunlock")             // 스턴 중에도 맞는다 — 연타로 1.5 s 안에 세 대
             stalker.stunImmune = false;
+        if (sabotage == "lurechase")            // 추격 중에도 던진 곡괭이 소리에 돌아선다 — 도망이 너무 쉬운 상태
+            stalker.lureInChase = true;
+        if (sabotage == "nopickup")             // 줍기 거리 0 — E 가 안 먹는다
+            pickaxe.thrown.reach = 0f;
+        if (sabotage == "twopicks")             // 던져도 손에 남는다 — 곡괭이가 둘인 상태
+            pickaxe.oneOnly = false;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -139,7 +145,132 @@ public class M1Check : MonoBehaviour
             yield return ChaseStage(cc);
         if (only == "" || only == "retreat")
             yield return RetreatStage(cc);
+        if (only == "" || only == "throw")
+            yield return ThrowStage(cc);
         Finish();
+    }
+
+    // M6: 곡괭이 던지기. 플레이어는 z 6 에서 +Z 를 본다. 괴물은 필요한 검사에서만 켠다
+    IEnumerator ThrowStage(CharacterController cc)
+    {
+        var st = stalker;
+        var mouse = InputSystem.AddDevice<Mouse>("ThrowMouse");
+        var kb = InputSystem.AddDevice<Keyboard>("ThrowKeyboard");
+        var thrown = pickaxe.thrown;
+        Vector3 P = new Vector3(0f, 0.1f, 6f);
+        float t;
+
+        // ① 던지면 뷰모델이 꺼지고 ThrownPick 이 날아가 3 s 안에 착지, 소음 pick_land 20 m 한 번, 5 m 이상 날아간다
+        st.enabled = false;
+        lamp.lampOn = true;
+        Teleport(cc, P, 0f);
+        player.frozen = false;
+        if (!pickaxe.hasPick) pickaxe.Return();
+        yield return null;
+        int noise0 = NoiseBus.Total;
+        yield return RightClick(mouse);
+        bool vmOff = !pickaxe.mesh.gameObject.activeSelf;
+        bool active = thrown.gameObject.activeSelf;
+        t = 0f;
+        while (!thrown.landed && t < 3f) { t += Time.deltaTime; yield return null; }
+        float landT = t;
+        float range = Flat(thrown.landPos - P);
+        Check("throw_lands_with_noise_20m", vmOff && active && !pickaxe.hasPick && thrown.landed && NoiseBus.Total == noise0 + 1 && NoiseBus.LastKind == "pick_land" && NoiseBus.LastRadius == Tuning.NOISE_PICK_LAND && range >= 5f,
+            $"viewmodel off {vmOff}, thrown active {active}, hasPick {pickaxe.hasPick}, landed {thrown.landed} at {landT:F2} s on {thrown.landedOn} at {thrown.landPos}, {range:F1} m from thrower, noise {NoiseBus.LastKind} {NoiseBus.LastRadius:0} m (+{NoiseBus.Total - noise0})");
+
+        // ② 던진 뒤엔 못 캔다: 포켓 앞에서 좌클릭 → 포켓 체력 그대로, 소음 없음
+        var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
+        pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
+        OrePocket pk = pockets.Find(x => !x.Breaking && x.health >= Tuning.POCKET_HEALTH) ?? pockets[0];
+        StandAt(cc, pk);
+        yield return null;
+        float hp0 = pk.health;
+        noise0 = NoiseBus.Total;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(0.6f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return null;
+        Check("no_mining_without_pick", pk.health == hp0 && NoiseBus.Total == noise0 && !pickaxe.hasPick, $"pocket hp {hp0:0} → {pk.health:0}, noises +{NoiseBus.Total - noise0}, hasPick {pickaxe.hasPick}");
+
+        // ③ 유인: 램프 끄고, 착지점에서 15 m 북쪽에 배회하는 괴물 → Investigate 로 착지점 쪽으로 5 m 이상 온다 (첫 소리 = 7 m 규칙)
+        pickaxe.Return();
+        lamp.lampOn = false;
+        Teleport(cc, P, 0f);
+        yield return null;
+        Vector3 expectLand = P + Vector3.forward * range;
+        Vector3 S = new Vector3(0f, 0.1f, Mathf.Min(expectLand.z + 15f, st.zMax - 1f));
+        st.enabled = true;
+        st.Teleport(S, 180f);
+        st.hp = Tuning.STALKER_HP;
+        yield return null;
+        yield return RightClick(mouse);
+        t = 0f;
+        while (!thrown.landed && t < 3f) { t += Time.deltaTime; yield return null; }
+        float sd0 = Flat(st.transform.position - thrown.landPos);
+        t = 0f;
+        while (t < 4f && !((st.state == Stalker.State.Investigate || st.state == Stalker.State.Search) && Flat(st.transform.position - S) >= 5f)) { t += Time.deltaTime; yield return null; }
+        float moved = Flat(st.transform.position - S);
+        float sd1 = Flat(st.transform.position - thrown.landPos);
+        Check("landing_noise_lures_wanderer", sd0 <= Tuning.NOISE_PICK_LAND && st.lastHeard.StartsWith("pick_land") && (st.state == Stalker.State.Investigate || st.state == Stalker.State.Search) && moved >= 5f && sd1 < sd0,
+            $"stalker {sd0:F1} m from landing, heard '{st.lastHeard}', state {st.state} after {t:F1} s, moved {moved:F1} m, now {sd1:F1} m from landing");
+
+        // ④ 추격 중엔 무시: 35 m 북쪽에서 추격해 오는 괴물 — 던져도 상태 Chase 그대로, pick_land 를 안 듣는다
+        pickaxe.Return();
+        Teleport(cc, P, 0f);
+        st.Teleport(new Vector3(0f, 0.1f, Mathf.Min(P.z + 35f, st.zMax - 1f)), 180f);
+        float loseS0 = st.loseS;
+        st.loseS = 99f;                                                // 못 보는 동안 추격을 놓지 않게 — 값만 바꿈
+        st.state = Stalker.State.Chase;
+        st.lastSeen = P;
+        st.lastHeard = "-";
+        yield return null;
+        yield return RightClick(mouse);
+        t = 0f;
+        while (!thrown.landed && t < 3f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(0.3f);
+        Check("chaser_ignores_landing_noise", thrown.landed && st.state == Stalker.State.Chase && !st.lastHeard.StartsWith("pick_land"),
+            $"landed {thrown.landed}, state {st.state}, heard '{st.lastHeard}', {Flat(st.transform.position - player.transform.position):F1} m away");
+        st.loseS = loseS0;
+        st.enabled = false;
+        st.Teleport(st.homePos);
+
+        // ⑤ 줍기: 4 m 에서 E 는 안 먹고, 2 m 에서 E 면 다시 든다. 착지 뒤 굴러가다 THROW_STUCK_S 에 멈춘 자리 기준
+        t = 0f;
+        while (!thrown.Frozen && t < Tuning.THROW_STUCK_S + 2f) { t += Time.deltaTime; yield return null; }
+        Vector3 land = thrown.transform.position;
+        float rolled = Flat(land - thrown.landPos);
+        Teleport(cc, new Vector3(land.x, 0.1f, land.z - 4f), 0f);
+        yield return null;
+        yield return PressKey(kb, Key.E);
+        bool farNo = !pickaxe.hasPick && thrown.gameObject.activeSelf;
+        Teleport(cc, new Vector3(land.x, 0.1f, land.z - 2f), 0f);
+        yield return null;
+        yield return PressKey(kb, Key.E);
+        Check("pickup_with_e_within_reach", farNo && pickaxe.hasPick && pickaxe.mesh.gameObject.activeSelf && !thrown.gameObject.activeSelf,
+            $"rolled {rolled:F1} m after landing, frozen {thrown.Frozen}; E at 4 m: hasPick {!farNo}; E at 2 m: hasPick {pickaxe.hasPick}, viewmodel {pickaxe.mesh.gameObject.activeSelf}, thrown active {thrown.gameObject.activeSelf}");
+
+        // ⑥ 맞히기: 5 m 앞 괴물에 던지면 체력 −25 · 스턴, 곡괭이는 괴물 2 m 안에 떨어진다
+        lamp.lampOn = false;
+        Teleport(cc, P, 0f);
+        st.enabled = true;
+        Vector3 T = P + Vector3.forward * 5f;
+        st.Teleport(T, 180f);
+        st.hp = Tuning.STALKER_HP;
+        st.hitsSeen = st.hitsTaken = 0;
+        yield return null;
+        float hpBefore = st.hp;
+        yield return RightClick(mouse);
+        t = 0f;
+        while (st.state != Stalker.State.Stun && t < 1.5f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(0.5f);
+        float dropD = Flat(thrown.transform.position - T);
+        Check("thrown_pick_hits_and_stuns", st.state == Stalker.State.Stun && st.hp == hpBefore - Tuning.STALKER_HIT_DMG && st.hitsTaken == 1 && thrown.landed && dropD < 2f,
+            $"state {st.state}, hp {hpBefore:0} → {st.hp:0}, taken {st.hitsTaken}, landed {thrown.landed} {dropD:F1} m from stalker");
+        st.enabled = false;                                            // 스턴이 끝나면 추격 — 5 m 라 바로 잡힌다. 여기서 끈다
+        st.Teleport(st.homePos);
+        if (!pickaxe.hasPick) pickaxe.Return();                        // 다음 구간은 곡괭이를 들고 시작한다
+        lamp.lampOn = true;
+        st.enabled = true;
     }
 
     IEnumerator M1(CharacterController cc, VolumetricFogVolumeComponent fog)
@@ -662,6 +793,22 @@ public class M1Check : MonoBehaviour
         while (st.state != Stalker.State.Search && t < 8f) { t += Time.deltaTime; yield return null; }
         lamp.lampOn = true;
         yield return Capture("11_stalker_arrived", v => { });
+    }
+
+    IEnumerator RightClick(Mouse mouse)
+    {
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Right));
+        yield return new WaitForSeconds(0.05f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return null;
+    }
+
+    IEnumerator PressKey(Keyboard kb, Key key)
+    {
+        InputSystem.QueueStateEvent(kb, new KeyboardState(key));
+        yield return new WaitForSeconds(0.05f);
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return null;
     }
 
     IEnumerator Click(Mouse mouse)

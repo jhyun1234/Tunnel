@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // 괴물 (M3 귀·배회·조사·수색 + M4 눈·빛·alert·chase·catch + M5 체력·스턴·철수). Godot Stalker.gd 에서 옮겼다.
-// 천장 이동·던진 곡괭이는 다음 마일스톤. 길찾기 없음 — 직선 갱도라 목적지로 곧장 간다.
+// 천장 이동은 모델 뒤. 던진 곡괭이(M6)는 ThrownPick 이 Hit 을 부른다 — 휘두른 한 대와 같다. 길찾기 없음 — 직선 갱도라 목적지로 곧장 간다.
 // 귀: 1타 = 소리 쪽으로 한 칸만, STALKER_HEAR_CONFIRM_S 안에 같은 자리에서 한 번 더 = 그 자리까지 (설계서 v2 Step 5).
 // 눈: 램프 켜진 몸이 앞 원뿔 STALKER_EYE_DEG 안 STALKER_EYE_M 안, 시선이 안 가려야. 빛: 켜진 램프가 STALKER_LIGHT_M 안에 보이면 배회 속도로 다가간다.
 // 체력(설계서 v2 Step 6, 교차 검토): 곡괭이 한 대 25 + 스턴 1.5 s(포효 0.7 + 뒷걸음 0.8). 철수선 30 이하가 되는 순간 철수 —
@@ -31,6 +31,7 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public float retreatHp = Tuning.STALKER_RETREAT_HP;
     [System.NonSerialized] public bool retreatArmor = true;      // 철수 중 피격은 스턴만
     [System.NonSerialized] public bool stunImmune = Tuning.STALKER_STUN_IMMUNE;   // 스턴 중 피격 무효
+    [System.NonSerialized] public bool lureInChase;             // 사보타주 lurechase: 추격 중에도 소리를 듣는다 (M6 유인 검사가 잡는지)
     [System.NonSerialized] public float hiddenLeft;             // s, 숨어 있는 남은 시간
     [System.NonSerialized] public string lastHeard = "-";
     [System.NonSerialized] public string sense = "-";   // 이번 프레임 감각: eye / found / light / -
@@ -71,8 +72,8 @@ public class Stalker : MonoBehaviour
 
     void OnNoise(Vector3 pos, float radius, string kind, object who)
     {
-        if (state != State.Wander && state != State.Investigate && state != State.Search)
-            return;                                // 이미 봤거나 맞았거나 숨었다 — 소리는 뒷전
+        if (state != State.Wander && state != State.Investigate && state != State.Search && !(lureInChase && state == State.Chase))
+            return;                                // 이미 봤거나 맞았거나 숨었다 — 소리는 뒷전. 던진 곡괭이 유인도 추격 중엔 안 먹힌다 (설계서 Step 4)
         float d = Flat(pos - transform.position);
         if (d > radius * earMul)
             return;

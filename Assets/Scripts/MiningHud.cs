@@ -5,6 +5,7 @@ using UnityEngine;
 public class MiningHud : MonoBehaviour
 {
     public Player player;
+    public Pickaxe pickaxe;
 
     static readonly Color NoiseColor = new Color(0.95f, 0.85f, 0.5f);
     static readonly Vector2 Center = new Vector2(110f, -110f);   // 왼쪽 아래 기준
@@ -35,6 +36,8 @@ public class MiningHud : MonoBehaviour
             ring = Circle(128, true);
         }
         GUI.Label(new Rect(24f, Screen.height - 64f, 236f, 40f), $"철 {player.ore}", label);
+        if (pickaxe != null && !pickaxe.hasPick)
+            GUI.Label(new Rect(24f, Screen.height - 104f, 600f, 40f), "곡괭이 없음 — E 로 줍기", label);
         if (left <= 0f)
             return;
         float a = left / Tuning.NOISE_HUD_FADE;

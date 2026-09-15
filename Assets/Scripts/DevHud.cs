@@ -10,6 +10,7 @@ public class DevHud : MonoBehaviour
     public Player player;
     public Volume volume;
     public Stalker stalker;
+    public Pickaxe pickaxe;
 
     VolumetricFogVolumeComponent fog;
     float fps, acc;
@@ -55,6 +56,6 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}   [F1] hide" + monster);
+            $"{player.stance}  stamina {player.stamina:0}  pick {(pickaxe == null || pickaxe.hasPick ? "held" : "thrown [E]")}   [F1] hide" + monster);
     }
 }

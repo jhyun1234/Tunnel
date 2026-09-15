@@ -16,7 +16,7 @@ public class MiningFx : MonoBehaviour
     public Material dustMaterial;
     public AudioClip[] hitClips;                        // Kenney Impact Sounds impactMining_* (CC0)
 
-    const int IgnoreRaycastLayer = 2;
+    public const int IgnoreRaycastLayer = 2;
     readonly List<GameObject> chips = new List<GameObject>();
 
     void Awake() => I = this;

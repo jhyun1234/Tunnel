@@ -264,6 +264,28 @@ public static class BuildM1
         stalker.zMax = (PieceCount - 0.5f) * Tuning.GRID_CELL - Tuning.STALKER_R - 0.2f;
         hud.stalker = stalker;
         check.stalker = stalker;
+        hud.pickaxe = pickaxe;
+
+        // M6 던진 곡괭이 — 씬에 하나, 꺼진 채. Pickaxe.Throw 가 켠다. 광석과 같은 Ignore Raycast 레이어(시선·조준 구에 안 걸린다)
+        var thrownGo = new GameObject("ThrownPick");
+        thrownGo.layer = MiningFx.IgnoreRaycastLayer;
+        thrownGo.AddComponent<SphereCollider>();
+        thrownGo.AddComponent<Rigidbody>();
+        var thrownMesh = Instance(pick, thrownGo.transform).transform;
+        thrownMesh.localScale = Vector3.one * Tuning.PICK_SCALE;
+        var box = new Bounds();
+        bool first = true;
+        foreach (var r in thrownMesh.GetComponentsInChildren<Renderer>())
+        {
+            r.gameObject.layer = MiningFx.IgnoreRaycastLayer;
+            if (first) { box = r.bounds; first = false; } else box.Encapsulate(r.bounds);
+        }
+        thrownMesh.localPosition = -box.center;             // 메시 원점이 자루 끝이라 AABB 가운데를 몸체 중심으로
+        var thrown = thrownGo.AddComponent<ThrownPick>();
+        thrown.pickaxe = pickaxe;
+        thrown.player = p;
+        pickaxe.thrown = thrown;
+        thrownGo.SetActive(false);
 
         var mining = new GameObject("Mining");
         var fx = mining.AddComponent<MiningFx>();
@@ -273,7 +295,9 @@ public static class BuildM1
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
         fx.dustMaterial = MakeDustMaterial();
         fx.hitClips = hitClips;
-        mining.AddComponent<MiningHud>().player = p;
+        var miningHud = mining.AddComponent<MiningHud>();
+        miningHud.player = p;
+        miningHud.pickaxe = pickaxe;
 
         EditorSceneManager.SaveScene(scene, ScenePath);
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
