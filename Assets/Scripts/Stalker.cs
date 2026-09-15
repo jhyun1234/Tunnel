@@ -30,11 +30,13 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public float dmgMul = 1f;
     [System.NonSerialized] public float retreatHp = Tuning.STALKER_RETREAT_HP;
     [System.NonSerialized] public bool retreatArmor = true;      // 철수 중 피격은 스턴만
+    [System.NonSerialized] public bool stunImmune = Tuning.STALKER_STUN_IMMUNE;   // 스턴 중 피격 무효
     [System.NonSerialized] public float hiddenLeft;             // s, 숨어 있는 남은 시간
     [System.NonSerialized] public string lastHeard = "-";
     [System.NonSerialized] public string sense = "-";   // 이번 프레임 감각: eye / found / light / -
     [System.NonSerialized] public int hits;          // 같은 자리에서 연속으로 들은 횟수
-    [System.NonSerialized] public int hitsTaken;     // 곡괭이에 맞은 횟수
+    [System.NonSerialized] public int hitsTaken;     // 곡괭이에 맞은 횟수 (먹힌 것)
+    [System.NonSerialized] public int hitsSeen;      // 곡괭이가 닿은 횟수 (스턴 중 무효 포함)
     [System.NonSerialized] public int spotsVisited;  // 이번 수색에서 들여다본 곳 수
     [System.NonSerialized] public int catches, restarts;
     [System.NonSerialized] public Vector3 noisePos, lastSeen;
@@ -86,16 +88,25 @@ public class Stalker : MonoBehaviour
         StartInvestigate(t, Tuning.STALKER_SPEED_INVESTIGATE, false);
     }
 
-    // 곡괭이에 맞았다 (Pickaxe.Strike). 철수 중이면 체력은 안 깎이고 스턴만
+    // 곡괭이에 맞았다 (Pickaxe.Strike). 스턴 중 피격은 무효(연타 방지). 철수 중이면 체력은 안 깎이고 스턴만.
+    // 철수선 이하가 되는 순간은 스턴 없이 바로 철수 (사용자 09-15 "피가 없으면 곧바로 도망가는 연출")
     public void Hit(float dmg, Vector3 dir)
     {
         if (!CanBeHit)
+            return;
+        hitsSeen++;
+        if (state == State.Stun && stunImmune)
             return;
         hitsTaken++;
         bool retreating = state == State.Retreat;
         if (!retreating || !retreatArmor)
             hp = Mathf.Max(0f, hp - dmg * dmgMul);
         squashLeft = Tuning.STALKER_SQUASH_S;
+        if (!retreating && hp <= retreatHp)
+        {
+            StartRetreat();
+            return;
+        }
         backDir = Flat3(transform.position - player.position).normalized;
         if (backDir.sqrMagnitude < 1e-4f) backDir = Flat3(dir).normalized;
         state = State.Stun;
@@ -204,19 +215,17 @@ public class Stalker : MonoBehaviour
             Fall(dt);
     }
 
-    // 스턴: 포효(서서 플레이어를 봄) → 뒷걸음. 끝나면 철수선 이하면 철수, 아니면 추격
+    // 스턴: 맞는 순간 밀렸다가(STALKER_STUN_KNOCK_*) 남은 시간은 서서 플레이어를 본다. 끝나면 철수선 이하면 철수, 아니면 추격
     void UpdateStun(float dt)
     {
         stunLeft -= dt;
-        if (stunLeft > Tuning.STALKER_STUN_S - Tuning.STALKER_STUN_ROAR_S)
-        {
-            Face(player.position, dt);
-            Fall(dt);
-        }
+        vy = cc.isGrounded ? -1f : vy - Tuning.GRAVITY * dt;
+        if (stunLeft > Tuning.STALKER_STUN_S - Tuning.STALKER_STUN_KNOCK_S)
+            cc.Move((backDir * (Tuning.STALKER_STUN_KNOCK_M / Tuning.STALKER_STUN_KNOCK_S) + Vector3.up * vy) * dt);
         else
         {
-            vy = cc.isGrounded ? -1f : vy - Tuning.GRAVITY * dt;
-            cc.Move((backDir * Tuning.STALKER_STUN_BACK_SPEED + Vector3.up * vy) * dt);
+            Face(player.position, dt);
+            cc.Move(Vector3.up * vy * dt);
         }
         if (stunLeft > 0f)
             return;

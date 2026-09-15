@@ -195,9 +195,12 @@ public static class Tuning
     public const float STALKER_HIT_DMG = 25.0f;         // 제안값, 곡괭이 한 대
     public const float STALKER_RETREAT_HP = 30.0f;      // 제안값. 이하가 되는 순간 철수. 철수 중 피격은 스턴만 — 체력 0 경로 없음
     public const float STALKER_STUN_S = 1.5f;           // s, 곡괭이 스턴 (Godot, 결정 사항)
-    public const float STALKER_STUN_ROAR_S = 0.7f;      // s, 그중 서서 포효 (시네마틱 설계서와 일치)
-    public const float STALKER_STUN_BACK_S = 0.8f;      // s, 그중 뒷걸음
-    public const float STALKER_STUN_BACK_SPEED = 2.0f;  // m/s, Unity 전용 제안값 — 1.6 m 면 곡괭이 사거리(3 m) 밖
+    // 사용자 판정(09-15 M5 1차): "포효 0.7 + 뒷걸음 0.8" 은 뒷걸음 뒤 돌진이 '준비 동작'으로 읽혀 "맞아서 밀렸다"가 안 됐다 →
+    // 맞는 순간 STALKER_STUN_KNOCK_M 만큼 STALKER_STUN_KNOCK_S 에 밀리고(충격), 남은 시간은 서서 플레이어를 본다. 시네마틱 설계서 Step 4 와 어긋남 — 결정 변경 제안
+    public const float STALKER_STUN_KNOCK_M = 1.0f;     // m, Unity 전용 제안값
+    public const float STALKER_STUN_KNOCK_S = 0.2f;     // s
+    // 사용자 판정(09-15): 스턴마다 다시 걸리니 연타로 1.5 s 안에 세 대를 다 넣어 "너무 쉽다" → 스턴 중 피격은 무효(피해·스턴 없음). 한 번 다가올 때 한 대만 먹힌다
+    public const bool STALKER_STUN_IMMUNE = true;
     public const float STALKER_SPEED_RETREAT = 4.0f;    // m/s (Godot STALKER_SPEED["retreat"])
     public const float STALKER_WALL_SPEED = 1.2f;       // m/s, 벽을 기어 오르는 속도 (Godot)
     public const float TUNNEL_ARCH_Y = 4.4f;            // m, 벽이 끝나는 높이 — 여기까지 오르면 사라진다 (Godot)
