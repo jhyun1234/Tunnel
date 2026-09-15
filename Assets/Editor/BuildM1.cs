@@ -20,6 +20,7 @@ public static class BuildM1
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
+    const string StalkerMatPath = "Assets/Settings/M3_StalkerBody.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
@@ -195,6 +196,31 @@ public static class BuildM1
         check.volume = volume;
         check.pieces = pieces;
         check.pickaxe = pickaxe;
+
+        // M3 괴물 — 캡슐 하나 (모델은 텍스처 확정 뒤). 북쪽 끝에서 시작
+        var stalkerGo = new GameObject("Stalker");
+        stalkerGo.transform.position = new Vector3(0f, 0.1f, (PieceCount - 1) * Tuning.GRID_CELL);
+        var scc = stalkerGo.AddComponent<CharacterController>();
+        scc.radius = Tuning.STALKER_R;
+        scc.height = Tuning.STALKER_H;
+        scc.center = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
+        var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        body.name = "Body";
+        UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+        body.transform.SetParent(stalkerGo.transform);
+        body.transform.localPosition = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
+        body.transform.localScale = new Vector3(Tuning.STALKER_R * 2f, Tuning.STALKER_H * 0.5f, Tuning.STALKER_R * 2f);  // 기본 캡슐 = 반지름 0.5 · 높이 2
+        var bodyMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M3_StalkerBody", color = new Color(0.12f, 0.10f, 0.09f) };
+        bodyMat.SetFloat("_Smoothness", 0.6f);
+        AssetDatabase.DeleteAsset(StalkerMatPath);
+        AssetDatabase.CreateAsset(bodyMat, StalkerMatPath);
+        body.GetComponent<MeshRenderer>().sharedMaterial = bodyMat;
+        var stalker = stalkerGo.AddComponent<Stalker>();
+        stalker.player = player.transform;
+        stalker.zMin = -Tuning.GRID_CELL * 0.5f + Tuning.STALKER_R + 0.2f;
+        stalker.zMax = (PieceCount - 0.5f) * Tuning.GRID_CELL - Tuning.STALKER_R - 0.2f;
+        hud.stalker = stalker;
+        check.stalker = stalker;
 
         var mining = new GameObject("Mining");
         var fx = mining.AddComponent<MiningFx>();

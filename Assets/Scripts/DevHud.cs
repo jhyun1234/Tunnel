@@ -9,6 +9,7 @@ public class DevHud : MonoBehaviour
     public Headlamp lamp;
     public Player player;
     public Volume volume;
+    public Stalker stalker;
 
     VolumetricFogVolumeComponent fog;
     float fps, acc;
@@ -45,10 +46,12 @@ public class DevHud : MonoBehaviour
     {
         if (!show || fog == null)
             return;
-        GUI.Label(new Rect(10, 10, 700, 100),
+        string monster = stalker == null ? "" :
+            $"\nstalker {stalker.state}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}   STALKER_EAR_MUL x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m)";
+        GUI.Label(new Rect(10, 10, 900, 120),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}   [F1] hide");
+            $"{player.stance}  stamina {player.stamina:0}   [F1] hide" + monster);
     }
 }

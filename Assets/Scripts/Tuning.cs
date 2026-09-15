@@ -148,6 +148,27 @@ public static class Tuning
     public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간
     public const float NOISE_HUD_PX_PER_M = 2.0f;  // 반경 1 m 당 지름 px
 
+    // ---- 괴물 (M3 소음 듣는 최소판). Godot Tuning.gd 괴물(#35) 절. 눈·빛·추격·잡기·천장은 다음 마일스톤 ----
+    public const float STALKER_R = 0.6f;               // m, 충돌 캡슐 반지름
+    public const float STALKER_H = 2.8f;               // m, 충돌 캡슐 높이
+    public const float STALKER_SPEED_WANDER = 2.5f;    // m/s, Godot STALKER_SPEED["wander"]
+    public const float STALKER_SPEED_INVESTIGATE = 4.0f;
+    public const float STALKER_SPEED_SEARCH = 2.5f;
+    public const float STALKER_EAR_MUL = 1.0f;         // 소음 반경에 곱함 — 반경 안이면 듣는다
+    public const int STALKER_SEARCH_CELLS = 3;         // 수색 범위 (격자 칸)
+    public const int STALKER_SPOTS_MIN = 2;            // 수색 곳 수
+    public const int STALKER_SPOTS_MAX = 3;
+    public const float STALKER_DWELL_S = 2.0f;         // s, 곳마다 머무는 시간
+    public const float STALKER_FOUND_M = 2.0f;         // m, 수색 자리에서 이 안이면 들킴 (M3 에서는 '도착' 기준으로만 쓴다)
+    public const int STALKER_WANDER_CELLS = 3;         // 배회 반경 (격자 칸)
+    public const float STALKER_WANDER_PAUSE_S = 1.0f;  // s, 배회 도착마다 멈춤
+    // Unity 전용 (제안서 M3 제안값): 1타 = 방향만, 2타 연속 = 정확 (설계서 v2 Step 5)
+    public const float STALKER_HEAR_SOFT_M = GRID_CELL; // m, 첫 소리에 소리 쪽으로 다가가는 거리 (한 칸)
+    public const float STALKER_HEAR_CONFIRM_S = 3.0f;   // s, 이 안에 같은 자리에서 한 번 더 들리면 그 자리까지 간다
+    public const float STALKER_ARRIVE_M = 0.5f;         // m, 목적지 도착 판정
+    public const float STALKER_LANE_X = 2.2f;           // m, 괴물이 다니는 폭 (벽 3.16 − 몸 0.6 − 여유)
+    public const float STALKER_STUCK_S = 1.0f;          // s, 이만큼 막혀 있으면 그 자리를 도착으로 친다
+
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;
     public static float JumpVelocity => Mathf.Sqrt(2.0f * GRAVITY * JUMP_HEIGHT);

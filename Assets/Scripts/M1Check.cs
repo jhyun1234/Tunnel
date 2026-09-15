@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -20,6 +20,7 @@ public class M1Check : MonoBehaviour
     public Volume volume;
     public Transform pieces;
     public Pickaxe pickaxe;
+    public Stalker stalker;
 
     const float MinFps = 60f;
     // Godot 골든 캡처 play_09_lamp.png(직선 갱도, 램프 켬) 화면 평균 밝기. 같은 계산(sRGB 휘도 평균)으로 잰 참고값
@@ -89,6 +90,10 @@ public class M1Check : MonoBehaviour
             lamp.GetComponent<Light>().GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer | Pickaxe.ViewModelRenderingLayer;
         if (sabotage == "mute")
             MiningFx.I.hitClips = new AudioClip[0];
+        if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
+            stalker.earMul = 0.4f;
+        if (sabotage == "bigears")              // 귀 ×2 = 50 m — 30 m 밖에서도 온다
+            stalker.earMul = 2f;
         Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? Sweep() : Run(fog));
     }
@@ -101,6 +106,8 @@ public class M1Check : MonoBehaviour
             yield return M1(cc, fog);
         if (only == "" || only == "mining")
             yield return Mining(cc);
+        if (only == "" || only == "stalker")
+            yield return StalkerStage(cc);
         Finish();
     }
 
@@ -298,6 +305,70 @@ public class M1Check : MonoBehaviour
         InputSystem.QueueStateEvent(mouse, new MouseState());
         strikes = NoiseBus.Total - noise0;
         Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s (swing {Tuning.MINE_COOLDOWN:F2} s)");
+    }
+
+    // M3: 소음을 듣는 괴물. 포켓은 안 캐지게(health 1e6) 두고 소음만 낸다. 괴물 자리는 소리를 내기 직전에 놓는다 — 그 순간의 거리가 기준이다
+    IEnumerator StalkerStage(CharacterController cc)
+    {
+        var st = stalker;
+        var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
+        pockets.Sort((a, b) => a.transform.position.z.CompareTo(b.transform.position.z));
+        OrePocket south = pockets[0];
+        OrePocket mid = pockets.Find(pk => pk.transform.position.z > 12f && pk.transform.position.z < 20f) ?? pockets[pockets.Count / 2];
+        foreach (var pk in pockets) pk.health = 1e6f;
+        var mouse = InputSystem.AddDevice<Mouse>("StalkerMouse");
+        lamp.lampOn = true;
+
+        // 1. 30 m 밖 1타 → 안 듣는다
+        StandAt(cc, south);
+        st.Teleport(new Vector3(0f, 0.1f, st.zMax));
+        yield return null;
+        float d0 = Flat(south.transform.position - st.transform.position);
+        yield return Click(mouse);
+        yield return new WaitForSeconds(2f);
+        Check("stalker_ignores_beyond_25m", d0 > 30f && st.hits == 0 && st.state == Stalker.State.Wander, $"noise at {d0:F1} m, hits {st.hits}, state {st.state}");
+
+        // 2. 20 m 안 1타 → 소리 쪽으로 한 칸(7 m)만 다가와 멈춘다
+        StandAt(cc, mid);
+        Vector3 from = new Vector3(0f, 0.1f, Mathf.Min(mid.transform.position.z + 20f, st.zMax));
+        st.Teleport(from);
+        yield return null;
+        yield return Click(mouse);
+        yield return new WaitForSeconds(3f);      // 7 m ÷ 4.0 = 1.75 s
+        float moved = Flat(st.transform.position - from);
+        float toPocket = Flat(mid.transform.position - st.transform.position);
+        Check("stalker_one_hit_approaches_7m", st.hits == 1 && moved > 5f && moved < 9f && toPocket > 5f && st.state == Stalker.State.Search,
+            $"moved {moved:F1} m, {toPocket:F1} m from pocket, state {st.state}");
+
+        // 3. 20 m 안 2타 연속 → 그 자리(2 m 안)까지 온다
+        yield return new WaitForSeconds(Tuning.STALKER_HEAR_CONFIRM_S);   // 앞 소리와 이어지지 않게
+        st.Teleport(from);
+        yield return null;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN * 1.6f);      // 2타
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        // 길을 비켜 남쪽 4 m 에서 포켓 쪽을 본다 — 괴물이 플레이어 몸에 막히지 않게, 오는 장면을 찍는다
+        Teleport(cc, new Vector3(-Mathf.Sign(mid.transform.position.x) * 1.0f, 0.1f, mid.transform.position.z - 4f), 0f);
+        float t = 0f;
+        while (st.state != Stalker.State.Search && t < 8f) { t += Time.deltaTime; yield return null; }
+        toPocket = Flat(mid.transform.position - st.transform.position);
+        Check("stalker_two_hits_arrives_2m", st.hits == 2 && st.state == Stalker.State.Search && toPocket < Tuning.STALKER_FOUND_M && t < 6f,
+            $"hits {st.hits}, {toPocket:F2} m from pocket after {t:F1} s, state {st.state}");
+        yield return Capture("11_stalker_arrived", v => { });
+        Teleport(cc, new Vector3(0f, 0.1f, st.zMin + 1f), 0f);    // 수색 길에서 비킨다
+
+        // 4. 2~3곳을 2 s 씩 들여다본 뒤 배회로 돌아간다
+        t = 0f;
+        while (st.state == Stalker.State.Search && t < 40f) { t += Time.deltaTime; yield return null; }
+        Check("stalker_searches_2to3_spots_then_wanders", st.state == Stalker.State.Wander && st.spotsVisited >= Tuning.STALKER_SPOTS_MIN && st.spotsVisited <= Tuning.STALKER_SPOTS_MAX,
+            $"spots {st.spotsVisited}, state {st.state} after {t:F1} s");
+    }
+
+    IEnumerator Click(Mouse mouse)
+    {
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(0.05f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
     }
 
     void StandAt(CharacterController cc, OrePocket pk)

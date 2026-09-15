@@ -1,6 +1,6 @@
 # 인계 문서 — 다음 세션은 여기서 시작한다
 
-최종 갱신 2026-09-14 (6차). 이 문서 하나만 읽어도 이어서 작업할 수 있어야 한다.
+최종 갱신 2026-09-15 (7차). 이 문서 하나만 읽어도 이어서 작업할 수 있어야 한다.
 
 ## 1. 지금 어디까지 왔나
 
@@ -9,11 +9,13 @@
 | 저장소 | https://github.com/jhyun1234/Tunnel (Public, Git LFS) |
 | 마일스톤 1 | **사용자 판정 통과 (09-14)**: 조작 · 반각 60° · URP 계속 · 램프 75.2 · 안개 0.00089 · 벽 앞 감광 |
 | 마일스톤 2 채굴 | 1차 판정(09-14) 반영 → **빌드·배포물 검사 통과, 재판정 대기 (4절)** |
+| 마일스톤 3 괴물 최소판 | `docs/제안서_M3_소음_듣는_괴물.md` 구현 → **빌드·배포물 검사 통과(09-15), 판정 대기 (4절)**. 캡슐 괴물이 곡괭이 소음(25 m)을 듣고 4.0 m/s 로 온다 |
 | 이동 | `Player.cs` — 걷기 4.5 / 달리기 7 / 숙이기 2, 점프, 스태미나, 광석 수(`ore`), 화면 흔들림(`Shake`) |
 | 헤드램프 | `Headlamp.cs` — Spot 반각 60°, 사거리 14, 세기 75.2, 가까운 면 감광(광선 9개, REF 4 m · POW 1.4). 곡괭이는 안 비춘다(조명 레이어), 곡괭이 전용 약한 등 `PickLight` 를 같이 켜고 끈다 |
 | 채굴 | `Pickaxe.cs`(뷰모델 + 좌클릭 채굴) · `OrePocket.cs` · `Ore.cs` · `MiningFx.cs`(먼지·자갈·광석·타격음) · `NoiseBus.cs` · `MiningHud.cs`("철 N" + 소음 원) |
 | 곡괭이 그리기 | ViewModel 레이어(8) → 메인 카메라가 빼고, 오버레이 카메라 `ViewModelCamera` 가 그린다 (벽 속으로 안 들어가 보임) |
 | 소리 | `Assets/Audio/PickHit/impactMining_000~004.ogg` — Kenney Impact Sounds (CC0, 라이선스 파일 같은 폴더). 타격마다 무작위, 3D, 소음 반경 25 m 에서 0. 덩이가 빠질 때 음높이 0.8 |
+| 괴물 | `Stalker.cs` — 상태 Wander·Investigate·Search. `NoiseBus.Made` 를 듣고 반경 × STALKER_EAR_MUL 안이면 조사. 1타 = 소리 쪽 7 m 만, 3 s 안 2타 = 그 자리. 수색 2~3곳 × 2 s. 길찾기 없음(직선). 캡슐(R 0.6 · H 2.8) + CharacterController. 설계 원본 `Opus5_채굴게임/Claude outputs/괴물AI_설계서_v2.md` |
 | 갱도 | `piece_straight.gltf` ×6 = 42 m. 포켓은 씬 생성기가 조각의 `SLOT_Pocket_*` 24자리에 놓는다 |
 | 텍스처 | `Assets/Editor/TextureImportRules.cs` — `*_nor_gl` = NormalMap, `*_Rough`·`*_arm` = 선형 |
 | 수치 | `Assets/Scripts/Tuning.cs` — Godot 이름 그대로. "Unity 전용" 표시는 판정으로 새로 넣은 값 |
@@ -41,6 +43,7 @@
   - 1 초 누르면 2타 (휘두르기 0.49 s)
 - 사보타주 FAIL 확인: `floor` `lamp` `fog` `thickfog` `nodim` `bury` `onehit` `spam` `nomagnet` `noassist` `noviewmodel` `picklamp`(갱도 가운데 곡괭이 탄 픽셀 13.5 %) `mute`(RMS 0)
 - 캡처: `build/check_m2c/` (빌드 산출물, 커밋 안 됨)
+- M3 (09-15): 30 m 밖 소음 무시(39.5 m, hits 0) · 1타 6~7 m 다가와 멈춤 · 2타 4.4 s 에 포켓 1.3 m 안 도착 · 수색 2~3곳 뒤 배회 복귀 7.5 s. 사보타주 `deaf`(귀 ×0.4) 3개 FAIL · `bigears`(귀 ×2) 1개 FAIL 확인. 캡처 `build/Tunnel/check/11_stalker_arrived.png`
 
 ### 측정 표 (`Tunnel.exe -sweep`)
 - 가까운 면 감광(램프 75.2) → 벽 앞 탄 픽셀 · 갱도 밝기: 없음 45.1 % · 0.0529 / REF 2 = 9.4 % / REF 3 = 2.8 % / **REF 4 = 1.3 % · 0.0515** / REF 4 POW 1.0 = 7.0 % / REF 6 = 0.4 % · 0.0469
@@ -51,7 +54,8 @@
 ### A. 사람이 답해야 하는 것 — 사용자에게 물어야 진행 가능
 
 1. 마일스톤 2 재판정 (4절)
-2. 다음 마일스톤 — 제안서로 하나씩. 남은 후보: ② 소음을 듣는 괴물 최소판 · ③ 갱도 조립기(조각 23종) · ④ 정비(갱목 고치기) · ⑤ 발걸음·램프 등 나머지 소리
+2. 마일스톤 3 판정 (4절 아래)
+3. 다음 마일스톤 — 제안서로 하나씩. 순서는 설계서 v2 Step 7: ②b 눈·빛·추격·잡기 → ②c 체력·스턴·철수 → ③ 갱도 조립기(조각 23종) + 감독·NavMesh·배움 카드 → ④ 정비 → ⑤ 나머지 소리
 
 ### B. 내가 할 수 있는 것
 
@@ -73,6 +77,8 @@
   ```bash
   cd /c/Users/anjyo/Tunnel/unity && "/c/Program Files/Unity/Hub/Editor/6000.4.7f1/Editor/Unity.exe" -batchmode -quit -nographics -projectPath "$(pwd -W)" -executeMethod BuildM1.MakeScene -force -logFile "$(pwd -W)/Logs/make_scene.log"
   ```
+- `MakeScene -force` 는 `M1_Volume.asset`·`M2_Dust.mat`·`M3_StalkerBody.mat` 을 지우고 다시 만든다 — git 에 수정으로 뜨는 게 정상.
+- 괴물 CharacterController 는 플레이어 몸에 막히면 밀지 않고 STALKER_STUCK_S 1 s 뒤 그 자리를 도착으로 친다. 검사는 소음을 낸 뒤 플레이어를 길에서 비킨다.
 - 컴포넌트의 public 필드 초기값은 씬에 구워져 `Tuning`을 바꿔도 안 따라온다. 실행 중 조정용 필드는 `[System.NonSerialized]`로 둔다.
 - 검사 모드: 창이 포커스를 잃으면 플레이어가 멈추고(`Application.runInBackground`로 막음), Input System이 가상 장치 입력을 막는다(`backgroundBehavior = IgnoreFocus`로 막음). 검사 단계가 상태를 바꾸고 끝나면 다음 단계가 망가진다(램프를 끈 채 끝나 채굴 화면이 검었다).
 - 밝기 비율만 보는 검사는 기준 화면이 거의 검으면 망가진 화면도 통과시킨다. 한 방향·한 자리만 캡처하면 방향 의존 버그·벽 앞 눈부심·곡괭이 눈부심을 못 잡았다. 사용자 지적이 오면 그 자리를 검사 캡처에 넣고, 사보타주로 FAIL을 먼저 본다.
@@ -91,3 +97,9 @@
 3. 타격음 — 크기, 곡괭이 소리로 들리는가, 반복이 거슬리는가
 4. 곡괭이 밝기(전용 등 3.0)가 어둡거나 밝지 않은가
 5. 먼지가 먼지로 보이는가
+
+물어볼 것 (마일스톤 3 괴물 최소판, `docs/제안서_M3_소음_듣는_괴물.md` 확인 목록):
+1. 북쪽 끝에서 왕복하는 캡슐이 램프 원뿔 안에서 보이는가 (검은 캡슐이라 어두우면 안 보일 수 있다)
+2. 1타 뒤 7 m 다가와 멈추는 게 "의심한다"로 읽히는가
+3. 4.0 m/s 로 오는 것이 무서운가, 느린가
+4. 화면 왼쪽 위 `stalker` 줄(상태·들은 소음·거리)이 읽히는가
