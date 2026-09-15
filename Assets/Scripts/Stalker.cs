@@ -6,7 +6,7 @@ using UnityEngine;
 // 귀: 1타 = 소리 쪽으로 한 칸만, STALKER_HEAR_CONFIRM_S 안에 같은 자리에서 한 번 더 = 그 자리까지 (설계서 v2 Step 5).
 // 눈: 램프 켜진 몸이 앞 원뿔 STALKER_EYE_DEG 안 STALKER_EYE_M 안, 시선이 안 가려야. 빛: 켜진 램프가 STALKER_LIGHT_M 안에 보이면 배회 속도로 다가간다.
 // 체력(설계서 v2 Step 6, 교차 검토): 곡괭이 한 대 25 + 스턴 1.5 s(포효 0.7 + 뒷걸음 0.8). 철수선 30 이하가 되는 순간 철수 —
-// 플레이어 램프 원뿔 안 8~14 m 벽으로 가서 벽을 타고 사라진다. 철수 중 피격은 스턴만(체력 0 경로 없음). STALKER_REGEN_S 뒤 틈에서 체력 100 으로.
+// 플레이어 램프 원뿔 안 8~14 m 벽으로 가서 벽을 타고 사라진다. 철수 중에는 못 친다(체력 0 경로 없음). STALKER_REGEN_S 뒤 틈에서 체력 100 으로.
 public class Stalker : MonoBehaviour
 {
     public enum State { Wander, Investigate, Search, Alert, Chase, Catch, Stun, Retreat, Climb, Hidden }
@@ -29,7 +29,7 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public float hp = Tuning.STALKER_HP;
     [System.NonSerialized] public float dmgMul = 1f;
     [System.NonSerialized] public float retreatHp = Tuning.STALKER_RETREAT_HP;
-    [System.NonSerialized] public bool retreatArmor = true;      // 철수 중 피격은 스턴만
+    [System.NonSerialized] public bool retreatArmor = true;      // 철수 중 무적 (사보타주 softretreat 가 끈다 — 연타로 벽에 못 가던 상태)
     [System.NonSerialized] public bool stunImmune = Tuning.STALKER_STUN_IMMUNE;   // 스턴 중 피격 무효
     [System.NonSerialized] public bool lureInChase;             // 사보타주 lurechase: 추격 중에도 소리를 듣는다 (M6 유인 검사가 잡는지)
     [System.NonSerialized] public float hiddenLeft;             // s, 숨어 있는 남은 시간
@@ -57,7 +57,7 @@ public class Stalker : MonoBehaviour
     const int RayMask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));   // Ignore Raycast(자갈·광석)·곡괭이 뷰모델은 시선을 안 막는다
 
     public float DistToPlayer => player != null ? Flat(player.position - transform.position) : -1f;
-    public bool CanBeHit => state != State.Catch && state != State.Climb && state != State.Hidden;
+    public bool CanBeHit => state != State.Catch && state != State.Climb && state != State.Hidden && !(state == State.Retreat && retreatArmor);
 
     void Awake()
     {
@@ -89,7 +89,8 @@ public class Stalker : MonoBehaviour
         StartInvestigate(t, Tuning.STALKER_SPEED_INVESTIGATE, false);
     }
 
-    // 곡괭이에 맞았다 (Pickaxe.Strike). 스턴 중 피격은 무효(연타 방지). 철수 중이면 체력은 안 깎이고 스턴만.
+    // 곡괭이에 맞았다 (Pickaxe.Strike · ThrownPick). 스턴 중 피격은 무효(연타 방지). 철수 중은 CanBeHit 이 막는다 —
+    // "철수 중 피격 = 스턴만"은 스턴마다 한 대씩 맞추면 벽에 영영 못 가서(사용자 09-15 F5) 무적으로 바꿨다.
     // 철수선 이하가 되는 순간은 스턴 없이 바로 철수 (사용자 09-15 "피가 없으면 곧바로 도망가는 연출")
     public void Hit(float dmg, Vector3 dir)
     {
@@ -99,9 +100,8 @@ public class Stalker : MonoBehaviour
         if (state == State.Stun && stunImmune)
             return;
         hitsTaken++;
-        bool retreating = state == State.Retreat;
-        if (!retreating || !retreatArmor)
-            hp = Mathf.Max(0f, hp - dmg * dmgMul);
+        bool retreating = state == State.Retreat;              // 사보타주 softretreat 때만 온다
+        hp = Mathf.Max(0f, hp - dmg * dmgMul);
         squashLeft = Tuning.STALKER_SQUASH_S;
         if (!retreating && hp <= retreatHp)
         {
@@ -209,6 +209,7 @@ public class Stalker : MonoBehaviour
                     state = State.Climb;
                     cc.enabled = false;
                     hasTarget = false;
+                    return;                        // cc 를 껐다 — 아래 Fall 이 같은 프레임에 Move 를 부르면 "inactive controller" 경고
                 }
                 break;
         }

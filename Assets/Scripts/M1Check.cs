@@ -110,7 +110,7 @@ public class M1Check : MonoBehaviour
             stalker.dmgMul = 0f;
         if (sabotage == "noretreat")            // 철수선 없음 — 체력이 0 까지 간다
             stalker.retreatHp = -1f;
-        if (sabotage == "softretreat")          // 철수 중에도 깎인다
+        if (sabotage == "softretreat")          // 철수 중에도 맞는다(깎이고 멈춘다) — 연타로 벽에 못 가던 상태
             stalker.retreatArmor = false;
         if (sabotage == "stunlock")             // 스턴 중에도 맞는다 — 연타로 1.5 s 안에 세 대
             stalker.stunImmune = false;
@@ -262,12 +262,14 @@ public class M1Check : MonoBehaviour
         yield return RightClick(mouse);
         t = 0f;
         while (st.state != Stalker.State.Stun && t < 1.5f) { t += Time.deltaTime; yield return null; }
-        yield return new WaitForSeconds(0.5f);
+        bool stunnedByThrow = st.state == Stalker.State.Stun;
+        yield return new WaitForSeconds(0.6f);                         // 곡괭이가 1.9 m 에서 떨어지는 시간. 스턴(0.5 s) 뒤 추격이 5 m 를 오기 전
         float dropD = Flat(thrown.transform.position - T);
-        Check("thrown_pick_hits_and_stuns", st.state == Stalker.State.Stun && st.hp == hpBefore - Tuning.STALKER_HIT_DMG && st.hitsTaken == 1 && thrown.landed && dropD < 2f,
-            $"state {st.state}, hp {hpBefore:0} → {st.hp:0}, taken {st.hitsTaken}, landed {thrown.landed} {dropD:F1} m from stalker");
+        Check("thrown_pick_hits_and_stuns", stunnedByThrow && st.hp == hpBefore - Tuning.STALKER_HIT_DMG && st.hitsTaken == 1 && thrown.landed && dropD < 2f,
+            $"stunned {stunnedByThrow} (now {st.state}), hp {hpBefore:0} → {st.hp:0}, taken {st.hitsTaken}, landed {thrown.landed} {dropD:F1} m from stalker");
         st.enabled = false;                                            // 스턴이 끝나면 추격 — 5 m 라 바로 잡힌다. 여기서 끈다
         st.Teleport(st.homePos);
+        player.frozen = false;
         if (!pickaxe.hasPick) pickaxe.Return();                        // 다음 구간은 곡괭이를 들고 시작한다
         lamp.lampOn = true;
         st.enabled = true;
@@ -489,6 +491,9 @@ public class M1Check : MonoBehaviour
         player.frozen = false;
         yield return null;
         float hp0 = st.hp;
+        float cool0 = pickaxe.cooldownTime, mul0 = pickaxe.swingTimeMul;
+        pickaxe.cooldownTime = 0f;                                     // 스턴 0.5 s 안에 두 타가 닿게 이 두 번만 빠르게 (사람은 0.69 s 걸려 못 한다). 첫 타 뒤엔 되돌리기(0.29 s)가 두 번째를 막는다
+        pickaxe.swingTimeMul = 0.2f;
         yield return Click(mouse);
         t = 0f;
         while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
@@ -497,14 +502,17 @@ public class M1Check : MonoBehaviour
         float hp1 = st.hp;
         float squash = bodyT != null ? bodyT.localScale.y : -1f;
         Vector3 at = st.transform.position;
-        yield return new WaitForSeconds(0.5f);                         // 휘두르기 간격(0.49 s)을 넘긴 뒤
+        yield return new WaitForSeconds(0.1f);                         // 첫 휘두르기(0.1 s)가 끝난 뒤
         yield return Click(mouse);                                     // 스턴 중 한 대 더 — 닿지만 안 먹혀야 한다
+        yield return new WaitForSeconds(0.15f);
+        pickaxe.cooldownTime = cool0;
+        pickaxe.swingTimeMul = mul0;
         int taken = st.hitsTaken;
         while (st.state == Stalker.State.Stun && Time.time - stunStart < 3f) yield return null;
         float stunT = Time.time - stunStart;
         float back = Flat(st.transform.position - at);
-        Check("hit_damages_and_stuns", hp0 == Tuning.STALKER_HP && hp1 == hp0 - Tuning.STALKER_HIT_DMG && stunT > 1.3f && stunT < 1.8f && back > 0.6f && back < 1.4f && st.state == Stalker.State.Chase && squash < bodyT.localScale.y,
-            $"hp {hp0:0} → {hp1:0}, stun {stunT:F2} s, knocked {back:F2} m, then {st.state}, squash y {squash:F2}→{bodyT.localScale.y:F2}");
+        Check("hit_damages_and_stuns", hp0 == Tuning.STALKER_HP && hp1 == hp0 - Tuning.STALKER_HIT_DMG && stunT > Tuning.STALKER_STUN_S - 0.2f && stunT < Tuning.STALKER_STUN_S + 0.3f && back > 0.6f && back < 1.4f && st.state == Stalker.State.Chase && squash < bodyT.localScale.y,
+            $"hp {hp0:0} → {hp1:0}, stun {stunT:F2} s (STALKER_STUN_S {Tuning.STALKER_STUN_S}), knocked {back:F2} m, then {st.state}, squash y {squash:F2}→{bodyT.localScale.y:F2}");
         Check("hits_during_stun_ignored", st.hp == hp1 && taken == 1 && st.hitsTaken == 1 && st.hitsSeen == 2, $"hp {st.hp:0} after a 2nd swing during stun, swings landed {st.hitsSeen}, taken {st.hitsTaken}");
 
         // ② 2대째·3대째: 체력 50 → 25, 세 번째는 멈춤 없이 그 자리에서 철수
@@ -528,18 +536,20 @@ public class M1Check : MonoBehaviour
         Check("third_hit_retreats_at_once", hp3 == Tuning.STALKER_HP - 3f * Tuning.STALKER_HIT_DMG && hp3 <= Tuning.STALKER_RETREAT_HP && noStun && st.state == Stalker.State.Retreat,
             $"hp after 3 hits {hp3:0} (retreat line {Tuning.STALKER_RETREAT_HP}), stunned first {!noStun}, state {st.state}");
 
-        // ③ 철수 중 1대: 체력 그대로, 1.5 s 멈춘 뒤 철수 계속. 길 앞 1.5 m 에 서서 치고 바로 비킨다
+        // ③ 철수 중 무적: 길 앞 1.5 m 에 서서 쳐도 곡괭이가 안 닿고(hitsSeen 그대로) 멈추지 않고 체력 그대로, 철수 계속. 0.6 s 뒤 비킨다(1 s 막히면 그 자리를 도착으로 친다)
         Vector3 dir = Flat3(st.retreatSpot - st.transform.position).normalized;
         Teleport(cc, st.transform.position + dir * 1.5f, Quaternion.LookRotation(-dir).eulerAngles.y);
         yield return null;
+        int seen0 = st.hitsSeen;
+        bool target = pickaxe.HasTarget;
         yield return Click(mouse);
+        bool stunned = false;
         t = 0f;
-        while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
-        bool stunned = st.state == Stalker.State.Stun;
+        while (t < 0.6f) { stunned |= st.state == Stalker.State.Stun; t += Time.deltaTime; yield return null; }
         Teleport(cc, retreatFrom, 0f);
-        while (st.state == Stalker.State.Stun) yield return null;
         yield return null;
-        Check("retreat_hits_only_stun", stunned && st.hp == hp3 && st.state == Stalker.State.Retreat, $"stunned {stunned}, hp {st.hp:0} (was {hp3:0}), then {st.state}");
+        Check("retreat_is_immune", !target && !stunned && st.hitsSeen == seen0 && st.hp == hp3 && (st.state == Stalker.State.Retreat || st.state == Stalker.State.Climb),
+            $"pick target {target}, stunned {stunned}, swings landed +{st.hitsSeen - seen0}, hp {st.hp:0} (was {hp3:0}), state {st.state}");
 
         // ④ 철수 자리: 플레이어에서 8~14 m, 램프 원뿔(60°) 안. 7 m 를 벗어난 뒤 다시 안 들어온다 (#16)
         float minAfter = 99f;

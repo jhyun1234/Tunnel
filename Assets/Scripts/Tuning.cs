@@ -193,8 +193,10 @@ public static class Tuning
     // ---- M5 (②c) 체력·스턴·철수. 설계서 v2 Step 4·6 (교차 검토 반영) ----
     public const float STALKER_HP = 100.0f;             // 제안값. 곡괭이 3대(75)면 철수선 밑
     public const float STALKER_HIT_DMG = 25.0f;         // 제안값, 곡괭이 한 대
-    public const float STALKER_RETREAT_HP = 30.0f;      // 제안값. 이하가 되는 순간 철수. 철수 중 피격은 스턴만 — 체력 0 경로 없음
-    public const float STALKER_STUN_S = 1.5f;           // s, 곡괭이 스턴 (Godot, 결정 사항)
+    // 제안값. 이하가 되는 순간 철수. 철수 중에는 못 친다(무적) — 사용자 판정(09-15 M6 F5): "스턴만"이던 규칙은 타이밍 연타로 벽에 못 가게 막혔다
+    public const float STALKER_RETREAT_HP = 30.0f;
+    // s, 곡괭이 스턴. Godot 1.5(결정 사항) → 사용자 판정(09-15 M6 F5) "1.5 s 는 길다" → 0.5. 밀림 0.2 s 뒤 0.3 s 서서 본다
+    public const float STALKER_STUN_S = 0.5f;
     // 사용자 판정(09-15 M5 1차): "포효 0.7 + 뒷걸음 0.8" 은 뒷걸음 뒤 돌진이 '준비 동작'으로 읽혀 "맞아서 밀렸다"가 안 됐다 →
     // 맞는 순간 STALKER_STUN_KNOCK_M 만큼 STALKER_STUN_KNOCK_S 에 밀리고(충격), 남은 시간은 서서 플레이어를 본다. 시네마틱 설계서 Step 4 와 어긋남 — 결정 변경 제안
     public const float STALKER_STUN_KNOCK_M = 1.0f;     // m, Unity 전용 제안값
