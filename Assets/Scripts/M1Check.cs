@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|stalker|chase 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -106,6 +106,11 @@ public class M1Check : MonoBehaviour
             stalker.chaseSpeed = 3f;
         if (sabotage == "nolose")               // 못 봐도 안 놓는다
             stalker.loseS = 99f;
+        if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
+            lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
+        if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
+            foreach (var r in stalker.GetComponentsInChildren<Renderer>())
+                if (r.name.StartsWith("Eye")) r.material.color = Color.black;
         Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? Sweep() : Run(fog));
     }
@@ -409,6 +414,54 @@ public class M1Check : MonoBehaviour
         float toLast = Flat(st.transform.position - P);
         Check("stalker_loses_after_3s", tLose > 2.7f && tLose < 3.6f && st.state == Stalker.State.Search && toLast < 3f, $"left chase at {tLose:F1} s, searching {toLast:F1} m from last seen, state {st.state}");
         lamp.lampOn = true;
+
+        // ⑨ 어둠 적응 (사용자 09-15 "램프를 끄면 아무것도 안 보인다" → A). 괴물은 끄고 북쪽 끝에 세운다 — 배회하며 화면에 들어오면 밝기가 2.5배 흔들렸다.
+        // 램프는 0.2 s 켜서 적응을 풀고 끈다 (한 프레임만 켜면 안 풀렸다, 09-15)
+        st.enabled = false;
+        st.Teleport(st.homePos);
+        Teleport(cc, P, 0f);
+        float ambDefault = lamp.darkAdaptAmbient;               // 사보타주(noadapt)가 바꾼 값을 스윕 뒤에 되돌린다
+        foreach (float amb in new[] { 3.0f, 8.0f, 16.0f })      // 값 고르기용 캡처 14_dark_adapt_*
+        {
+            lamp.darkAdaptAmbient = amb;
+            lamp.lampOn = true;
+            yield return new WaitForSeconds(0.2f);
+            lamp.lampOn = false;
+            yield return new WaitForSeconds(Tuning.DARK_ADAPT_TIME);
+            Vector3 v = default;
+            yield return Capture($"14_dark_adapt_{amb:0.0}", x => v = x);
+            Debug.Log($"DARK_SWEEP ambient {amb:0.0} lum {v.x:F4} grad {v.y:F2} adapt {lamp.adapt:F2}");
+        }
+        lamp.darkAdaptAmbient = ambDefault;
+        lamp.lampOn = true;
+        yield return new WaitForSeconds(0.2f);
+        lamp.lampOn = false;
+        Vector3 dark0 = default, adapted = default;
+        yield return Capture("15_dark_0s", x => dark0 = x);
+        float adapt0 = lamp.adapt;
+        yield return new WaitForSeconds(Tuning.DARK_ADAPT_TIME);
+        yield return Capture("15_dark_adapted", x => adapted = x);
+        float fogNow = RenderSettings.fogDensity;
+        Check("dark_adapt_shapes_visible", adapt0 < 0.3f && lamp.adapt >= 1f && adapted.x > dark0.x * 3f && adapted.x > 0.010f && adapted.x < 0.05f && Mathf.Abs(fogNow - Tuning.DARK_ADAPT_FOG) < 0.01f,
+            $"lum off 0.6 s {dark0.x:F4} (adapt {adapt0:F2}) → adapted {adapted.x:F4} (Godot 0.025, allow 0.010~0.05), fog {fogNow:F2} (DARK_ADAPT_FOG {Tuning.DARK_ADAPT_FOG})");
+        lamp.lampOn = true;
+        yield return null;
+        yield return null;
+        Check("lamp_on_resets_adapt", lamp.adapt == 0f && Mathf.Abs(RenderSettings.fogDensity - Tuning.FOG_DENSITY) < 1e-4f, $"adapt {lamp.adapt:F2}, fog {RenderSettings.fogDensity:F3}");
+
+        // ⑩ 괴물 눈 발광 (C): 램프 끄고 5 m 앞에 세운(꺼 둔) 괴물의 눈 영역 밝기
+        yield return new WaitForSeconds(0.2f);
+        lamp.lampOn = false;
+        st.Teleport(P + fwd * 5f, 180f);
+        var eyeR = new List<Renderer>();
+        foreach (var r in st.GetComponentsInChildren<Renderer>()) if (r.name.StartsWith("Eye")) eyeR.Add(r);
+        var camMain = pickaxe.cam.GetComponent<Camera>();
+        Vector3 eyes = default;
+        Rect eyeRect = ScreenRect(camMain, eyeR.ToArray());
+        yield return Capture("16_eyes_in_dark", x => eyes = x, eyeRect);
+        Check("stalker_eyes_glow_in_dark", eyeRect.width > 0f && eyes.x > 0.05f, $"eye region lum {eyes.x:F3} in {eyeRect.width:F0}x{eyeRect.height:F0} px at 5 m, lamp off, adapt {lamp.adapt:F2}");
+        lamp.lampOn = true;
+        st.enabled = true;
     }
 
     // M3: 소음을 듣는 괴물. 포켓은 안 캐지게(health 1e6) 두고 소음만 낸다. 괴물 자리는 소리를 내기 직전에 놓는다 — 그 순간의 거리가 기준이다

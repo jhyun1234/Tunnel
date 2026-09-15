@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 // 헤드램프. 카메라를 LAMP_FOLLOW_TIME 만큼 늦게 쫓아간다 — 카메라 축에 딱 붙으면 빛에 방향이 없다(Godot #17).
 // 가까운 면을 비추면 세기를 낮춘다(LAMP_NEAR_*) — URP 거리 제곱 감쇠로 벽 앞이 하얗게 타지 않게.
 // 곡괭이는 비추지 않는다(조명 레이어). 곡괭이 전용 약한 등(pickLight)이 램프와 같이 켜지고 꺼진다.
-// F 로 끄고 켠다. 소리·눈 적응(DARK_ADAPT_*)은 아직 없다.
+// F 로 끄고 켠다. 끄면 눈이 어둠에 적응한다(DARK_ADAPT_*: 환경광이 오르고 거리 안개가 짙어진다). 소리는 아직 없다.
 [RequireComponent(typeof(Light))]
 public class Headlamp : MonoBehaviour
 {
@@ -16,6 +16,8 @@ public class Headlamp : MonoBehaviour
     [System.NonSerialized] public float nearRef = Tuning.LAMP_NEAR_REF;
     [System.NonSerialized] public float nearPow = Tuning.LAMP_NEAR_POW;
     [System.NonSerialized] public float nearDim = 1f;
+    [System.NonSerialized] public float darkAdaptAmbient = Tuning.DARK_ADAPT_AMBIENT;
+    [System.NonSerialized] public float adapt;     // 0 = 평소, 1 = 어둠에 다 적응
 
     static readonly Vector3[] RayDirs = BuildRays();
     Light lamp;
@@ -62,6 +64,10 @@ public class Headlamp : MonoBehaviour
         float kDim = 1f - Mathf.Exp(-Time.deltaTime / Tuning.LAMP_NEAR_TIME);
         nearDim = Mathf.Lerp(nearDim, NearDim(), kDim);
         lamp.intensity = energy * nearDim * fade;
+        // 어둠 적응: 끄면 DARK_ADAPT_TIME 에 걸쳐 오르고, 켜면 즉시 평소 (Godot Atmosphere.gd 트윈과 같다)
+        adapt = lampOn ? 0f : Mathf.MoveTowards(adapt, 1f, Time.deltaTime / Tuning.DARK_ADAPT_TIME);
+        RenderSettings.ambientLight = Tuning.AMBIENT_COLOR * Mathf.Lerp(Tuning.AMBIENT_ENERGY, darkAdaptAmbient, adapt);
+        RenderSettings.fogDensity = Mathf.Lerp(Tuning.FOG_DENSITY, Tuning.DARK_ADAPT_FOG, adapt);
         if (pickLight != null)
             pickLight.intensity = Tuning.PICK_LIGHT_ENERGY * fade;
     }

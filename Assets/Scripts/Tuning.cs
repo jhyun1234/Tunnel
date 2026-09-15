@@ -67,6 +67,13 @@ public static class Tuning
     public const float VOLFOG_ANISOTROPY = 0.6f;
     public const float VOLFOG_SCATTERING = 1.0f;   // Unity 전용: 패키지 VolumetricAdditionalLight 기본값
     public const float VOLFOG_DISTANCE = 40.0f;    // Unity 전용: Godot PIECE_VIEW_RANGE 와 같게
+    // 눈의 어둠 적응 (Godot #32 수정 2, Atmosphere.gd). 램프를 끄면 환경광이 DARK_ADAPT_TIME 에 걸쳐 DARK_ADAPT_AMBIENT 로 오르고
+    // 거리 안개가 DARK_ADAPT_FOG 로 짙어진다(환경광은 거리가 없어 먼 곳은 안개로 잠근다). 켜면 즉시 평소(눈부심).
+    // 사용자 09-15 M4 판정 "램프를 끄면 아무것도 안 보여 물러나는 것을 볼 수 없다" → 옮긴다. Godot 값 그대로 출발
+    // Godot 3.0 은 Unity 에서 화면 밝기 0.003 (Godot 실측 0.025 의 1/8, 09-15 스윕: 1.5 → 0.0004 · 3.0 → 0.0030 · 6.0 → 0.0101). Unity 전용 제안값 8.0 ≈ 0.014. 사용자가 캡처 14_dark_adapt_* 로 고른다
+    public const float DARK_ADAPT_AMBIENT = 8.0f;
+    public const float DARK_ADAPT_TIME = 4.0f;     // 초
+    public const float DARK_ADAPT_FOG = 0.45f;     // 적응했을 때 거리 안개 밀도 — 2 m 41 %·4 m 17 %·6 m 7 % 만 보인다
     public const float ADJ_SATURATION = 0.75f;
     public const float VIGNETTE = 0.35f;
 
@@ -182,6 +189,9 @@ public static class Tuning
     public const float CATCH_BLACK_MIN_S = 1.0f;        // s, 검은 화면 최소 (검사 기준)
     public const float CATCH_RESTART_S = 3.0f;          // s, 잡힌 뒤 재시작까지
     public const float CATCH_FADE_OUT_S = 0.5f;         // s, 재시작 뒤 밝아지는 시간
+    // Unity 전용 제안값: 괴물 눈 두 개가 약하게 빛난다 — 램프를 꺼도 괴물 자리는 보인다 (사용자 09-15 A+C 결정)
+    public const float STALKER_EYE_GLOW = 0.6f;    // Unlit 색 배율
+    public static readonly Color STALKER_EYE_COLOR = new Color(0.90f, 0.80f, 0.60f);
 
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;

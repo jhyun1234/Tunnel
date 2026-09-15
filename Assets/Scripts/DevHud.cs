@@ -52,7 +52,7 @@ public class DevHud : MonoBehaviour
         GUI.Label(new Rect(10, 10, 900, 120),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
-            $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]\n" +
+            $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}  dark adapt {lamp.adapt:0.00}   [F] [ - = ]\n" +
             $"{player.stance}  stamina {player.stamina:0}   [F1] hide" + monster);
     }
 }

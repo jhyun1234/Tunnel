@@ -218,8 +218,8 @@ public static class BuildM1
         AssetDatabase.CreateAsset(bodyMat, StalkerMatPath);
         body.GetComponent<MeshRenderer>().sharedMaterial = bodyMat;
         // 앞 표시 — 눈 두 개 (사용자 09-15 "캡슐이라 플레이어를 보는지 배회인지 판정이 안 선다"). 눈높이 STALKER_EYE_H, 몸 앞면
-        var eyeMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M4_StalkerEye", color = new Color(0.85f, 0.80f, 0.70f) };
-        eyeMat.SetFloat("_Smoothness", 0.5f);
+        // Unlit — 빛과 무관하게 늘 같은 밝기로 보인다 (램프를 꺼도 눈은 보인다). Lit + _EMISSION 은 빌드에서 변형이 빠져 검게 나왔다(09-15)
+        var eyeMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "M4_StalkerEye", color = Tuning.STALKER_EYE_COLOR * Tuning.STALKER_EYE_GLOW };
         AssetDatabase.DeleteAsset(StalkerEyeMatPath);
         AssetDatabase.CreateAsset(eyeMat, StalkerEyeMatPath);
         foreach (float sx in new[] { -0.16f, 0.16f })
@@ -229,7 +229,7 @@ public static class BuildM1
             UnityEngine.Object.DestroyImmediate(eye.GetComponent<Collider>());
             eye.transform.SetParent(stalkerGo.transform);
             eye.transform.localPosition = new Vector3(sx, Tuning.STALKER_EYE_H, Tuning.STALKER_R * 0.92f);
-            eye.transform.localScale = Vector3.one * 0.14f;
+            eye.transform.localScale = Vector3.one * 0.2f;
             eye.GetComponent<MeshRenderer>().sharedMaterial = eyeMat;
         }
         var stalker = stalkerGo.AddComponent<Stalker>();
