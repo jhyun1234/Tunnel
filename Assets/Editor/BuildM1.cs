@@ -21,6 +21,7 @@ public static class BuildM1
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
     const string StalkerMatPath = "Assets/Settings/M3_StalkerBody.mat";
+    const string StalkerEyeMatPath = "Assets/Settings/M4_StalkerEye.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
@@ -216,6 +217,21 @@ public static class BuildM1
         AssetDatabase.DeleteAsset(StalkerMatPath);
         AssetDatabase.CreateAsset(bodyMat, StalkerMatPath);
         body.GetComponent<MeshRenderer>().sharedMaterial = bodyMat;
+        // 앞 표시 — 눈 두 개 (사용자 09-15 "캡슐이라 플레이어를 보는지 배회인지 판정이 안 선다"). 눈높이 STALKER_EYE_H, 몸 앞면
+        var eyeMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M4_StalkerEye", color = new Color(0.85f, 0.80f, 0.70f) };
+        eyeMat.SetFloat("_Smoothness", 0.5f);
+        AssetDatabase.DeleteAsset(StalkerEyeMatPath);
+        AssetDatabase.CreateAsset(eyeMat, StalkerEyeMatPath);
+        foreach (float sx in new[] { -0.16f, 0.16f })
+        {
+            var eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            eye.name = sx < 0 ? "EyeL" : "EyeR";
+            UnityEngine.Object.DestroyImmediate(eye.GetComponent<Collider>());
+            eye.transform.SetParent(stalkerGo.transform);
+            eye.transform.localPosition = new Vector3(sx, Tuning.STALKER_EYE_H, Tuning.STALKER_R * 0.92f);
+            eye.transform.localScale = Vector3.one * 0.14f;
+            eye.GetComponent<MeshRenderer>().sharedMaterial = eyeMat;
+        }
         var stalker = stalkerGo.AddComponent<Stalker>();
         stalker.player = player.transform;
         stalker.playerHead = head;
