@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 // 화면에 들린 곡괭이(뷰모델)와 채굴. Godot Pickaxe.gd + Miner.gd.
-// 좌클릭을 누르고 있는 동안, 카메라 정면 MINE_RANGE 안에 광맥 포켓이 있으면 휘두른다. 허공에는 안 휘두른다.
+// 좌클릭을 누르고 있는 동안, 카메라 정면 MINE_RANGE 안에 광맥 포켓이나 괴물이 있으면 휘두른다. 허공에는 안 휘두른다.
 // 휘두르기: 뒤로 들기 → 내려치기 → 끝나는 순간 다시 쏴서 맞은 것을 친다(휘두르는 사이 시점이 돌았을 수 있다) → 박힌 채 잠깐 멈춤 → 되돌리기.
 // 곡괭이는 ViewModel 레이어라 오버레이 카메라가 그린다(벽 속으로 들어가도 벽 위에 보인다). 헤드램프는 안 비추고 PickLight 만 비춘다.
 public class Pickaxe : MonoBehaviour
@@ -41,7 +41,7 @@ public class Pickaxe : MonoBehaviour
     {
         cooldown = Mathf.Max(0f, cooldown - Time.deltaTime);
         var mouse = Mouse.current;
-        if (cooldown <= 0f && !swinging && mouse != null && mouse.leftButton.isPressed && Target(out _, out _))
+        if (cooldown <= 0f && !swinging && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
         {
             cooldown = cooldownTime;
             StartCoroutine(Swing());
@@ -61,13 +61,14 @@ public class Pickaxe : MonoBehaviour
         }
     }
 
-    public bool HasTarget => Target(out _, out _);   // 검사가 읽는다
+    public bool HasTarget => Target(out _, out _, out _);   // 검사가 읽는다
 
     // 판정 구(aimRadius) 위 가장 가까운 포켓. 벽 충돌체는 무시한다 — Godot MineRay 가 포켓 레이어만 봤다(mask 4).
     // 포켓 앞면은 벽 충돌 상자보다 몇 cm 만 나와 있어서, 벽에 막히게 두면 포켓 아래를 조준했을 때 안 맞았다(09-14 검사)
-    bool Target(out OrePocket pocket, out RaycastHit hit)
+    bool Target(out OrePocket pocket, out Stalker stalker, out RaycastHit hit)
     {
         pocket = null;
+        stalker = null;
         hit = default;
         int n = aimRadius > 0f
             ? Physics.SphereCastNonAlloc(cam.position, aimRadius, cam.forward, Hits, Tuning.MINE_RANGE, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
@@ -80,10 +81,20 @@ public class Pickaxe : MonoBehaviour
                 pocket = candidate;
                 hit = Hits[i];
             }
+            var monster = Hits[i].collider.GetComponent<Stalker>();       // 괴물 (M5). 포켓보다 가까우면 괴물을 친다
+            if (monster != null && monster.CanBeHit && (stalker == null || Hits[i].distance < hit.distance))
+            {
+                stalker = monster;
+                hit = Hits[i];
+            }
         }
-        if (pocket != null && hit.distance <= 0f)
-            hit.point = pocket.transform.position;      // 구가 처음부터 겹치면 닿은 점이 없다
-        return pocket != null;
+        if (stalker != null && pocket != null)
+        {
+            if (hit.collider.GetComponent<Stalker>() != null) pocket = null; else stalker = null;
+        }
+        if (hit.distance <= 0f)
+            hit.point = pocket != null ? pocket.transform.position : stalker != null ? stalker.transform.position + Vector3.up * 1.4f : hit.point;  // 구가 처음부터 겹치면 닿은 점이 없다
+        return pocket != null || stalker != null;
     }
 
     IEnumerator Swing()
@@ -111,8 +122,15 @@ public class Pickaxe : MonoBehaviour
 
     void Strike()
     {
-        if (!Target(out var pocket, out var hit))
+        if (!Target(out var pocket, out var stalker, out var hit))
             return;
+        if (stalker != null)
+        {
+            stalker.Hit(Tuning.STALKER_HIT_DMG, cam.forward);
+            MiningFx.I.HitSound(hit.point, false);
+            player.Shake(Tuning.PICK_HIT_SHAKE_AMOUNT, Tuning.PICK_HIT_SHAKE_TIME);
+            return;
+        }
         pocket.TakeHit(damage, cam.forward, hit.point);
         NoiseBus.Make(hit.point, Tuning.NOISE_PICK, "pick", player);   // 포켓에 닿은 타격만 소음. 허공은 위에서 걸러진다
         MiningFx.I.HitSound(hit.point, pocket.Breaking);

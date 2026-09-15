@@ -22,6 +22,7 @@ public static class BuildM1
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
     const string StalkerMatPath = "Assets/Settings/M3_StalkerBody.mat";
     const string StalkerEyeMatPath = "Assets/Settings/M4_StalkerEye.mat";
+    const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
@@ -239,6 +240,26 @@ public static class BuildM1
         stalker.lamp = lamp;
         stalker.restartPos = player.transform.position;
         stalker.homePos = stalkerGo.transform.position;
+        // 갈라진 틈 2곳 (M5 재등장 자리) — 복도 양 끝 벽 아래, 자리표시 검은 판. 미로가 생기면 레벨 설계서 M3-e 자리로
+        var crackMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M5_Crack", color = new Color(0.02f, 0.02f, 0.02f) };
+        crackMat.SetFloat("_Smoothness", 0.1f);
+        AssetDatabase.DeleteAsset(CrackMatPath);
+        AssetDatabase.CreateAsset(crackMat, CrackMatPath);
+        var cracks = new Vector3[2];
+        for (int i = 0; i < 2; i++)
+        {
+            float z = i == 0 ? stalker.zMin + 1f : stalker.zMax - 1f;
+            float side = i == 0 ? -1f : 1f;
+            var crack = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            crack.name = i == 0 ? "Crack_S" : "Crack_N";
+            UnityEngine.Object.DestroyImmediate(crack.GetComponent<Collider>());
+            crack.transform.SetParent(pieces);
+            crack.transform.position = new Vector3(side * (Tuning.TUNNEL_WALL_X - 0.05f), 0.3f, z);
+            crack.transform.localScale = new Vector3(0.2f, 0.6f, 1.6f);
+            crack.GetComponent<MeshRenderer>().sharedMaterial = crackMat;
+            cracks[i] = new Vector3(side * Tuning.STALKER_LANE_X, 0.1f, z);
+        }
+        stalker.cracks = cracks;
         stalker.zMin = -Tuning.GRID_CELL * 0.5f + Tuning.STALKER_R + 0.2f;
         stalker.zMax = (PieceCount - 0.5f) * Tuning.GRID_CELL - Tuning.STALKER_R - 0.2f;
         hud.stalker = stalker;

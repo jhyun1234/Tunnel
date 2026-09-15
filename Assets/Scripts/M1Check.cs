@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase|retreat 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -106,6 +106,12 @@ public class M1Check : MonoBehaviour
             stalker.chaseSpeed = 3f;
         if (sabotage == "nolose")               // 못 봐도 안 놓는다
             stalker.loseS = 99f;
+        if (sabotage == "tank")                 // 곡괭이가 안 먹힌다
+            stalker.dmgMul = 0f;
+        if (sabotage == "noretreat")            // 철수선 없음 — 체력이 0 까지 간다
+            stalker.retreatHp = -1f;
+        if (sabotage == "softretreat")          // 철수 중에도 깎인다
+            stalker.retreatArmor = false;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -129,6 +135,8 @@ public class M1Check : MonoBehaviour
             yield return StalkerStage(cc);
         if (only == "" || only == "chase")
             yield return ChaseStage(cc);
+        if (only == "" || only == "retreat")
+            yield return RetreatStage(cc);
         Finish();
     }
 
@@ -326,6 +334,111 @@ public class M1Check : MonoBehaviour
         InputSystem.QueueStateEvent(mouse, new MouseState());
         strikes = NoiseBus.Total - noise0;
         Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s (swing {Tuning.MINE_COOLDOWN:F2} s)");
+    }
+
+    // M5: 체력·스턴·철수. 플레이어를 괴물 앞 2.2 m(사거리 3 m 안)에 세우고 한 번 클릭 = 한 대. 괴물은 매번 z 20 에 북쪽을 보고 선다
+    IEnumerator RetreatStage(CharacterController cc)
+    {
+        var st = stalker;
+        var mouse = InputSystem.AddDevice<Mouse>("RetreatMouse");
+        lamp.lampOn = true;
+        Vector3 S = new Vector3(0f, 0.1f, 20f);
+        Vector3 fwd = Vector3.forward;
+        Vector3 P = S - fwd * 2.2f;                                   // 남쪽 2.2 m 에서 북쪽(괴물)을 본다
+        var bodyT = st.transform.Find("Body");
+        float t;
+
+        // ① 1대: 체력 75, 1.5 s 멈춤(0.7 서서 + 0.8 뒷걸음 1.6 m), 끝나면 추격
+        st.Teleport(S, 180f);
+        st.hp = Tuning.STALKER_HP;
+        Teleport(cc, P, 0f);
+        player.frozen = false;
+        yield return null;
+        float hp0 = st.hp;
+        yield return Click(mouse);
+        t = 0f;
+        while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
+        yield return null;                                             // 납작해진 몸이 한 프레임 뒤에 보인다
+        float hp1 = st.hp;
+        float squash = bodyT != null ? bodyT.localScale.y : -1f;
+        Vector3 at = st.transform.position;
+        float stunT = 0f;
+        while (st.state == Stalker.State.Stun && stunT < 3f) { stunT += Time.deltaTime; yield return null; }
+        float back = Flat(st.transform.position - at);
+        Check("hit_damages_and_stuns", hp0 == Tuning.STALKER_HP && hp1 == hp0 - Tuning.STALKER_HIT_DMG && stunT > 1.3f && stunT < 1.8f && back > 1.0f && back < 2.2f && st.state == Stalker.State.Chase && squash < bodyT.localScale.y,
+            $"hp {hp0:0} → {hp1:0}, stun {stunT:F2} s, backed {back:F2} m, then {st.state}, squash y {squash:F2}→{bodyT.localScale.y:F2}");
+
+        // ② 2대째·3대째: 체력 50 → 25, 세 번째 멈춤이 끝나면 즉시 철수
+        for (int i = 0; i < 2; i++)
+        {
+            st.Teleport(S, 180f);                                        // 자리만 되돌린다 — 체력은 그대로 (Teleport 는 hp 를 안 건드린다)
+            Teleport(cc, P, 0f);
+            player.frozen = false;                                       // 스턴 끝에 추격 → 잡힘이 한 프레임에 끼어들 수 있다
+            yield return null;
+            yield return Click(mouse);
+            t = 0f;
+            while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
+            if (i == 0) { while (st.state == Stalker.State.Stun) yield return null; }
+        }
+        float hp3 = st.hp;
+        Vector3 retreatFrom = player.transform.position;
+        while (st.state == Stalker.State.Stun) yield return null;
+        yield return null;
+        Check("third_hit_retreats_at_once", hp3 == Tuning.STALKER_HP - 3f * Tuning.STALKER_HIT_DMG && hp3 <= Tuning.STALKER_RETREAT_HP && st.state == Stalker.State.Retreat,
+            $"hp after 3 hits {hp3:0} (retreat line {Tuning.STALKER_RETREAT_HP}), state {st.state}");
+
+        // ③ 철수 중 1대: 체력 그대로, 1.5 s 멈춘 뒤 철수 계속. 길 앞 1.5 m 에 서서 치고 바로 비킨다
+        Vector3 dir = Flat3(st.retreatSpot - st.transform.position).normalized;
+        Teleport(cc, st.transform.position + dir * 1.5f, Quaternion.LookRotation(-dir).eulerAngles.y);
+        yield return null;
+        yield return Click(mouse);
+        t = 0f;
+        while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
+        bool stunned = st.state == Stalker.State.Stun;
+        Teleport(cc, retreatFrom, 0f);
+        while (st.state == Stalker.State.Stun) yield return null;
+        yield return null;
+        Check("retreat_hits_only_stun", stunned && st.hp == hp3 && st.state == Stalker.State.Retreat, $"stunned {stunned}, hp {st.hp:0} (was {hp3:0}), then {st.state}");
+
+        // ④ 철수 자리: 플레이어에서 8~14 m, 램프 원뿔(60°) 안. 7 m 를 벗어난 뒤 다시 안 들어온다 (#16)
+        float minAfter = 99f;
+        bool left = false;
+        t = 0f;
+        while (st.state == Stalker.State.Retreat && t < 10f)
+        {
+            float d = Flat(st.transform.position - retreatFrom);
+            if (d > Tuning.GRID_CELL) left = true;
+            else if (left) minAfter = Mathf.Min(minAfter, d);
+            t += Time.deltaTime;
+            yield return null;
+        }
+        float spotD = Flat(st.retreatSpot - st.retreatFrom);
+        float spotAng = Vector3.Angle(Flat3(st.retreatFwd), Flat3(st.retreatSpot - st.retreatFrom));
+        Check("retreat_spot_in_lamp_cone_8_14m", st.state == Stalker.State.Climb && spotD >= Tuning.STALKER_RETREAT_MIN_M - 0.5f && spotD <= Tuning.STALKER_RETREAT_MAX_M + 0.5f && spotAng <= Tuning.LAMP_ANGLE_DEG && st.retreatInCone && minAfter > Tuning.GRID_CELL,
+            $"spot {spotD:F1} m at {spotAng:F0}° (cone ±{Tuning.LAMP_ANGLE_DEG}), inCone {st.retreatInCone}, re-entered 7 m: {(minAfter <= Tuning.GRID_CELL ? "yes " + minAfter.ToString("F1") : "no")}, state {st.state} after {t:F1} s");
+
+        // ⑤ 벽타기 3~5 s 뒤 사라진다, 숨은 시간은 90 s 로 시작
+        float y0 = st.transform.position.y;
+        t = 0f;
+        while (st.state == Stalker.State.Climb && t < 8f) { t += Time.deltaTime; yield return null; }
+        bool shown = false;
+        foreach (var r in st.GetComponentsInChildren<Renderer>()) shown |= r.enabled;
+        Check("climbs_wall_then_vanishes", st.state == Stalker.State.Hidden && t > 3f && t < 5f && !shown && Mathf.Abs(st.hiddenLeft - Tuning.STALKER_REGEN_S) < 1f,
+            $"climb {t:F1} s from y {y0:F1}, state {st.state}, visible {shown}, hidden {st.hiddenLeft:0} s (STALKER_REGEN_S {Tuning.STALKER_REGEN_S})");
+
+        // ⑥ 재등장: 숨은 시간만 2 s 로 줄인다(값만 바꿈). 체력 100, 플레이어에서 먼 틈, 배회. 램프는 꺼서 나오자마자 빛을 보고 움직이지 않게
+        lamp.lampOn = false;
+        st.hiddenLeft = 2f;
+        t = 0f;
+        while (st.state == Stalker.State.Hidden && t < 5f) { t += Time.deltaTime; yield return null; }
+        shown = true;
+        foreach (var r in st.GetComponentsInChildren<Renderer>()) shown &= r.enabled;
+        float far = 0f;
+        foreach (var c in st.cracks) far = Mathf.Max(far, Flat(c - player.transform.position));
+        float d2 = Flat(st.transform.position - player.transform.position);
+        Check("reappears_at_far_crack_full_hp", st.state == Stalker.State.Wander && st.hp == Tuning.STALKER_HP && shown && d2 > 15f && Mathf.Abs(d2 - far) < 1.5f,
+            $"state {st.state}, hp {st.hp:0}, visible {shown}, {d2:F1} m from player (far crack {far:F1} m)");
+        lamp.lampOn = true;
     }
 
     // M4: 눈·빛·추격·잡기. 플레이어는 z 10 에서 +Z 를 본다. 괴물은 앞(+Z)이나 뒤(-Z)에 놓고 플레이어 쪽을 보게 한다
@@ -597,6 +710,7 @@ public class M1Check : MonoBehaviour
     }
 
     static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+    static Vector3 Flat3(Vector3 v) => new Vector3(v.x, 0f, v.z);
 
     static float ListenerRms(float[] buffer)
     {

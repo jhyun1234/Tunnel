@@ -190,6 +190,22 @@ public static class Tuning
     public const float CATCH_BLACK_MIN_S = 1.0f;        // s, 검은 화면 최소 (검사 기준)
     public const float CATCH_RESTART_S = 3.0f;          // s, 잡힌 뒤 재시작까지
     public const float CATCH_FADE_OUT_S = 0.5f;         // s, 재시작 뒤 밝아지는 시간
+    // ---- M5 (②c) 체력·스턴·철수. 설계서 v2 Step 4·6 (교차 검토 반영) ----
+    public const float STALKER_HP = 100.0f;             // 제안값. 곡괭이 3대(75)면 철수선 밑
+    public const float STALKER_HIT_DMG = 25.0f;         // 제안값, 곡괭이 한 대
+    public const float STALKER_RETREAT_HP = 30.0f;      // 제안값. 이하가 되는 순간 철수. 철수 중 피격은 스턴만 — 체력 0 경로 없음
+    public const float STALKER_STUN_S = 1.5f;           // s, 곡괭이 스턴 (Godot, 결정 사항)
+    public const float STALKER_STUN_ROAR_S = 0.7f;      // s, 그중 서서 포효 (시네마틱 설계서와 일치)
+    public const float STALKER_STUN_BACK_S = 0.8f;      // s, 그중 뒷걸음
+    public const float STALKER_STUN_BACK_SPEED = 2.0f;  // m/s, Unity 전용 제안값 — 1.6 m 면 곡괭이 사거리(3 m) 밖
+    public const float STALKER_SPEED_RETREAT = 4.0f;    // m/s (Godot STALKER_SPEED["retreat"])
+    public const float STALKER_WALL_SPEED = 1.2f;       // m/s, 벽을 기어 오르는 속도 (Godot)
+    public const float TUNNEL_ARCH_Y = 4.4f;            // m, 벽이 끝나는 높이 — 여기까지 오르면 사라진다 (Godot)
+    public const float TUNNEL_WALL_X = 3.16f;           // m, 보이는 벽까지 (Godot)
+    public const float STALKER_RETREAT_MIN_M = 8.0f;    // m, 철수 자리: 플레이어 램프 원뿔 안 8~14 m (교차 검토 승인 2026-09-15)
+    public const float STALKER_RETREAT_MAX_M = 14.0f;
+    public const float STALKER_REGEN_S = 90.0f;         // s, 제안값. 숨었다가 체력 100 으로 재등장 (층마다 −25 % 는 층이 생길 때)
+    public const float STALKER_SQUASH_S = 0.3f;         // s, Unity 전용: 맞으면 몸이 납작해지는 시간 (캡슐용 휘청 표시)
     // Unity 전용 제안값: 괴물 눈 두 개가 약하게 빛난다 — 램프를 꺼도 괴물 자리는 보인다 (사용자 09-15 A+C 결정)
     public const float STALKER_EYE_GLOW = 0.6f;    // Unlit 색 배율
     public static readonly Color STALKER_EYE_COLOR = new Color(0.90f, 0.80f, 0.60f);
