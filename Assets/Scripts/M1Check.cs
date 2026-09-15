@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -100,6 +100,12 @@ public class M1Check : MonoBehaviour
             stalker.earMul = 2f;
         if (sabotage == "ghost")                // 괴물 몸을 안 그린다 — 보임 검사가 잡는지
             foreach (var r in stalker.GetComponentsInChildren<Renderer>()) r.enabled = false;
+        if (sabotage == "blind")                // 눈 0 m — 램프를 봐도 모른다
+            stalker.eyeM = 0f;
+        if (sabotage == "slowchase")            // 추격 3.0 m/s — 걷는 사람도 못 잡는다
+            stalker.chaseSpeed = 3f;
+        if (sabotage == "nolose")               // 못 봐도 안 놓는다
+            stalker.loseS = 99f;
         Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? Sweep() : Run(fog));
     }
@@ -107,13 +113,17 @@ public class M1Check : MonoBehaviour
     IEnumerator Run(VolumetricFogVolumeComponent fog)
     {
         var cc = player.GetComponent<CharacterController>();
+        stalker.enabled = false;                 // 괴물 무관 구간은 괴물을 끈다 (DevHud 0 키와 같다) — 켜 두면 램프 빛을 보고 와서 잡는다
         yield return new WaitForSeconds(1.5f);   // 바닥에 내려앉는다
         if (only == "" || only == "m1")
             yield return M1(cc, fog);
         if (only == "" || only == "mining")
             yield return Mining(cc);
+        stalker.enabled = true;
         if (only == "" || only == "stalker")
             yield return StalkerStage(cc);
+        if (only == "" || only == "chase")
+            yield return ChaseStage(cc);
         Finish();
     }
 
@@ -313,6 +323,94 @@ public class M1Check : MonoBehaviour
         Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s (swing {Tuning.MINE_COOLDOWN:F2} s)");
     }
 
+    // M4: 눈·빛·추격·잡기. 플레이어는 z 10 에서 +Z 를 본다. 괴물은 앞(+Z)이나 뒤(-Z)에 놓고 플레이어 쪽을 보게 한다
+    IEnumerator ChaseStage(CharacterController cc)
+    {
+        var st = stalker;
+        var kb = InputSystem.AddDevice<Keyboard>("ChaseKeyboard");
+        Vector3 P = new Vector3(0f, 0.1f, 10f);
+        Vector3 fwd = Vector3.forward;
+        float t;
+
+        // ① 램프 켜고 8 m 앞 → alert. ② alert → chase 1.0 s
+        lamp.lampOn = true;
+        Teleport(cc, P, 0f);
+        st.Teleport(P + fwd * 8f, 180f);
+        t = 0f;
+        while (st.state != Stalker.State.Alert && t < 2f) { t += Time.deltaTime; yield return null; }
+        float tAlert = t;
+        Check("stalker_sees_lamp_in_12m", st.state == Stalker.State.Alert && tAlert < 1f, $"alert after {tAlert:F2} s, sense {st.sense}, state {st.state}");
+        t = 0f;
+        while (st.state == Stalker.State.Alert && t < 3f) { t += Time.deltaTime; yield return null; }
+        Check("alert_1s_before_chase", st.state == Stalker.State.Chase && t > 0.9f && t < 1.3f, $"chase after {t:F2} s (STALKER_ALERT_S {Tuning.STALKER_ALERT_S})");
+        st.Teleport(new Vector3(0f, 0.1f, st.zMax));
+
+        // ③ 램프 끄고 같은 자리 → 모른다
+        lamp.lampOn = false;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
+        st.Teleport(P + fwd * 8f, 180f);
+        yield return new WaitForSeconds(2f);
+        Check("stalker_blind_when_lamp_off", st.state != Stalker.State.Alert && st.state != Stalker.State.Chase && st.sense == "-", $"state {st.state}, sense {st.sense}");
+
+        // ④ 램프 켜고 20 m → 빛. 2 s 에 배회 속도(2.5)로 4~6 m 다가온다
+        lamp.lampOn = true;
+        Vector3 from = P + fwd * 20f;
+        st.Teleport(from, 180f);
+        yield return new WaitForSeconds(2f);
+        float moved = Flat(from - st.transform.position);
+        Check("stalker_light_30m_slow_approach", st.state == Stalker.State.Investigate && moved > 3.5f && moved < 6.5f, $"moved {moved:F1} m in 2 s, state {st.state}, sense {st.sense}");
+        st.Teleport(new Vector3(0f, 0.1f, st.zMax));
+
+        // ⑤ 5 m 뒤에서 걷는 플레이어를 7 s 안에 잡는다. ⑥ 검은 화면 → 3.0 s 뒤 복도 시작점 · 광석 0 · 괴물 북쪽 끝
+        Teleport(cc, P, 0f);
+        player.ore = 3;
+        st.Teleport(P - fwd * 5f, 0f);
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+        int c0 = st.catches;
+        t = 0f;
+        while (st.catches == c0 && t < 8f) { t += Time.deltaTime; yield return null; }
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        float tCatch = t;
+        Check("chase_catches_walker", st.catches == c0 + 1 && tCatch < 7f, $"caught after {tCatch:F1} s, state {st.state}");
+        Vector3 blackV = default;
+        yield return Capture("13_caught_black", v => blackV = v);      // 0.6 s 뒤 = 검은 화면 안
+        int r0 = st.restarts;
+        t = 0.6f;
+        while (st.restarts == r0 && t < 5f) { t += Time.deltaTime; yield return null; }
+        yield return null;
+        float toStart = Flat(player.transform.position - st.restartPos);
+        Check("catch_black_then_restart_3s", blackV.x < 0.02f && st.restarts == r0 + 1 && t > 2.7f && t < 3.4f && toStart < 0.5f && player.ore == 0 && !player.frozen && st.transform.position.z > st.zMax - 5f,
+            $"black lum {blackV.x:F3}, restart at {t:F1} s, {toStart:F2} m from start, ore {player.ore}, frozen {player.frozen}, stalker z {st.transform.position.z:F1}");
+        yield return new WaitForSeconds(Tuning.CATCH_FADE_OUT_S);
+
+        // ⑦ 5 m 뒤에서 달리는 플레이어는 4 s 동안 안 잡힌다
+        Teleport(cc, new Vector3(0f, 0.1f, 4f), 0f);
+        player.stamina = Tuning.STAMINA_MAX;
+        st.Teleport(new Vector3(0f, 0.1f, -1f), 0f);
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W, Key.LeftShift));
+        c0 = st.catches;
+        bool chased = false;
+        for (t = 0f; t < 4f && st.catches == c0; t += Time.deltaTime) { chased |= st.state == Stalker.State.Chase; yield return null; }
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        Check("runner_escapes_4s", st.catches == c0 && chased, $"caught {st.catches != c0}, chased {chased}, gap {st.DistToPlayer:F1} m at 4 s");
+        st.Teleport(new Vector3(0f, 0.1f, st.zMax));
+
+        // ⑧ 추격 중 램프 끄고 뒤로 빠지면 3.0 s 에 놓고, 마지막 본 자리로 가서 수색
+        Teleport(cc, P, 0f);
+        st.Teleport(P + fwd * 8f, 180f);
+        t = 0f;
+        while (st.state != Stalker.State.Chase && t < 3f) { t += Time.deltaTime; yield return null; }
+        lamp.lampOn = false;
+        Teleport(cc, P - fwd * 12f, 0f);
+        t = 0f;
+        while (st.state == Stalker.State.Chase && t < 5f) { t += Time.deltaTime; yield return null; }
+        float tLose = t;
+        while (st.state != Stalker.State.Search && t < 10f) { t += Time.deltaTime; yield return null; }
+        float toLast = Flat(st.transform.position - P);
+        Check("stalker_loses_after_3s", tLose > 2.7f && tLose < 3.6f && st.state == Stalker.State.Search && toLast < 3f, $"left chase at {tLose:F1} s, searching {toLast:F1} m from last seen, state {st.state}");
+        lamp.lampOn = true;
+    }
+
     // M3: 소음을 듣는 괴물. 포켓은 안 캐지게(health 1e6) 두고 소음만 낸다. 괴물 자리는 소리를 내기 직전에 놓는다 — 그 순간의 거리가 기준이다
     IEnumerator StalkerStage(CharacterController cc)
     {
@@ -342,6 +440,8 @@ public class M1Check : MonoBehaviour
             Debug.Log($"STALKER_VIS {dist:0} m lum {v.x:F4} burnt {v.z * 100f:F1} % rect {r.width:F0}x{r.height:F0}");
         }
         Check("stalker_visible_in_lamp", minRect > 0f && vis[3f].x > MinStalkerLum3m && vis[7f].x > MinStalkerLum7m, $"lum 3 m {vis[3f].x:F3} (min {MinStalkerLum3m}) · 7 m {vis[7f].x:F3} (min {MinStalkerLum7m}) · 13 m {vis[13f].x:F3} (램프 14 m 밖은 안 보이는 게 맞다)");
+        lamp.lampOn = false;                       // 귀 검사는 램프를 끄고 — M4 눈·빛이 끼어들지 않게 (램프 끄면 소리만 남는 것이 규칙이다)
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
 
         // 1. 30 m 밖 1타 → 안 듣는다
         StandAt(cc, south);
@@ -378,14 +478,27 @@ public class M1Check : MonoBehaviour
         toPocket = Flat(mid.transform.position - st.transform.position);
         Check("stalker_two_hits_arrives_2m", st.hits == 2 && st.state == Stalker.State.Search && toPocket < Tuning.STALKER_FOUND_M && t < 6f,
             $"hits {st.hits}, {toPocket:F2} m from pocket after {t:F1} s, state {st.state}");
-        yield return Capture("11_stalker_arrived", v => { });
         Teleport(cc, new Vector3(0f, 0.1f, st.zMin + 1f), 0f);    // 수색 길에서 비킨다
 
-        // 4. 2~3곳을 2 s 씩 들여다본 뒤 배회로 돌아간다
+        // 4. 2~3곳을 2 s 씩 들여다본 뒤 배회로 돌아간다. 수색 곳이 우연히 플레이어 2 m 안이면 들키는 게(found) 규칙이라 그것도 통과로 친다
         t = 0f;
-        while (st.state == Stalker.State.Search && t < 40f) { t += Time.deltaTime; yield return null; }
-        Check("stalker_searches_2to3_spots_then_wanders", st.state == Stalker.State.Wander && st.spotsVisited >= Tuning.STALKER_SPOTS_MIN && st.spotsVisited <= Tuning.STALKER_SPOTS_MAX,
-            $"spots {st.spotsVisited}, state {st.state} after {t:F1} s");
+        bool found = false;
+        while (st.state == Stalker.State.Search && t < 40f) { t += Time.deltaTime; found |= st.sense == "found"; yield return null; }
+        Check("stalker_searches_2to3_spots_then_wanders", found || (st.state == Stalker.State.Wander && st.spotsVisited >= Tuning.STALKER_SPOTS_MIN && st.spotsVisited <= Tuning.STALKER_SPOTS_MAX),
+            $"spots {st.spotsVisited}, state {st.state} after {t:F1} s{(found ? ", found player within 2 m" : "")}");
+
+        // 5. 도착 장면 캡처 (램프 켜고) — 2타로 다시 부른 뒤 4 m 남쪽에서 본다
+        StandAt(cc, mid);
+        st.Teleport(from);
+        yield return null;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN * 1.6f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        Teleport(cc, new Vector3(-Mathf.Sign(mid.transform.position.x) * 1.0f, 0.1f, mid.transform.position.z - 4f), 0f);
+        t = 0f;
+        while (st.state != Stalker.State.Search && t < 8f) { t += Time.deltaTime; yield return null; }
+        lamp.lampOn = true;
+        yield return Capture("11_stalker_arrived", v => { });
     }
 
     IEnumerator Click(Mouse mouse)

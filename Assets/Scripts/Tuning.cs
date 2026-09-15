@@ -168,6 +168,20 @@ public static class Tuning
     public const float STALKER_ARRIVE_M = 0.5f;         // m, 목적지 도착 판정
     public const float STALKER_LANE_X = 2.2f;           // m, 괴물이 다니는 폭 (벽 3.16 − 몸 0.6 − 여유)
     public const float STALKER_STUCK_S = 1.0f;          // s, 이만큼 막혀 있으면 그 자리를 도착으로 친다
+    // ---- M4 (②b) 눈·빛·추격·잡기. Godot 그대로 ----
+    public const float STALKER_EYE_H = 2.4f;            // m, 눈(시선 레이) 높이
+    public const float STALKER_EYE_DEG = 60.0f;         // 눈 원뿔 반각. 램프 켜진 몸만, 시선이 안 가려야
+    public const float STALKER_EYE_M = 12.0f;           // m, 눈 사거리
+    public const float STALKER_LIGHT_M = 30.0f;         // m, 빛: 켜진 램프가 시선에 들면 그 자리로 천천히(배회 속도)
+    public const float STALKER_ALERT_S = 1.0f;          // s, 들키면 포효하고 이만큼 뒤에 추격 — 빠져나갈 틈
+    public const float STALKER_SPEED_CHASE = 6.5f;      // m/s. 걷는 사람(4.5)은 잡히고, 달리면(7.0) 5초 벌 수 있다
+    public const float STALKER_LOSE_S = 3.0f;           // s, 추격 중 이만큼 못 보면 마지막 자리 조사
+    public const float STALKER_CATCH_M = 1.5f;          // m, 잡는 거리 (추격 중)
+    // Unity 전용 (제안서 M4 제안값, 설계서 v2 Step 2 교차 검토: 검은 화면 1.0 s 이상, 잡힌 뒤 3.0 s 재시작 — 시네마틱과 일치)
+    public const float CATCH_FADE_S = 0.3f;             // s, 잡힌 뒤 검어지는 시간
+    public const float CATCH_BLACK_MIN_S = 1.0f;        // s, 검은 화면 최소 (검사 기준)
+    public const float CATCH_RESTART_S = 3.0f;          // s, 잡힌 뒤 재시작까지
+    public const float CATCH_FADE_OUT_S = 0.5f;         // s, 재시작 뒤 밝아지는 시간
 
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;

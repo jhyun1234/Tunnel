@@ -218,6 +218,11 @@ public static class BuildM1
         body.GetComponent<MeshRenderer>().sharedMaterial = bodyMat;
         var stalker = stalkerGo.AddComponent<Stalker>();
         stalker.player = player.transform;
+        stalker.playerHead = head;
+        stalker.playerBody = p;
+        stalker.lamp = lamp;
+        stalker.restartPos = player.transform.position;
+        stalker.homePos = stalkerGo.transform.position;
         stalker.zMin = -Tuning.GRID_CELL * 0.5f + Tuning.STALKER_R + 0.2f;
         stalker.zMax = (PieceCount - 0.5f) * Tuning.GRID_CELL - Tuning.STALKER_R - 0.2f;
         hud.stalker = stalker;

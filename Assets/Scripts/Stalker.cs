@@ -1,30 +1,44 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// 소음을 듣는 괴물 최소판 (M3). Godot Stalker.gd 의 귀·배회·조사·수색만 옮겼다.
-// 눈·빛·추격·잡기·체력·벽·천장은 다음 마일스톤. 길찾기 없음 — 직선 갱도라 목적지로 곧장 간다.
-// 1타 = 소리 쪽으로 한 칸만 (방향만 안다), STALKER_HEAR_CONFIRM_S 안에 같은 자리에서 한 번 더 = 그 자리까지 (설계서 v2 Step 5).
+// 괴물 (M3 귀·배회·조사·수색 + M4 눈·빛·alert·chase·catch). Godot Stalker.gd 에서 옮겼다.
+// 체력·스턴·철수·벽·천장은 다음 마일스톤. 길찾기 없음 — 직선 갱도라 목적지로 곧장 간다.
+// 귀: 1타 = 소리 쪽으로 한 칸만, STALKER_HEAR_CONFIRM_S 안에 같은 자리에서 한 번 더 = 그 자리까지 (설계서 v2 Step 5).
+// 눈: 램프 켜진 몸이 앞 원뿔 STALKER_EYE_DEG 안 STALKER_EYE_M 안, 시선이 안 가려야. 빛: 켜진 램프가 STALKER_LIGHT_M 안에 보이면 배회 속도로 다가간다.
 public class Stalker : MonoBehaviour
 {
-    public enum State { Wander, Investigate, Search }
+    public enum State { Wander, Investigate, Search, Alert, Chase, Catch }
 
     [System.NonSerialized] public State state = State.Wander;
     public Transform player;
+    public Transform playerHead;
+    public Player playerBody;
+    public Headlamp lamp;
     public float zMin, zMax;                       // 갱도 축 범위 — 씬 생성기가 넣는다
+    public Vector3 restartPos;                     // 잡힌 뒤 플레이어가 서는 자리 (복도 시작점)
+    public Vector3 homePos;                        // 잡힌 뒤 괴물이 돌아가는 자리 (북쪽 끝)
 
     // 실행 중 조정·검사용 (씬에 안 굽는다)
     [System.NonSerialized] public float earMul = Tuning.STALKER_EAR_MUL;
+    [System.NonSerialized] public float eyeM = Tuning.STALKER_EYE_M;
+    [System.NonSerialized] public float chaseSpeed = Tuning.STALKER_SPEED_CHASE;
+    [System.NonSerialized] public float loseS = Tuning.STALKER_LOSE_S;
     [System.NonSerialized] public string lastHeard = "-";
+    [System.NonSerialized] public string sense = "-";   // 이번 프레임 감각: eye / found / light / -
     [System.NonSerialized] public int hits;          // 같은 자리에서 연속으로 들은 횟수
     [System.NonSerialized] public int spotsVisited;  // 이번 수색에서 들여다본 곳 수
-    [System.NonSerialized] public Vector3 noisePos;
+    [System.NonSerialized] public int catches, restarts;
+    [System.NonSerialized] public Vector3 noisePos, lastSeen;
+    [System.NonSerialized] public float black;      // 잡힘 화면 검은 정도 0~1
 
     CharacterController cc;
     Vector3 target;
-    bool hasTarget;
-    float pause, dwell, vy, stuck, noiseTime = -99f;
+    bool hasTarget, lightChase;
+    float pause, dwell, vy, stuck, alertLeft, unseen, catchT, investigateSpeed, noiseTime = -99f;
     readonly List<Vector3> spots = new List<Vector3>();
     readonly System.Random rng = new System.Random(Tuning.MAP_SEED + 200);
+    static Texture2D blackTex;
+    const int RayMask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));   // Ignore Raycast(자갈·광석)·곡괭이 뷰모델은 시선을 안 막는다
 
     public float DistToPlayer => player != null ? Flat(player.position - transform.position) : -1f;
 
@@ -38,6 +52,8 @@ public class Stalker : MonoBehaviour
 
     void OnNoise(Vector3 pos, float radius, string kind, object who)
     {
+        if (state == State.Alert || state == State.Chase || state == State.Catch)
+            return;                                // 이미 봤다 — 소리는 뒷전
         float d = Flat(pos - transform.position);
         if (d > radius * earMul)
             return;
@@ -50,15 +66,19 @@ public class Stalker : MonoBehaviour
         Vector3 to = pos - transform.position;
         to.y = 0f;
         Vector3 t = hits >= 2 ? pos : transform.position + Vector3.ClampMagnitude(to, Tuning.STALKER_HEAR_SOFT_M);
-        SetTarget(t);
-        spots.Clear();
-        spotsVisited = 0;
-        state = State.Investigate;
+        StartInvestigate(t, Tuning.STALKER_SPEED_INVESTIGATE, false);
     }
 
     void Update()
     {
         float dt = Time.deltaTime;
+        if (state == State.Catch)
+        {
+            UpdateCatch(dt);
+            return;
+        }
+        black = Mathf.MoveTowards(black, 0f, dt / Tuning.CATCH_FADE_OUT_S);
+        Senses();
         switch (state)
         {
             case State.Wander:
@@ -74,7 +94,9 @@ public class Stalker : MonoBehaviour
                 }
                 break;
             case State.Investigate:
-                if (MoveTo(Tuning.STALKER_SPEED_INVESTIGATE, dt))
+                if (lightChase && sense == "light")
+                    SetTarget(player.position);     // 빛이 보이는 동안은 자리를 계속 고친다
+                if (MoveTo(investigateSpeed, dt))
                     BeginSearch();
                 break;
             case State.Search:
@@ -99,14 +121,95 @@ public class Stalker : MonoBehaviour
                     spotsVisited++;
                 }
                 break;
+            case State.Alert:                      // 멈춰서 플레이어를 본다 — 빠져나갈 틈 (STALKER_ALERT_S)
+                Face(player.position, dt);
+                alertLeft -= dt;
+                if (alertLeft <= 0f)
+                {
+                    state = State.Chase;
+                    unseen = 0f;
+                    lastSeen = player.position;
+                }
+                break;
+            case State.Chase:
+                if (sense == "eye") { lastSeen = player.position; unseen = 0f; }
+                else unseen += dt;
+                if (DistToPlayer <= Tuning.STALKER_CATCH_M)
+                {
+                    StartCatch();
+                    break;
+                }
+                if (unseen >= loseS)               // 놓쳤다 — 마지막 본 자리로
+                {
+                    StartInvestigate(lastSeen, Tuning.STALKER_SPEED_INVESTIGATE, false);
+                    break;
+                }
+                SetTarget(sense == "eye" ? player.position : lastSeen);
+                MoveTo(chaseSpeed, dt);
+                break;
         }
-        if (!hasTarget)
+        if (!hasTarget || state == State.Alert)
             Fall(dt);
+    }
+
+    // 감각. 우선순위: 눈 > 수색 중 2 m(found) > 빛
+    void Senses()
+    {
+        sense = "-";
+        if (player == null || lamp == null)
+            return;
+        float d = DistToPlayer;
+        bool lit = lamp.lampOn;
+        if (lit && d <= eyeM && Vector3.Angle(Flat3(transform.forward), Flat3(player.position - transform.position)) <= Tuning.STALKER_EYE_DEG && Clear())
+            sense = "eye";
+        else if (state == State.Search && d <= Tuning.STALKER_FOUND_M)
+            sense = "found";
+        else if (lit && d <= Tuning.STALKER_LIGHT_M && Clear())
+            sense = "light";
+
+        if (state == State.Alert || state == State.Chase)
+            return;
+        if (sense == "eye" || sense == "found")
+            StartAlert();
+        else if (sense == "light" && (state == State.Wander || state == State.Search || lightChase))
+            StartInvestigate(player.position, Tuning.STALKER_SPEED_WANDER, true);
+    }
+
+    // 눈에서 플레이어 머리까지 시선이 안 가리는가
+    bool Clear()
+    {
+        Vector3 eye = transform.position + Vector3.up * Tuning.STALKER_EYE_H;
+        Vector3 to = playerHead.position - eye;
+        if (!Physics.Raycast(eye, to.normalized, out RaycastHit hit, to.magnitude, RayMask, QueryTriggerInteraction.Ignore))
+            return true;
+        return hit.transform == player || hit.transform.IsChildOf(player);
+    }
+
+    void StartAlert()
+    {
+        state = State.Alert;
+        alertLeft = Tuning.STALKER_ALERT_S;
+        hasTarget = false;
+        lightChase = false;
+        spots.Clear();
+    }
+
+    void StartInvestigate(Vector3 at, float speed, bool byLight)
+    {
+        if (state == State.Investigate && !lightChase && byLight)
+            return;                                // 소음 조사 중엔 빛이 끼어들지 않는다
+        SetTarget(at);
+        investigateSpeed = speed;
+        lightChase = byLight;
+        spots.Clear();
+        spotsVisited = 0;
+        state = State.Investigate;
     }
 
     void BeginSearch()
     {
         hasTarget = false;
+        lightChase = false;
         dwell = Tuning.STALKER_DWELL_S;
         spotsVisited = 1;                          // 도착 자리가 첫 곳
         spots.Clear();
@@ -116,13 +219,59 @@ public class Stalker : MonoBehaviour
         state = State.Search;
     }
 
+    // 잡힘: 플레이어 잠금 → 검은 화면 → CATCH_RESTART_S 에 복도 시작점에서 다시 (설계서 v2 Step 2, 교차 검토 반영)
+    void StartCatch()
+    {
+        state = State.Catch;
+        catchT = 0f;
+        catches++;
+        hasTarget = false;
+        if (playerBody != null) playerBody.frozen = true;
+    }
+
+    void UpdateCatch(float dt)
+    {
+        catchT += dt;
+        black = Mathf.Clamp01(catchT / Tuning.CATCH_FADE_S);
+        if (catchT < Tuning.CATCH_RESTART_S)
+            return;
+        var pcc = player.GetComponent<CharacterController>();
+        pcc.enabled = false;
+        player.SetPositionAndRotation(restartPos, Quaternion.identity);
+        pcc.enabled = true;
+        if (playerBody != null)
+        {
+            playerBody.ore = 0;
+            playerBody.frozen = false;
+        }
+        restarts++;
+        Teleport(homePos);
+    }
+
+    void OnGUI()
+    {
+        if (black <= 0f)
+            return;
+        if (blackTex == null)
+        {
+            blackTex = new Texture2D(1, 1);
+            blackTex.SetPixel(0, 0, Color.black);
+            blackTex.Apply();
+        }
+        GUI.color = new Color(0f, 0f, 0f, black);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), blackTex);
+        GUI.color = Color.white;
+    }
+
     // 검사·배치용. 상태도 배회로 되돌린다
-    public void Teleport(Vector3 pos)
+    public void Teleport(Vector3 pos, float yaw = float.NaN)
     {
         cc.enabled = false;
         transform.position = pos;
+        if (!float.IsNaN(yaw)) transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         cc.enabled = true;
         hasTarget = false;
+        lightChase = false;
         pause = Tuning.STALKER_WANDER_PAUSE_S;      // 놓인 자리에서 한 번 멈춘다 (검사 캡처도 이 틈에 찍는다)
         hits = 0;
         noiseTime = -99f;
@@ -144,6 +293,13 @@ public class Stalker : MonoBehaviour
         float x = (float)(rng.NextDouble() * 2.0 - 1.0) * Tuning.STALKER_LANE_X;
         float z = center.z + (float)(rng.NextDouble() * 2.0 - 1.0) * range;
         return new Vector3(x, center.y, z);
+    }
+
+    void Face(Vector3 at, float dt)
+    {
+        Vector3 dir = Flat3(at - transform.position);
+        if (dir.sqrMagnitude > 1e-4f)
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir.normalized), 10f * dt);
     }
 
     // 목적지로 걷는다. 도착하면 true
@@ -173,4 +329,5 @@ public class Stalker : MonoBehaviour
     }
 
     static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+    static Vector3 Flat3(Vector3 v) => new Vector3(v.x, 0f, v.z);
 }

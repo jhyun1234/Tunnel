@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
-// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · F1 표시 끄기
+// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · F1 표시 끄기
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
@@ -40,6 +40,7 @@ public class DevHud : MonoBehaviour
         if (kb.equalsKey.wasPressedThisFrame) lamp.energy *= 1.25f;
         if (kb.minusKey.wasPressedThisFrame) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;
+        if (kb.digit0Key.wasPressedThisFrame && stalker != null) stalker.enabled = !stalker.enabled;
     }
 
     void OnGUI()
@@ -47,7 +48,7 @@ public class DevHud : MonoBehaviour
         if (!show || fog == null)
             return;
         string monster = stalker == null ? "" :
-            $"\nstalker {stalker.state}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}   STALKER_EAR_MUL x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m)";
+            $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m";
         GUI.Label(new Rect(10, 10, 900, 120),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +

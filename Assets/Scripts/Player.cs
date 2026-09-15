@@ -11,6 +11,7 @@ public class Player : MonoBehaviour
     public bool exhausted;                 // 0 에서 Shift 를 계속 눌렀다 — 100 찰 때까지 못 움직인다 (시점·숙이기는 됨)
     public string stance = "walk";         // crouch / walk / run
     [System.NonSerialized] public int ore; // 캔 광석 수
+    [System.NonSerialized] public bool frozen; // 잡힌 동안 — 입력·시점 잠금 (Stalker 가 켜고 끈다)
 
     CharacterController cc;
     Vector3 velocity;
@@ -44,6 +45,8 @@ public class Player : MonoBehaviour
         var kb = Keyboard.current;
         var mouse = Mouse.current;
         float dt = Time.deltaTime;
+        if (frozen)
+            return;
 
         if (mouse != null)
         {
