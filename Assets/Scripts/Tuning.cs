@@ -212,7 +212,9 @@ public static class Tuning
     public const float STALKER_REGEN_S = 90.0f;         // s, 제안값. 숨었다가 체력 100 으로 재등장 (층마다 −25 % 는 층이 생길 때)
     public const float STALKER_SQUASH_S = 0.3f;         // s, Unity 전용: 맞으면 몸이 납작해지는 시간 (캡슐용 휘청 표시)
     // ---- M6 곡괭이 던지기 (#34, 규칙 개정 4). Godot Tuning.gd 그대로. 설계서 v2 Step 4 "착지 소음은 유인" · Step 6 "던지기도 25 + 스턴" ----
-    public const float THROW_SPEED = 14.0f;             // m/s. Unity 중력 9.81(Godot 24 이 아님)이라 사거리는 검사 실측 → HANDOFF
+    // m/s. Godot 14 → Unity(중력 9.81)에서 실측 8.9 m 는 "멀다"(사용자 09-15 M6 판정) → 사거리 6 m 가 되는 값. 감쇠 1.0 이라 거리는 속도에 비례하지 않는다 — 검사가 잰다
+    public const float THROW_SPEED = 9.8f;
+    public const float THROW_RANGE_M = 6.0f;            // m, 사용자 판정 사거리 — 검사가 ±0.5 m 로 확인한다 (Unity 전용)
     public const float THROW_UP_DEG = 10.0f;            // 카메라 앞에서 위로
     public const float THROW_BODY_R = 0.15f;            // m, 던진 곡괭이 충돌 구
     public const float NOISE_PICK_LAND = 20.0f;         // m, 착지 소음 (광차와 같은 급). 유인 — 배회·수색 중에만 먹힌다 (Stalker.OnNoise)

@@ -175,8 +175,8 @@ public class M1Check : MonoBehaviour
         while (!thrown.landed && t < 3f) { t += Time.deltaTime; yield return null; }
         float landT = t;
         float range = Flat(thrown.landPos - P);
-        Check("throw_lands_with_noise_20m", vmOff && active && !pickaxe.hasPick && thrown.landed && NoiseBus.Total == noise0 + 1 && NoiseBus.LastKind == "pick_land" && NoiseBus.LastRadius == Tuning.NOISE_PICK_LAND && range >= 5f,
-            $"viewmodel off {vmOff}, thrown active {active}, hasPick {pickaxe.hasPick}, landed {thrown.landed} at {landT:F2} s on {thrown.landedOn} at {thrown.landPos}, {range:F1} m from thrower, noise {NoiseBus.LastKind} {NoiseBus.LastRadius:0} m (+{NoiseBus.Total - noise0})");
+        Check("throw_lands_with_noise_20m", vmOff && active && !pickaxe.hasPick && thrown.landed && NoiseBus.Total == noise0 + 1 && NoiseBus.LastKind == "pick_land" && NoiseBus.LastRadius == Tuning.NOISE_PICK_LAND && Mathf.Abs(range - Tuning.THROW_RANGE_M) <= 0.5f,
+            $"viewmodel off {vmOff}, thrown active {active}, hasPick {pickaxe.hasPick}, landed {thrown.landed} at {landT:F2} s on {thrown.landedOn} at {thrown.landPos}, {range:F1} m from thrower (THROW_RANGE_M {Tuning.THROW_RANGE_M} ±0.5), noise {NoiseBus.LastKind} {NoiseBus.LastRadius:0} m (+{NoiseBus.Total - noise0})");
 
         // ② 던진 뒤엔 못 캔다: 포켓 앞에서 좌클릭 → 포켓 체력 그대로, 소음 없음
         var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
