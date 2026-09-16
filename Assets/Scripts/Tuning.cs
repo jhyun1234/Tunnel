@@ -40,6 +40,13 @@ public static class Tuning
     public const float EXHAUST_BREATH_M = 0.03f;     // m, 숨 한 번에 머리가 오르내리는 폭 (제안값: 곡괭이 걷기 흔들림 0.02 보다 크게)
     public const float EXHAUST_BREATH_DEG = 1.5f;    // 도, 숨 한 번에 시야가 끄덕이는 각 (제안값)
     public const float EXHAUST_BREATH_S = 0.7f;      // s, 숨 한 번 (헐떡임 ≈ 85회/분, 제안값)
+    // 2차 판정(09-16): "탈진 전과 시야가 같아 보인다" → 시야각 절반 + 흐릿함, 시점은 좌우 ±90° 만(위아래 잠금) — 옆에서 오는 괴물은 소리로만
+    public const float EXHAUST_FOV_MUL = 0.5f;       // 시야각 배율 (80° → 40°)
+    public const float EXHAUST_BLUR_RADIUS = 1.5f;   // 가우시안 흐림 반지름 (URP DepthOfField, 0.5~1.5). 손의 곡괭이(오버레이 카메라)는 안 흐려진다
+    public const float EXHAUST_BLUR_START = 0.3f;    // m, 이 거리부터 흐려지기 시작
+    public const float EXHAUST_BLUR_END = 2.5f;      // m, 이 거리부터 완전히 흐림
+    public const float EXHAUST_YAW_LIMIT_DEG = 90.0f; // 탈진 시작 방향에서 좌우로 이만큼만 돌아본다
+    public const float BREATH_SOON_MUL = 0.3f;       // 곧 단계(≤ STAMINA_SOON)에도 숨 들썩임을 이 배율로 (2차 판정: "작게 넣어라")
 
     public const float GRID_CELL = 7.0f;           // m, 조각 한 칸
     public const float CAMERA_FOV = 80.0f;         // Godot Player.tscn Camera3D (세로 fov)

@@ -286,7 +286,8 @@ public class M1Check : MonoBehaviour
         st.enabled = true;
     }
 
-    // UI-1b: 지쳤을 때 자세. 걸으면 램프가 LAMP_BOB_DEG 끄덕이고, 스태미나 ≤ STAMINA_SOON 이면 3배, 탈진하면 눈 EXHAUST_EYE·시야 EXHAUST_LOOK_DOWN_DEG 아래·숨 들썩임
+    // UI-1b: 지쳤을 때 자세. 걸으면 램프가 LAMP_BOB_DEG 끄덕이고, 스태미나 ≤ STAMINA_SOON 이면 3배 + 작은 숨 들썩임, 탈진하면 눈 EXHAUST_EYE·시야 EXHAUST_LOOK_DOWN_DEG 아래·
+    // 시야각 절반·흐림·좌우 ±90° 만·숨 들썩임
     IEnumerator TiredStage(CharacterController cc)
     {
         var st = stalker;
@@ -321,6 +322,25 @@ public class M1Check : MonoBehaviour
         }
         yield return new WaitForSeconds(0.5f);
         float still = Mathf.Abs(LampPitch());
+        // 곧 단계에 서 있으면 작은 숨 들썩임(BREATH_SOON_MUL), 100 이면 없음
+        float breathSoon = 0f, breathFull = 0f;
+        foreach (float s0 in new[] { 30f, Tuning.STAMINA_MAX })
+        {
+            player.stamina = s0;
+            yield return new WaitForSeconds(Tuning.EXHAUST_TIME + 0.1f);
+            float lo = float.MaxValue, hi = float.MinValue;
+            for (t = 0f; t < 1f; t += Time.deltaTime)
+            {
+                lo = Mathf.Min(lo, player.head.localPosition.y);
+                hi = Mathf.Max(hi, player.head.localPosition.y);
+                player.stamina = s0;                                       // 서 있으면 20/s 차서 곧 단계를 벗어난다
+                yield return null;
+            }
+            if (s0 == 30f) breathSoon = hi - lo; else breathFull = hi - lo;
+        }
+        float expectSoon = Tuning.EXHAUST_BREATH_M * 2f * Tuning.BREATH_SOON_MUL;
+        Check("breath_bounce_small_when_tired", breathSoon >= expectSoon * 0.8f && breathSoon <= expectSoon * 1.2f && breathFull < 0.002f,
+            $"head up-down standing at 30: {breathSoon * 100f:F2} cm (expect {expectSoon * 100f:F2} ±20 %), at 100: {breathFull * 100f:F2} cm");
         float expect1 = lamp.bobDeg, expect3 = lamp.bobDeg * Tuning.LAMP_BOB_SOON_MUL;
         Check("lamp_nods_when_walking", amp100 >= expect1 * 0.8f && amp100 <= expect1 * 1.2f && still < 0.05f,
             $"lamp pitch vs camera walking at 100: max {amp100:F3}° (LAMP_BOB_DEG {expect1:F3} ±20 %), standing {still:F3}°");
@@ -328,7 +348,7 @@ public class M1Check : MonoBehaviour
         Check("lamp_nod_triples_when_tired", amp30 >= expect3 * 0.8f && amp30 <= expect3 * 1.2f,
             $"walking at 30: max {amp30:F3}° (expect {expect3:F3} ±20 %, x{Tuning.LAMP_BOB_SOON_MUL} of {amp100:F3})");
 
-        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 시야 EXHAUST_LOOK_DOWN_DEG 아래(±숨 끄덕임), 1 s 동안 머리가 EXHAUST_BREATH_M 로 오르내림, 0.3 m 안 움직임.
+        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 시야 EXHAUST_LOOK_DOWN_DEG 아래(±숨 끄덕임), 시야각 ×EXHAUST_FOV_MUL, 1 s 동안 머리가 EXHAUST_BREATH_M 로 오르내림, 0.3 m 안 움직임.
         //    갱도 가운데(z≈16, 북쪽 21 m 남음)에서 탈진하게 2 s 달린 뒤 스태미나를 1 로 — 5 s 를 다 달리면 끝 벽 앞이라 화면이 벽으로 찬다(09-16)
         player.stamina = Tuning.STAMINA_MAX;
         Teleport(cc, new Vector3(0f, 0.1f, 2f), 0f);
@@ -350,13 +370,33 @@ public class M1Check : MonoBehaviour
         }
         float eyeEx = (yMin + yMax) * 0.5f, breathEx = yMax - yMin;
         float movedEx = Flat(player.transform.position - pe);
+        float fovEx = Camera.main.fieldOfView;
+        // 시점: 좌우는 탈진 시작 방향에서 ±EXHAUST_YAW_LIMIT_DEG 까지만, 위아래는 안 움직인다 (Player.Look — 마우스와 같은 길)
+        float yaw0 = player.transform.eulerAngles.y, pitch0 = CameraPitch();
+        float px = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);      // 1° 에 해당하는 마우스 픽셀
+        player.Look(new Vector2(0f, 126f * px));                          // 위로 126° 요청 — 잠김 (360° 를 넘기면 각이 감겨 못 잰다)
+        yield return null;
+        float pitchAfter = CameraPitch();
+        player.Look(new Vector2(126f * px, 0f));
+        float yawR = Mathf.DeltaAngle(yaw0, player.transform.eulerAngles.y);
+        player.Look(new Vector2(-216f * px, 0f));
+        float yawL = Mathf.DeltaAngle(yaw0, player.transform.eulerAngles.y);
+        player.Look(new Vector2(90f * px, 0f));                           // 정면으로 (−90 + 90)
         Check("exhausted_posture", player.exhausted && tEx < 1f && Mathf.Abs(eyeEx - Tuning.EXHAUST_EYE) < 0.05f && Mathf.Abs(downEx - Tuning.EXHAUST_LOOK_DOWN_DEG) <= Tuning.EXHAUST_BREATH_DEG + 0.5f && breathEx >= Tuning.EXHAUST_BREATH_M * 2f * 0.8f && movedEx < 0.3f,
             $"exhausted {player.exhausted} {tEx:F2} s after stamina 1 (z {player.transform.position.z:F1}), +0.5 s: eye {eyeEx:F2} m (EXHAUST_EYE {Tuning.EXHAUST_EYE}), camera {downEx:F1}° down (EXHAUST_LOOK_DOWN_DEG {Tuning.EXHAUST_LOOK_DOWN_DEG} ±{Tuning.EXHAUST_BREATH_DEG}), head up-down {breathEx * 100f:F1} cm in 1 s (EXHAUST_BREATH_M ×2 = {Tuning.EXHAUST_BREATH_M * 200f:F0} cm), moved {movedEx:F2} m in 1 s");
+        Check("exhausted_tunnel_vision", Mathf.Abs(fovEx - Tuning.CAMERA_FOV * Tuning.EXHAUST_FOV_MUL) < 1f && Mathf.Abs(yawR - Tuning.EXHAUST_YAW_LIMIT_DEG) < 1f && Mathf.Abs(yawL + Tuning.EXHAUST_YAW_LIMIT_DEG) < 1f && Mathf.Abs(pitchAfter - pitch0) <= Tuning.EXHAUST_BREATH_DEG * 2f + 0.5f,
+            $"fov {fovEx:F1}° (CAMERA_FOV {Tuning.CAMERA_FOV} × {Tuning.EXHAUST_FOV_MUL}), look right 126° → yaw {yawR:F1}°, left → {yawL:F1}° (limit ±{Tuning.EXHAUST_YAW_LIMIT_DEG}), look up 126° → camera pitch {pitch0:F1} → {pitchAfter:F1}° (locked)");
         // 바닥을 비춘다: 화면 아래 절반이 밝아지고 위 절반은 어두워진다 — 같은 자리·같은 방향의 회복 뒤 화면과 비교
         Vector3 botEx = default, topEx = default, botOk = default, topOk = default;
         Rect bottom = new Rect(0f, 0f, Screen.width, Screen.height * 0.5f), top = new Rect(0f, Screen.height * 0.5f, Screen.width, Screen.height * 0.5f);
         yield return Capture("17_exhausted", v => botEx = v, bottom);
         yield return Capture("17_exhausted_top", v => topEx = v, top);
+        // 흐림: 같은 탈진 화면에서 흐림만 끄면 구조(밝기 기울기)가 살아난다
+        Vector3 sharp = default;
+        player.blurMul = 0f;
+        yield return Capture("17_exhausted_noblur", v => sharp = v, bottom);
+        player.blurMul = 1f;
+        Check("exhausted_blur", botEx.y < sharp.y * 0.7f, $"bottom-half gradient blurred {botEx.y:F2} vs blur off {sharp.y:F2} ({botEx.y / Mathf.Max(sharp.y, 1e-6f) * 100f:F0} %, need < 70 %)");
 
         // ④ 100 이 차면 풀린다 — 0.5 s 안에 눈 EYE_HEIGHT, 램프 각 0
         InputSystem.QueueStateEvent(kb, new KeyboardState());
@@ -367,10 +407,14 @@ public class M1Check : MonoBehaviour
         float eyeBack = player.head.localPosition.y, pitchBack = CameraPitch();
         yield return Capture("18_recovered", v => botOk = v, bottom);
         yield return Capture("18_recovered_top", v => topOk = v, top);
-        Check("exhausted_lamp_lights_floor", botEx.x > botOk.x * 1.3f && topEx.x < topOk.x,
+        Check("exhausted_lamp_lights_floor", botEx.x > botOk.x * 1.3f,                                   // 위 절반은 시야각 40° 라 탈진 때도 가까운 바닥 — 비교 안 함
             $"screen lum bottom half exhausted {botEx.x:F4} vs recovered {botOk.x:F4} (x{botEx.x / Mathf.Max(botOk.x, 1e-6f):F2}), top half {topEx.x:F4} vs {topOk.x:F4}");
-        Check("exhaustion_recovers", !player.exhausted && tBack < 6f && player.stamina >= Tuning.STAMINA_MAX - 0.5f && Mathf.Abs(eyeBack - Tuning.EYE_HEIGHT) < 0.05f && Mathf.Abs(pitchBack) < 0.5f,
-            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, camera {pitchBack:F2}°");
+        float yawFree0 = player.transform.eulerAngles.y;
+        player.Look(new Vector2(126f * px, 0f));
+        float yawFree = Mathf.Abs(Mathf.DeltaAngle(yawFree0, player.transform.eulerAngles.y));
+        player.Look(new Vector2(-126f * px, 0f));
+        Check("exhaustion_recovers", !player.exhausted && tBack < 6f && player.stamina >= Tuning.STAMINA_MAX - 0.5f && Mathf.Abs(eyeBack - Tuning.EYE_HEIGHT) < 0.05f && Mathf.Abs(pitchBack) < 0.5f && Mathf.Abs(Camera.main.fieldOfView - Tuning.CAMERA_FOV) < 0.5f && yawFree > Tuning.EXHAUST_YAW_LIMIT_DEG + 5f,
+            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, camera {pitchBack:F2}°, fov {Camera.main.fieldOfView:F1}°, look right 126° → {yawFree:F0}° (free)");
         Teleport(cc, P, 0f);
         st.enabled = true;
     }

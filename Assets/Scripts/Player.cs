@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 // 1인칭 이동 · 마우스 시점 · 점프 · 세 자세 · 스태미나 · 광석 수 · 화면 흔들림. Godot Player.gd 를 옮겼다.
 // 입력은 키보드·마우스 장치에서만 읽는다 — 검사(M1Check)도 가상 장치로 같은 길을 지난다.
@@ -15,8 +17,11 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
     [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
     [System.NonSerialized] public bool stagger = true;        // 사보타주 nostagger 가 끈다 — 탈진해도 자세 없는(옛) 상태
-    [System.NonSerialized] public float lookDown, breathAmp;   // 탈진 자세: 시야 숙임 각 · 숨 들썩임 폭 (검사가 읽는다)
-    float breathPhase;
+    [System.NonSerialized] public float blurMul = 1f;         // 검사가 흐림만 끄고 비교한다
+    [System.NonSerialized] public float lookDown, breathAmp, pant;   // 탈진 자세: 시야 숙임 각 · 숨 들썩임 폭(0~1) · 탈진 정도(0~1, 시야각·흐림·시점 잠금) (검사가 읽는다)
+    float breathPhase, pantYaw;
+    Camera cam;
+    DepthOfField dof;                      // 탈진 흐림. 씬 Volume 의 실행 중 프로필에 넣는다 — 에셋은 안 바뀐다
 
     CharacterController cc;
     Vector3 velocity;
@@ -47,6 +52,34 @@ public class Player : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
     }
 
+    void Start()
+    {
+        cam = head.GetComponentInChildren<Camera>();
+        var volume = FindFirstObjectByType<Volume>();
+        if (volume != null && cam != null)
+        {
+            if (!volume.profile.TryGet(out dof))
+                dof = volume.profile.Add<DepthOfField>(true);
+            dof.mode.Override(DepthOfFieldMode.Gaussian);
+            dof.gaussianStart.Override(Tuning.EXHAUST_BLUR_START);
+            dof.gaussianEnd.Override(Tuning.EXHAUST_BLUR_END);
+            dof.gaussianMaxRadius.Override(0f);
+            dof.highQualitySampling.Override(true);
+            dof.active = false;
+        }
+    }
+
+    // 마우스 시점. 탈진 중(pant)에는 위아래를 잠그고 좌우는 탈진 시작 방향에서 ±EXHAUST_YAW_LIMIT_DEG 만 — 옆에서 오는 것은 소리로만 (사용자 09-16)
+    public void Look(Vector2 d)
+    {
+        float yaw = transform.eulerAngles.y + d.x * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg;
+        if (pant > 0f)
+            yaw = pantYaw + Mathf.Clamp(Mathf.DeltaAngle(pantYaw, yaw), -Tuning.EXHAUST_YAW_LIMIT_DEG, Tuning.EXHAUST_YAW_LIMIT_DEG);
+        transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        if (pant <= 0f)
+            pitch = Mathf.Clamp(pitch - d.y * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg, -Tuning.PITCH_LIMIT_DEG, Tuning.PITCH_LIMIT_DEG);
+    }
+
     void Update()
     {
         var kb = Keyboard.current;
@@ -59,9 +92,7 @@ public class Player : MonoBehaviour
         {
             if (Cursor.lockState == CursorLockMode.Locked)
             {
-                Vector2 d = mouse.delta.ReadValue();
-                transform.Rotate(0f, d.x * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg, 0f);
-                pitch = Mathf.Clamp(pitch - d.y * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg, -Tuning.PITCH_LIMIT_DEG, Tuning.PITCH_LIMIT_DEG);
+                Look(mouse.delta.ReadValue());
             }
             if (mouse.leftButton.wasPressedThisFrame)
                 Cursor.lockState = CursorLockMode.Locked;
@@ -140,14 +171,26 @@ public class Player : MonoBehaviour
             shakeLeft -= dt;
             shake = new Vector3(Random.Range(-1f, 1f), Random.Range(-1f, 1f), 0f) * shakeAmount * Mathf.Max(shakeLeft, 0f) / shakeSpan;
         }
-        // 탈진 자세 (UI-1b 1차 판정): 시야가 EXHAUST_LOOK_DOWN_DEG 숙여지고(마우스 시점은 그 위에), 숨 박자(EXHAUST_BREATH_S)로 머리가 오르내리며 끄덕인다
+        // 탈진 자세 (UI-1b 1·2차 판정): 시야가 EXHAUST_LOOK_DOWN_DEG 숙여지고 시야각 절반·흐릿함·좌우 ±90° 만, 숨 박자(EXHAUST_BREATH_S)로 머리가 오르내리며 끄덕인다.
+        // 곧 단계(≤ STAMINA_SOON)에도 숨 들썩임은 BREATH_SOON_MUL 로 작게
         bool panting = exhausted && stagger;
-        lookDown = Mathf.MoveTowards(lookDown, panting ? Tuning.EXHAUST_LOOK_DOWN_DEG : 0f, Tuning.EXHAUST_LOOK_DOWN_DEG / Tuning.EXHAUST_TIME * dt);
-        breathAmp = Mathf.MoveTowards(breathAmp, panting ? 1f : 0f, dt / Tuning.EXHAUST_TIME);
-        breathPhase = panting || breathAmp > 0f ? breathPhase + dt * Mathf.PI * 2f / Tuning.EXHAUST_BREATH_S : 0f;
+        if (panting && pant <= 0f) pantYaw = transform.eulerAngles.y;   // 탈진 시작 방향 — 좌우 한계의 기준
+        pant = Mathf.MoveTowards(pant, panting ? 1f : 0f, dt / Tuning.EXHAUST_TIME);
+        lookDown = pant * Tuning.EXHAUST_LOOK_DOWN_DEG;
+        if (panting) pitch = Mathf.MoveTowards(pitch, 0f, Tuning.PITCH_LIMIT_DEG / Tuning.EXHAUST_TIME * dt);   // 보던 위아래는 정면으로 — 숙임 각이 그대로 읽히게
+        float breathTarget = panting ? 1f : stamina <= Tuning.STAMINA_SOON ? Tuning.BREATH_SOON_MUL : 0f;
+        breathAmp = Mathf.MoveTowards(breathAmp, breathTarget, dt / Tuning.EXHAUST_TIME);
+        breathPhase = breathAmp > 0f ? breathPhase + dt * Mathf.PI * 2f / Tuning.EXHAUST_BREATH_S : 0f;
         float breath = Mathf.Sin(breathPhase) * breathAmp;
         head.localPosition = new Vector3(0f, eye + breath * Tuning.EXHAUST_BREATH_M, 0f) + shake;
         head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG, 0f, 0f);
+        if (cam != null)
+            cam.fieldOfView = Tuning.CAMERA_FOV * Mathf.Lerp(1f, Tuning.EXHAUST_FOV_MUL, pant);
+        if (dof != null)
+        {
+            dof.gaussianMaxRadius.value = Tuning.EXHAUST_BLUR_RADIUS * pant * blurMul;
+            dof.active = dof.gaussianMaxRadius.value > 0f;
+        }
     }
 
     // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다. 탈진(UI-1b)이면 EXHAUST_EYE 로 — "무릎 짚고 헐떡임", 숙이기가 우선
