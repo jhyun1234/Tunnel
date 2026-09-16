@@ -155,6 +155,22 @@ public static class Tuning
     public const float NOISE_PICK = 25.0f;         // 곡괭이가 포켓에 닿은 타격
     public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간
     public const float NOISE_HUD_PX_PER_M = 2.0f;  // 반경 1 m 당 지름 px
+    // ---- S1 발소리·착지음 (제안서 S1, 설계서 sound_design.md Step 2·7). 반경·간격은 Godot Tuning.gd STANCE 표 그대로 ----
+    public const float NOISE_STEP = 6.0f;          // m, 걷기 발걸음 반경 (같은 칸 안)
+    public const float STEP_INTERVAL = 0.5f;       // s, 걷기 4.5 m/s 에서 2.25 m 마다 한 걸음
+    public const float NOISE_STEP_CROUCH = 2.0f;   // Godot STANCE["crouch"].radius — 바로 옆에서만
+    public const float STEP_INTERVAL_CROUCH = 1.2f; // Godot STANCE["crouch"].step (설계서 제안값 0.8 보다 Godot 값이 우선)
+    public const float NOISE_STEP_RUN = 14.0f;     // Godot STANCE["run"].radius — 두 칸 건너에서도
+    public const float STEP_INTERVAL_RUN = 0.32f;  // Godot STANCE["run"].step
+    // Unity 전용 제안값. 설계서 Step 2 사다리: 이웃끼리 2배(6 dB), 꼭대기는 HIT_VOLUME 0.8. 파일마다 소리 크기가 달라 검사(-only sound)의 RMS 실측으로 맞춘다
+    // 실측(09-16, -only sound): 타격 0.8 = RMS 0.504. 파일 소리 크기가 달라 설계서 값(0.05/0.1/0.2/0.4)으로는 달리기 −27 dB·착지가 타격의 1/8 →
+    // 꼭대기 0.504 에서 절반씩 내려 놓은 값. 여유는 맨 아래(숙이기)에 둔다 — 정확히 2배씩이면 프레임 흔들림에 깨진다
+    // 타격은 5변주 중 가장 작은 파일(RMS 0.399, 1024 샘플 창)이 꼭대기 — 어느 파일이 나와도 순서가 지켜지게
+    public const float STEP_VOLUME_CROUCH = 0.09f;
+    public const float STEP_VOLUME_WALK = 0.165f;
+    public const float STEP_VOLUME_RUN = 0.36f;
+    public const float LAND_VOLUME = 0.75f;        // 던진 곡괭이 착지 — 착지 자리 3D, 반경 NOISE_PICK_LAND 에서 0 (파일은 리미터로 2.5배, cut_sounds.py)
+    public const float STEP_PITCH_JITTER = 0.05f;  // 발소리 4변주에 더해 매번 조금 다르게
 
     // ---- 괴물 (M3 소음 듣는 최소판). Godot Tuning.gd 괴물(#35) 절. 눈·빛·추격·잡기·천장은 다음 마일스톤 ----
     public const float STALKER_R = 0.6f;               // m, 충돌 캡슐 반지름

@@ -12,12 +12,15 @@ public class Player : MonoBehaviour
     public string stance = "walk";         // crouch / walk / run
     [System.NonSerialized] public int ore; // 캔 광석 수
     [System.NonSerialized] public bool frozen; // 잡힌 동안 — 입력·시점 잠금 (Stalker 가 켜고 끈다)
+    [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
+    [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
 
     CharacterController cc;
     Vector3 velocity;
     float pitch;
     float eye = Tuning.EYE_HEIGHT;
     float shakeLeft, shakeAmount, shakeSpan;
+    float stepLeft;                        // 다음 발걸음까지 (Godot _step_left). 멈추면 0 — 다시 걸으면 바로 한 걸음
 
     public CharacterController Controller => cc;
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
@@ -108,6 +111,21 @@ public class Player : MonoBehaviour
 
         if ((cc.Move(velocity * dt) & CollisionFlags.Above) != 0 && velocity.y > 0f)
             velocity.y = 0f;
+
+        // 발소리: 땅에서 움직이는 동안 자세별 간격마다 소음 한 번 (Godot Player.gd). 소리는 NoiseSound 가 튼다
+        if (grounded && input != Vector2.zero)
+        {
+            stepLeft -= dt;
+            if (stepLeft <= 0f)
+            {
+                stepLeft = stance == "crouch" ? Tuning.STEP_INTERVAL_CROUCH : stance == "run" ? Tuning.STEP_INTERVAL_RUN : Tuning.STEP_INTERVAL;
+                float radius = stance == "crouch" ? Tuning.NOISE_STEP_CROUCH : stance == "run" ? Tuning.NOISE_STEP_RUN : Tuning.NOISE_STEP;
+                steps++;
+                NoiseBus.Make(transform.position, radius * stepNoiseMul, "step", this);
+            }
+        }
+        else
+            stepLeft = 0f;
 
         Vector3 shake = Vector3.zero;
         if (shakeLeft > 0f)

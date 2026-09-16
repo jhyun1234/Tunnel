@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase|retreat|throw 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase|retreat|throw|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -120,6 +120,10 @@ public class M1Check : MonoBehaviour
             pickaxe.thrown.reach = 0f;
         if (sabotage == "twopicks")             // 던져도 손에 남는다 — 곡괭이가 둘인 상태
             pickaxe.oneOnly = false;
+        if (sabotage == "flatsteps")            // 발소리 음량이 자세 무관 같다 — 사다리가 없는 상태
+            NoiseSound.I.flat = true;
+        if (sabotage == "quietfeet")            // 발소리 반경 0 — 괴물이 발소리를 못 듣는(옛) 상태
+            player.stepNoiseMul = 0f;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -147,7 +151,130 @@ public class M1Check : MonoBehaviour
             yield return RetreatStage(cc);
         if (only == "" || only == "throw")
             yield return ThrowStage(cc);
+        if (only == "" || only == "sound")
+            yield return SoundStage(cc);
         Finish();
+    }
+
+    // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 타격, 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다
+    IEnumerator SoundStage(CharacterController cc)
+    {
+        var st = stalker;
+        var kb = InputSystem.AddDevice<Keyboard>("SoundKeyboard");
+        var audio = new float[1024];
+        Vector3 P = new Vector3(0f, 0.1f, 6f);
+        st.enabled = false;
+        lamp.lampOn = true;
+        player.frozen = false;
+        if (!pickaxe.hasPick) pickaxe.Return();
+
+        // ① 자세별 2.6 s 이동: 발소리 RMS 최대 · 소음 반경 · 걸음 수
+        string[] names = { "crouch", "walk", "run" };
+        Key[][] keys = { new[] { Key.W, Key.LeftCtrl }, new[] { Key.W }, new[] { Key.W, Key.LeftShift } };
+        float[] wantR = { Tuning.NOISE_STEP_CROUCH, Tuning.NOISE_STEP, Tuning.NOISE_STEP_RUN };
+        float[] interval = { Tuning.STEP_INTERVAL_CROUCH, Tuning.STEP_INTERVAL, Tuning.STEP_INTERVAL_RUN };
+        float[] rms = new float[3], radius = new float[3];
+        int[] n = new int[3];
+        NoiseSound.I.maxRepeat = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            Teleport(cc, P, 0f);
+            player.stamina = Tuning.STAMINA_MAX;
+            yield return null;
+            int s0 = player.steps;
+            InputSystem.QueueStateEvent(kb, new KeyboardState(keys[i]));
+            float loud = 0f;
+            for (float t = 0f; t < 2.6f; t += Time.deltaTime) { loud = Mathf.Max(loud, ListenerRms(audio)); yield return null; }
+            InputSystem.QueueStateEvent(kb, new KeyboardState());
+            for (float t = 0f; t < 0.4f; t += Time.deltaTime) { loud = Mathf.Max(loud, ListenerRms(audio)); yield return null; }
+            rms[i] = loud;
+            radius[i] = NoiseBus.LastRadius;
+            n[i] = player.steps - s0;
+            yield return new WaitForSeconds(0.5f);
+        }
+        int[] wantN = { 3, 5, 8 };
+        bool stepsOk = true;
+        string stepsInfo = "";
+        for (int i = 0; i < 3; i++)
+        {
+            stepsOk &= Mathf.Approximately(radius[i], wantR[i]) && n[i] >= wantN[i] && n[i] <= wantN[i] + 2;
+            stepsInfo += $"{names[i]} {n[i]} steps (2.6 s / {interval[i]} s) radius {radius[i]:0} m (want {wantR[i]:0}); ";
+        }
+        Check("step_noise_radius_interval", stepsOk && NoiseBus.LastKind == "step", stepsInfo);
+        Check("step_variations_no_repeat", n[1] + n[2] >= 10 && NoiseSound.I.maxRepeat < 2, $"{n[1] + n[2]} steps, same file in a row max {NoiseSound.I.maxRepeat + 1}");
+
+        // ② 착지·타격을 발 앞(2 m 안 = 최대 음량)에서 튼다 — 사다리는 거리 감쇠 전 크기로 비교한다
+        Teleport(cc, P, 0f);
+        yield return new WaitForSeconds(0.3f);
+        //    변주 파일마다 크기가 달라 착지는 가장 큰 파일, 타격은 가장 작은 파일로 비교한다 (어느 짝이 나와도 순서가 지켜지게)
+        float land = 0f, hit = 99f;
+        Vector3 at = P + Vector3.forward * 1f + Vector3.up * 1.5f;
+        foreach (var clip in NoiseSound.I.landClips)
+        {
+            float one = 0f;
+            NoiseSound.Play3D(at, clip, Tuning.LAND_VOLUME, Tuning.NOISE_PICK_LAND);
+            for (float t = 0f; t < clip.length + 0.2f; t += Time.deltaTime) { one = Mathf.Max(one, ListenerRms(audio)); yield return null; }
+            land = Mathf.Max(land, one);
+        }
+        foreach (var clip in MiningFx.I.hitClips)
+        {
+            float one = 0f;
+            NoiseSound.Play3D(at, clip, Tuning.HIT_VOLUME, Tuning.NOISE_PICK);
+            for (float t = 0f; t < clip.length + 0.2f; t += Time.deltaTime) { one = Mathf.Max(one, ListenerRms(audio)); yield return null; }
+            hit = Mathf.Min(hit, one);
+        }
+        if (hit > 90f) hit = 0f;                                          // 타격 파일이 없다(사보타주 mute)
+        float[] ladder = { rms[0], rms[1], rms[2], land, hit };
+        string[] ladderNames = { "crouch", "walk", "run", "land", "hit" };
+        bool ladderOk = true;
+        string ladderInfo = "";
+        for (int i = 0; i < 5; i++)
+        {
+            float db = 20f * Mathf.Log10(Mathf.Max(ladder[i], 1e-6f));
+            ladderInfo += $"{ladderNames[i]} {ladder[i]:F4} ({db:F1} dB)";
+            if (i > 0)
+            {
+                float ratio = ladder[i] / Mathf.Max(ladder[i - 1], 1e-6f);
+                ladderOk &= ratio >= 2f;
+                ladderInfo += $" x{ratio:F2}";
+            }
+            ladderInfo += "; ";
+        }
+        Check("sound_ladder_6db", ladderOk && ladder[0] > 0.0005f, ladderInfo);
+
+        // ③ 괴물 귀: 램프 끄고 12 m 앞 괴물 쪽으로 달리면 온다(14 m), 8 m 에서 걷기(6 m)·3 m 에서 숙이기(2 m)는 안 온다 — 멀어지는 쪽으로 움직인다
+        lamp.lampOn = false;
+        st.enabled = true;
+        string[] earNames = { "run12", "walk8", "crouch3" };
+        float[] dist = { 12f, 8f, 3f };
+        Key[][] earKeys = { new[] { Key.W, Key.LeftShift }, new[] { Key.S }, new[] { Key.S, Key.LeftCtrl } };
+        bool[] wantHear = { true, false, false };
+        bool earOk = true;
+        string earInfo = "";
+        for (int i = 0; i < 3; i++)
+        {
+            Teleport(cc, P, 0f);
+            player.stamina = Tuning.STAMINA_MAX;
+            st.Teleport(P + Vector3.forward * dist[i], 180f);
+            st.lastHeard = "-";
+            yield return null;
+            InputSystem.QueueStateEvent(kb, new KeyboardState(earKeys[i]));
+            float t = 0f;
+            while (t < 1.5f && !st.lastHeard.StartsWith("step")) { t += Time.deltaTime; yield return null; }
+            InputSystem.QueueStateEvent(kb, new KeyboardState());
+            yield return null;
+            bool heard = st.lastHeard.StartsWith("step");
+            bool moving = st.state == Stalker.State.Investigate || st.state == Stalker.State.Search;
+            earOk &= heard == wantHear[i] && moving == wantHear[i];
+            earInfo += $"{earNames[i]}: heard '{st.lastHeard}' state {st.state} at {t:F1} s (want {(wantHear[i] ? "hear" : "ignore")}); ";
+            yield return new WaitForSeconds(0.3f);
+        }
+        Check("stalker_hears_steps", earOk, earInfo);
+        st.enabled = false;
+        st.Teleport(st.homePos);
+        lamp.lampOn = true;
+        Teleport(cc, P, 0f);
+        InputSystem.RemoveDevice(kb);
     }
 
     // M6: 곡괭이 던지기. 플레이어는 z 6 에서 +Z 를 본다. 괴물은 필요한 검사에서만 켠다

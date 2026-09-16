@@ -1,0 +1,9 @@
+Assets/Audio/Player — 플레이어가 내는 소리 (제안서 S1). 전부 Freesound.org, 라이선스 Creative Commons 0 (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/).
+받은 날짜 2026-09-16, 검색 필터 license:"Creative Commons 0", 각 소리 페이지에서 "Creative Commons 0" 확인. 원본은 저장소에 없다 — 아래 URL 에서 hq ogg 미리듣기를 받아 tools/cut_sounds.py 로 잘랐다.
+사용자 판정(2026-09-16): 후보 24개 중 아래 셋을 골랐다.
+
+step_dirt_000~003.ogg   "Footsteps_On_Dirt.wav" — lzmraul — https://freesound.org/people/lzmraul/sounds/389454/ — 처음 4걸음을 한 걸음씩 자름
+step_crouch_000.ogg     "Boots Gravel Feet Slide 1_5" — Joao_Janz — https://freesound.org/people/Joao_Janz/sounds/504383/ — 1.2 s 통째로
+pick_land_000~001.ogg   "34 Wrench on concrete floor, indoor, 5 impacts.wav" — Bibow — https://freesound.org/people/Bibow/sounds/426848/ — 처음 두 번의 떨어짐(튄 소리 포함 1.4 s)
+
+가공: mono 44.1 kHz, 최대값 0.9 로 맞춤, 끝 50 ms 페이드, OGG Vorbis q5. 음량은 Tuning.cs (STEP_VOLUME_*, LAND_VOLUME) 가 정한다.

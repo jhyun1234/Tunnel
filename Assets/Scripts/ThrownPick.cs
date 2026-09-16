@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 // 던져진 곡괭이 (M6, Godot ThrownPick.gd). 씬에 하나만 있고 Pickaxe.Throw 가 켜고 Return 이 끈다 — 곡괭이는 하나뿐.
-// 첫 충돌에서 큰 소음(NOISE_PICK_LAND) 한 번 = 유인. 착지 뒤 THROW_STUCK_S 지나면 얼린다(틈에 끼지 않게).
+// 첫 충돌에서 큰 소음(NOISE_PICK_LAND) 한 번 = 유인 (소리도 그 소음에서 난다, NoiseSound). 착지 뒤 THROW_STUCK_S 지나면 얼린다(틈에 끼지 않게).
 // 괴물에 닿으면 휘두른 한 대와 같다(Stalker.Hit) 하고 그 자리에 떨어진다. CARRY_REACH 안에서 E → Pickaxe.Return.
 // 레이어는 광석과 같은 Ignore Raycast — 시선·채굴 조준 구에 안 걸린다. 플레이어 몸과는 안 부딪힌다.
 [RequireComponent(typeof(Rigidbody), typeof(SphereCollider))]
@@ -57,8 +57,7 @@ public class ThrownPick : MonoBehaviour
             rb.angularVelocity = Vector3.zero;
         }
         landedOn = $"{c.collider.name} y{transform.position.y:F2} age{age:F2}";
-        Land();
-        MiningFx.I.HitSound(transform.position, true);         // 낮은 타격음 — "떨어졌다"
+        Land();                                                // 착지음은 NoiseSound 가 pick_land 소음에 붙여 튼다
     }
 
     void Land()

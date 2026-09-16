@@ -24,6 +24,7 @@ public static class BuildM1
     const string StalkerEyeMatPath = "Assets/Settings/M4_StalkerEye.mat";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
+    const string PlayerSoundDir = "Assets/Audio/Player";  // 발소리·착지 (Freesound CC0, SOURCES.txt)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
     public static void MakeScene()
@@ -50,6 +51,16 @@ public static class BuildM1
         {
             Debug.LogError($"{HitSoundDir} 에 소리 파일이 없다");
             EditorApplication.Exit(4);
+            return;
+        }
+        AudioClip[] Clips(string prefix) => AssetDatabase.FindAssets("t:AudioClip", new[] { PlayerSoundDir })
+            .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g)))
+            .Where(c => c.name.StartsWith(prefix)).OrderBy(c => c.name).ToArray();
+        AudioClip[] stepClips = Clips("step_dirt"), crouchClips = Clips("step_crouch"), landClips = Clips("pick_land");
+        if (stepClips.Length < 4 || crouchClips.Length == 0 || landClips.Length == 0)
+        {
+            Debug.LogError($"{PlayerSoundDir} 에 step_dirt 4 · step_crouch · pick_land 가 없다 (tools/cut_sounds.py)");
+            EditorApplication.Exit(5);
             return;
         }
 
@@ -295,6 +306,11 @@ public static class BuildM1
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
         fx.dustMaterial = MakeDustMaterial();
         fx.hitClips = hitClips;
+        var noiseSound = mining.AddComponent<NoiseSound>();
+        noiseSound.player = p;
+        noiseSound.stepClips = stepClips;
+        noiseSound.crouchClips = crouchClips;
+        noiseSound.landClips = landClips;
         var miningHud = mining.AddComponent<MiningHud>();
         miningHud.player = p;
         miningHud.pickaxe = pickaxe;
