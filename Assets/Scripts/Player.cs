@@ -14,6 +14,7 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public bool frozen; // 잡힌 동안 — 입력·시점 잠금 (Stalker 가 켜고 끈다)
     [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
     [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
+    [System.NonSerialized] public bool stagger = true;        // 사보타주 nostagger 가 끈다 — 탈진해도 자세 없는(옛) 상태
 
     CharacterController cc;
     Vector3 velocity;
@@ -141,13 +142,15 @@ public class Player : MonoBehaviour
         head.localPosition = new Vector3(0f, eye, 0f) + shake;
     }
 
-    // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다
+    // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다. 탈진(UI-1b)이면 EXHAUST_EYE 로 — "무릎 짚고 헐떡임", 숙이기가 우선
     void UpdateCrouch(float dt)
     {
-        float target = stance == "crouch" ? Tuning.CROUCH_EYE : Tuning.EYE_HEIGHT;
+        float target = stance == "crouch" ? Tuning.CROUCH_EYE : exhausted && stagger ? Tuning.EXHAUST_EYE : Tuning.EYE_HEIGHT;
         if (Mathf.Approximately(eye, target))
             return;
-        eye = Mathf.MoveTowards(eye, target, (Tuning.EYE_HEIGHT - Tuning.CROUCH_EYE) / Tuning.CROUCH_TIME * dt);
+        bool crouching = target == Tuning.CROUCH_EYE || eye <= Tuning.CROUCH_EYE + 0.01f;   // 숙이기 길은 빠르고(0.15 s), 탈진 길은 느리다(0.3 s)
+        float rate = crouching ? (Tuning.EYE_HEIGHT - Tuning.CROUCH_EYE) / Tuning.CROUCH_TIME : (Tuning.EYE_HEIGHT - Tuning.EXHAUST_EYE) / Tuning.EXHAUST_TIME;
+        eye = Mathf.MoveTowards(eye, target, rate * dt);
         SetHeight(Tuning.BODY_HEIGHT - (Tuning.EYE_HEIGHT - eye));
     }
 

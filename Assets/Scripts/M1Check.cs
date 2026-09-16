@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase|retreat|throw|pick|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase|retreat|throw|pick|tired|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -132,6 +132,10 @@ public class M1Check : MonoBehaviour
             pickaxe.shaky = false;
         if (sabotage == "everlasting")          // 0 이어도 안 부서지고 캐진다
             pickaxe.breaks = false;
+        if (sabotage == "flatnod")              // 곧 단계에도 램프 끄덕임 폭 그대로
+            lamp.soonNod = false;
+        if (sabotage == "nostagger")            // 탈진해도 자세 없음 (UI-1b 전 상태)
+            player.stagger = false;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -161,6 +165,8 @@ public class M1Check : MonoBehaviour
             yield return ThrowStage(cc);
         if (only == "" || only == "pick")
             yield return PickStage(cc);
+        if (only == "" || only == "tired")
+            yield return TiredStage(cc);
         if (only == "" || only == "sound")
             yield return SoundStage(cc);
         Finish();
@@ -279,6 +285,91 @@ public class M1Check : MonoBehaviour
             $"hasPick {pickaxe.hasPick}, viewmodel {pickaxe.mesh.gameObject.activeSelf}, durability {pickaxe.durability:0}");
         st.enabled = true;
     }
+
+    // UI-1b: 지쳤을 때 자세. 걸으면 램프가 LAMP_BOB_DEG 끄덕이고, 스태미나 ≤ STAMINA_SOON 이면 3배, 탈진하면 눈 EXHAUST_EYE·램프 EXHAUST_LAMP_DOWN_DEG 아래
+    IEnumerator TiredStage(CharacterController cc)
+    {
+        var st = stalker;
+        var kb = InputSystem.AddDevice<Keyboard>("TiredKeyboard");
+        float t;
+        st.enabled = false;
+        lamp.lampOn = true;
+        player.frozen = false;
+        player.exhausted = false;
+        Vector3 P = new Vector3(0f, 0.1f, 6f);
+
+        // ① 100 에서 걸으면 램프가 카메라보다 ±LAMP_BOB_DEG 안에서 끄덕인다(최대 편차 = 폭 ±20 %), 서면 0
+        float amp100 = 0f, amp30 = 0f;
+        foreach (float s0 in new[] { Tuning.STAMINA_MAX, 30f })          // 30: 걸으면 10/s 차서 1.3 s 뒤 43, 아직 곧 단계
+        {
+            player.stamina = s0;
+            Teleport(cc, P, 0f);
+            yield return new WaitForSeconds(0.3f);
+            float amp = 0f;
+            InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+            yield return new WaitForSeconds(0.3f);                           // 가속
+            Quaternion camPrev = lamp.cam.rotation;
+            for (t = 0f; t < 1f; t += Time.deltaTime)
+            {
+                if (Quaternion.Angle(camPrev, lamp.cam.rotation) < 0.01f)          // 시점이 돈 프레임은 뺀다 — 램프 늦게 따라오기(LAMP_FOLLOW_TIME)가 섞인다(사람 마우스)
+                    amp = Mathf.Max(amp, Mathf.Abs(LampPitch()));
+                camPrev = lamp.cam.rotation;
+                yield return null;
+            }
+            InputSystem.QueueStateEvent(kb, new KeyboardState());
+            if (s0 == Tuning.STAMINA_MAX) amp100 = amp; else amp30 = amp;
+        }
+        yield return new WaitForSeconds(0.5f);
+        float still = Mathf.Abs(LampPitch());
+        float expect1 = lamp.bobDeg, expect3 = lamp.bobDeg * Tuning.LAMP_BOB_SOON_MUL;
+        Check("lamp_nods_when_walking", amp100 >= expect1 * 0.8f && amp100 <= expect1 * 1.2f && still < 0.05f,
+            $"lamp pitch vs camera walking at 100: max {amp100:F3}° (LAMP_BOB_DEG {expect1:F3} ±20 %), standing {still:F3}°");
+        // ② 곧 단계(≤ STAMINA_SOON)면 3배
+        Check("lamp_nod_triples_when_tired", amp30 >= expect3 * 0.8f && amp30 <= expect3 * 1.2f,
+            $"walking at 30: max {amp30:F3}° (expect {expect3:F3} ±20 %, x{Tuning.LAMP_BOB_SOON_MUL} of {amp100:F3})");
+
+        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 램프 EXHAUST_LAMP_DOWN_DEG 아래, 0.5 s 동안 0.3 m 안 움직임.
+        //    갱도 가운데(z≈16, 북쪽 21 m 남음)에서 탈진하게 2 s 달린 뒤 스태미나를 1 로 — 5 s 를 다 달리면 끝 벽 앞이라 화면이 벽으로 찬다(09-16)
+        player.stamina = Tuning.STAMINA_MAX;
+        Teleport(cc, new Vector3(0f, 0.1f, 2f), 0f);
+        yield return null;
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W, Key.LeftShift));
+        yield return new WaitForSeconds(2f);
+        player.stamina = 1f;
+        t = 0f;
+        while (!player.exhausted && t < 2f) { t += Time.deltaTime; yield return null; }
+        float tEx = t;
+        yield return new WaitForSeconds(0.5f);
+        Vector3 pe = player.transform.position;
+        float eyeEx = player.head.localPosition.y, downEx = LampPitch();
+        yield return new WaitForSeconds(0.5f);
+        float movedEx = Flat(player.transform.position - pe);
+        Check("exhausted_posture", player.exhausted && tEx < 1f && Mathf.Abs(eyeEx - Tuning.EXHAUST_EYE) < 0.05f && Mathf.Abs(downEx - Tuning.EXHAUST_LAMP_DOWN_DEG) < 2f && movedEx < 0.3f,
+            $"exhausted {player.exhausted} {tEx:F2} s after stamina 1 (z {player.transform.position.z:F1}), +0.5 s: eye {eyeEx:F2} m (EXHAUST_EYE {Tuning.EXHAUST_EYE}), lamp {downEx:F1}° below camera (EXHAUST_LAMP_DOWN_DEG {Tuning.EXHAUST_LAMP_DOWN_DEG}), moved {movedEx:F2} m in 0.5 s");
+        // 바닥을 비춘다: 화면 아래 절반이 밝아지고 위 절반은 어두워진다 — 같은 자리·같은 방향의 회복 뒤 화면과 비교
+        Vector3 botEx = default, topEx = default, botOk = default, topOk = default;
+        Rect bottom = new Rect(0f, 0f, Screen.width, Screen.height * 0.5f), top = new Rect(0f, Screen.height * 0.5f, Screen.width, Screen.height * 0.5f);
+        yield return Capture("17_exhausted", v => botEx = v, bottom);
+        yield return Capture("17_exhausted_top", v => topEx = v, top);
+
+        // ④ 100 이 차면 풀린다 — 0.5 s 안에 눈 EYE_HEIGHT, 램프 각 0
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        t = 0f;
+        while (player.exhausted && t < 6f) { t += Time.deltaTime; yield return null; }
+        float tBack = t;
+        yield return new WaitForSeconds(0.5f);
+        float eyeBack = player.head.localPosition.y, pitchBack = LampPitch();
+        yield return Capture("18_recovered", v => botOk = v, bottom);
+        yield return Capture("18_recovered_top", v => topOk = v, top);
+        Check("exhausted_lamp_lights_floor", botEx.x > botOk.x * 1.3f && topEx.x < topOk.x,
+            $"screen lum bottom half exhausted {botEx.x:F4} vs recovered {botOk.x:F4} (x{botEx.x / Mathf.Max(botOk.x, 1e-6f):F2}), top half {topEx.x:F4} vs {topOk.x:F4}");
+        Check("exhaustion_recovers", !player.exhausted && tBack < 6f && player.stamina >= Tuning.STAMINA_MAX - 0.5f && Mathf.Abs(eyeBack - Tuning.EYE_HEIGHT) < 0.05f && Mathf.Abs(pitchBack) < 0.5f,
+            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, lamp {pitchBack:F2}°");
+        Teleport(cc, P, 0f);
+        st.enabled = true;
+    }
+
+    float LampPitch() => Vector3.SignedAngle(lamp.cam.forward, lamp.transform.forward, lamp.cam.right);   // 도, + 면 램프가 카메라보다 아래
 
     // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 타격, 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다
     IEnumerator SoundStage(CharacterController cc)

@@ -27,6 +27,14 @@ public static class Tuning
     public const float STAMINA_RUN = 20.0f;        // /s 달리면 닳음
     public const float STAMINA_WALK = 10.0f;       // /s 걸으면 참
     public const float STAMINA_IDLE = 20.0f;       // /s 서 있으면 참
+    // Unity 전용 (제안서 UI-1b, 설계서 ui_ux Step 2 스태미나 줄): 숫자 없이 몸으로. 걸을 때 램프가 끄덕이고(Godot LAMP_BOB 0.01° 는
+    // 14 m 벽에서 2 mm 라 안 보이는 값 — 새로 정한다), 스태미나 "곧" 단계면 폭 3배, 탈진하면 눈이 내려가고 램프가 바닥을 본다
+    public const float LAMP_BOB_DEG = 0.4f;        // 도, 걷기 끄덕임 폭 (제안값: 5 m 벽에서 빛 원 3.5 cm). 사용자가 DevHud 7/8(임시) 로 찾는다
+    public const float LAMP_BOB_SOON_MUL = 3.0f;   // 곧 단계 배율
+    public const float STAMINA_SOON = 50.0f;       // 이하면 곧 단계
+    public const float EXHAUST_EYE = 1.2f;         // m, 탈진 눈높이 (숙이기 1.0 과 헷갈리지 않게)
+    public const float EXHAUST_TIME = 0.3f;        // s, 내려가고 올라오는 시간
+    public const float EXHAUST_LAMP_DOWN_DEG = 20.0f; // 도, 탈진하면 램프가 바닥 쪽으로 숙여지는 각
 
     public const float GRID_CELL = 7.0f;           // m, 조각 한 칸
     public const float CAMERA_FOV = 80.0f;         // Godot Player.tscn Camera3D (세로 fov)
