@@ -74,6 +74,14 @@ public static class Tuning
     public const float LAMP_NEAR_TIME = 0.15f;     // 초, 감광이 따라가는 시간 — 광선이 기둥 가장자리를 넘을 때 깜빡이지 않게
     public static readonly Color LAMP_COLOR = new Color(1.00f, 0.96f, 0.88f);
     public const bool LAMP_SHADOW = true;
+    // Unity 전용 (제안서 3D-②, 09-17): 헤드램프 그림자 편차. URP 기본(깊이 0.1 · 법선 0.5)이면 12만 면 괴물 몸이 제 그림자를 제 살에
+    // 얼룩(shadow acne)으로 찍어 살이 검게 지직거린다(2 m 정면 밝기 그림자 켬÷끔 0.58). 값은 `Tunnel.exe -sweep -bias` 스윕으로 고른다
+    // 스윕(09-17) 비율: 깊이 0.1·법선 0.5 = 0.58 (URP 기본) · 0.6·0.5 = 0.84 · 1.0·0.5 = 0.88~0.90 · **1.0·0.25 = 0.956** · 1.0·0 = 0.94 · 1.5·0.25 = 0.94 · 2.0·0.25 = 0.92.
+    // 법선 편차는 키울수록 나빠진다(0.5 → 2.0 에서 0.58 → 0.31). 깊이 1.0 을 넘겨도 더 안 좋아진다 → 1.0 · 0.25
+    public const float LAMP_SHADOW_DEPTH_BIAS = 1.0f;
+    public const float LAMP_SHADOW_NORMAL_BIAS = 0.25f;
+    public const float STALKER_ACNE_MIN_RATIO = 0.85f;   // 제안값: 2 m 정면 몸 밝기, 그림자 켬÷끔 이 값 이상이면 얼룩 없음 (실측 0.90~0.96)
+    public const float STALKER_BURN_MAX = 0.03f;         // 제안값: 2 m 정면 화면의 하얗게 탄 픽셀 비율 상한. 얼룩 걷힌 뒤 흰 뼈가 램프에 타서 1.45 % (얼룩 있을 땐 0.26 %) — 뼈 밝기는 사용자 판정
     public const float LAMP_FOLLOW_TIME = 0.10f;   // 초, 램프가 시점을 늦게 따라온다
     public static readonly Vector3 LAMP_OFFSET = new Vector3(0.0f, 0.12f, 0.0f); // 카메라 기준, 이마 자리
     public const float LAMP_TOGGLE_TIME = 0.15f;
@@ -282,6 +290,10 @@ public static class Tuning
     public const float STALKER_MODEL_SCALE = 1.5f;          // Godot MINER_SCALE (사용자 09-11 "1.0 은 안 무섭다")
     public const float STALKER_MODEL_YAW = 0f;              // 도. 모델 정면이 이동 방향(+Z)이 아니면 180
     public const string STALKER_MODEL_IDLE = "idle_crouch"; // 3D-① 은 이 동작만 반복. 나머지 13개 연결은 3D-③
+    // 3D-② (09-17 판정 "구체 두 개가 눈구멍에 박혀 이질감"): 눈 = 눈구멍 속 작은 빛점. 지름 0.04(눈구멍 폭 0.08 의 절반), 안쪽으로 0.04 m
+    // 1차 실측(09-17): 0.04 · 깊이 0.04 는 해골 속에 묻혀 2 m 얼굴에서 안 보이고 14 m 에선 점 3 px 로 희미했다(눈구멍이 진짜 구멍이 아니라 얕은 홈). → 0.06 · 0.01
+    public const float STALKER_EYE_SIZE = 0.06f;            // m, 세계 크기 (3D-① 은 0.12)
+    public const float STALKER_EYE_DEPTH = 0.01f;           // m, 눈구멍 면에서 안쪽으로
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
     // 7 m 보임 = 모델을 그렸을 때와 숨겼을 때 같은 화면 영역의 차이. 모델이 검댕처럼 어두워 밝기 자체(첫 실측 0.036)로는 바탕(0.05)과 못 가른다
     public const float STALKER_MODEL_CONTRAST_MIN_7M = 0.010f;   // 제안값: 밝기 차 ≥ 0.010 또는 구조(이웃 밝기 차×1000) 차 ≥ 3

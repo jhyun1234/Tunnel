@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering.Universal;
 
 // 헤드램프. 카메라를 LAMP_FOLLOW_TIME 만큼 늦게 쫓아간다 — 카메라 축에 딱 붙으면 빛에 방향이 없다(Godot #17).
 // 가까운 면을 비추면 세기를 낮춘다(LAMP_NEAR_*) — URP 거리 제곱 감쇠로 벽 앞이 하얗게 타지 않게.
@@ -10,6 +11,9 @@ using UnityEngine.InputSystem;
 public class Headlamp : MonoBehaviour
 {
     public Transform cam;
+    // 3D-②: 등 하나만 그림자 편차를 따로 (URP 파이프라인 값 대신). 검사 스윕·사보타주 acne 가 바꾼 뒤 ApplyShadowBias()
+    [System.NonSerialized] public float shadowDepthBias = Tuning.LAMP_SHADOW_DEPTH_BIAS;
+    [System.NonSerialized] public float shadowNormalBias = Tuning.LAMP_SHADOW_NORMAL_BIAS;
     public Light pickLight;
     public bool lampOn = true;
     // 씬에 굽지 않는다 — 값은 Tuning 한 곳. DevHud·검사가 실행 중에 조정한다
@@ -42,6 +46,14 @@ public class Headlamp : MonoBehaviour
         light.shadows = Tuning.LAMP_SHADOW ? LightShadows.Soft : LightShadows.None;
     }
 
+    public void ApplyShadowBias()
+    {
+        var data = lamp.GetUniversalAdditionalLightData();
+        data.usePipelineSettings = false;
+        lamp.shadowBias = shadowDepthBias;
+        lamp.shadowNormalBias = shadowNormalBias;
+    }
+
     // 가운데 하나 + 원뿔 반각의 절반 기울기로 8방향
     static Vector3[] BuildRays()
     {
@@ -56,6 +68,7 @@ public class Headlamp : MonoBehaviour
     {
         lamp = GetComponent<Light>();
         Apply(lamp);
+        ApplyShadowBias();
         transform.SetPositionAndRotation(cam.TransformPoint(Tuning.LAMP_OFFSET), cam.rotation);
         follow = cam.rotation;
         player = cam.GetComponentInParent<Player>();

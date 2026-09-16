@@ -101,6 +101,14 @@ public class M1Check : MonoBehaviour
             foreach (var r in stalker.GetComponentsInChildren<Renderer>()) r.enabled = false;
         if (sabotage == "capsule")              // 3D-①: 모델 없음 (옛 캡슐 자리표시 상태) — 모델 검사가 잡는지
             stalker.transform.Find("Body/Model")?.gameObject.SetActive(false);
+        if (sabotage == "acne")                 // 3D-②: 그림자 편차를 URP 기본으로 — 살 얼룩 검사가 잡는지
+        {
+            lamp.shadowDepthBias = 0.1f; lamp.shadowNormalBias = 0.5f; lamp.ApplyShadowBias();
+        }
+        if (sabotage == "noshadow")             // 3D-① 진단: 모델이 그림자를 안 만든다 — 2 m 살의 지직거림이 자기 그림자 얼룩(shadow acne)인지
+            foreach (var r in stalker.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = ShadowCastingMode.Off;
+        if (sabotage == "dimlamp")              // 3D-① 진단: 램프 1/4 — 지직거림이 과다 노출인지
+            lamp.energy *= 0.25f;
         if (sabotage == "flatskin")             // 3D-①: 살 노멀맵 뺌 — 노멀 검사·그늘 값이 잡는지
             foreach (var r in stalker.GetComponentsInChildren<Renderer>())
                 foreach (var m in r.materials)
@@ -158,7 +166,7 @@ public class M1Check : MonoBehaviour
             foreach (var r in stalker.GetComponentsInChildren<Renderer>())
                 if (r.name.StartsWith("Eye")) r.material.color = Color.black;
         Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
-        StartCoroutine(sweep ? Sweep() : Run(fog));
+        StartCoroutine(sweep ? (Array.IndexOf(args, "-bias") >= 0 ? BiasSweep() : Sweep()) : Run(fog));
     }
 
     IEnumerator Run(VolumetricFogVolumeComponent fog)
@@ -1308,13 +1316,34 @@ public class M1Check : MonoBehaviour
             Debug.Log($"MONSTER_2M {dirNames[i]} lum {v.x:F4} structure {v.y:F2} burnt {v.z * 100f:F2} % magenta {lastMagenta}");
             if (i == 0) vis[2.5f] = v;   // 정면 2 m 의 탄 픽셀 비율
         }
-        Check("monster_no_magenta_no_burn", magenta == 0 && vis[2.5f].z < 0.01f, $"magenta pixels {magenta} (want 0), burnt at 2 m front {vis[2.5f].z * 100f:F2} % (max 1 %)");
+        Check("monster_no_magenta_no_burn", magenta == 0 && vis[2.5f].z < Tuning.STALKER_BURN_MAX, $"magenta pixels {magenta} (want 0), burnt at 2 m front {vis[2.5f].z * 100f:F2} % (max {Tuning.STALKER_BURN_MAX * 100f:F0} %)");
         // 얼굴: 2 m 정면은 머리가 화면 위로 나간다(모델 키 3.7 m) — 30° 올려다보고 한 장 (Player.Look — 마우스와 같은 길)
         st.Teleport(P + Vector3.forward * 2f, 180f);
         float px = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);
         player.Look(new Vector2(0f, 30f * px));
         yield return Capture("13_monster_2m_face", x => { });
         player.Look(new Vector2(0f, -30f * px));
+
+        // 3D-② ⑦ 살 얼룩: 2 m 정면 몸 밝기, 모델 그림자 켬 ÷ 끔 (URP 기본 편차 0.1·0.5 에서 0.58 — 살이 검게 지직거렸다, 사용자 09-17)
+        float acne = 0f;
+        yield return ShadowRatio("13_monster_2m_acne", bodyR, mainCam, x => acne = x);
+        Check("monster_skin_no_acne", acne >= Tuning.STALKER_ACNE_MIN_RATIO, $"lum ratio shadows on/off {acne:F3} (min {Tuning.STALKER_ACNE_MIN_RATIO}) with bias depth {lamp.shadowDepthBias} normal {lamp.shadowNormalBias}");
+
+        // 3D-② 부작용 확인: 편차를 키우면 그림자가 물체에서 떨어져 뜬다 — 바닥에 던진 곡괭이 밑 그림자를 3 m 뒤에서 찍는다 (사용자가 본다)
+        st.Teleport(st.homePos);
+        if (!pickaxe.hasPick) pickaxe.Return();
+        var mouse = InputSystem.AddDevice<Mouse>("MonsterMouse");
+        Teleport(cc, P, 0f);
+        yield return null;
+        yield return RightClick(mouse);
+        float tw = 0f;
+        var thrown = pickaxe.thrown;
+        while (!thrown.Frozen && tw < Tuning.THROW_STUCK_S + 4f) { tw += Time.deltaTime; yield return null; }
+        Vector3 land = thrown.transform.position;
+        Teleport(cc, new Vector3(land.x, 0.1f, land.z - 3f), 0f);
+        yield return Capture("13_shadow_contact", x => { });
+        pickaxe.Return();
+        InputSystem.RemoveDevice(mouse);
 
         // 그늘: 2 m 정면에서 램프(머리)를 왼쪽·오른쪽 20° 로 — 몸 영역의 구조값(이웃 밝기 차)을 기록한다. 문턱은 flatskin 실측 뒤 (제안서 ⑤)
         st.Teleport(P + Vector3.forward * 2f, 180f);
@@ -1439,6 +1468,48 @@ public class M1Check : MonoBehaviour
     }
 
     // 값 고르기용 측정: 가까운 면 감광(기준 거리·지수)마다 갱도(z 17.5, +Z)와 벽 앞 화면. 판정이 아니라 숫자 표를 남긴다
+    // 3D-②: 2 m 정면 몸 영역 밝기 — 모델 그림자 켬 ÷ 끔. 1.0 = 얼룩 없음. 캡처 이름 name(켬)·name_noshadow(끔)
+    IEnumerator ShadowRatio(string name, Renderer[] bodyR, Camera mainCam, Action<float> result)
+    {
+        Vector3 on = default, off = default;
+        Rect r = default;
+        yield return Capture(name, x => on = x, default, () => r = ScreenRect(mainCam, bodyR));
+        var was = bodyR.Select(x => x.shadowCastingMode).ToArray();
+        foreach (var x in bodyR) x.shadowCastingMode = ShadowCastingMode.Off;
+        yield return Capture(name + "_noshadow", x => off = x, r);
+        for (int k = 0; k < bodyR.Length; k++) bodyR[k].shadowCastingMode = was[k];
+        float ratio = off.x > 0f ? on.x / off.x : 0f;
+        Debug.Log($"SHADOW_RATIO {name} lum on {on.x:F4} off {off.x:F4} ratio {ratio:F3} structure on {on.y:F1} off {off.y:F1}");
+        result(ratio);
+    }
+
+    // `-sweep -bias`: 헤드램프 그림자 편차 조합을 돌며 2 m 정면 살 얼룩 비율을 잰다 → Tuning.LAMP_SHADOW_*_BIAS 를 고른다 (제안서 3D-②)
+    IEnumerator BiasSweep()
+    {
+        yield return new WaitForSeconds(1.5f);
+        var cc = player.GetComponent<CharacterController>();
+        var st = stalker;
+        st.enabled = false;
+        lamp.lampOn = true;
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var bodyR = st.transform.Find("Body/Model").GetComponentsInChildren<Renderer>();
+        Vector3 P = new Vector3(0f, 0.1f, 3.5f);
+        Teleport(cc, P, 0f);
+        st.Teleport(P + Vector3.forward * 2f, 180f);
+        // 1차(09-17): 깊이 {0.1,0.3,0.6,1.0} × 법선 {0.5,1,2} — 법선을 키우면 나빠진다(0.5→2.0: 0.58→0.31), 깊이는 도움(1.0·0.5 = 0.879). 2차: 깊이 더 · 법선 더 작게
+        foreach (float depth in new[] { 1.0f, 1.5f, 2.0f })
+            foreach (float normal in new[] { 0f, 0.25f, 0.5f })
+            {
+                lamp.shadowDepthBias = depth; lamp.shadowNormalBias = normal; lamp.ApplyShadowBias();
+                yield return null;
+                float ratio = 0f;
+                yield return ShadowRatio($"sweep_bias_d{depth:0.0}_n{normal:0.0}", bodyR, mainCam, x => ratio = x);
+                Debug.Log($"SWEEP bias depth {depth:0.0} normal {normal:0.0} ratio {ratio:F3}");
+            }
+        Debug.Log("CHECK ALL PASS");
+        Application.Quit(0);
+    }
+
     IEnumerator Sweep()
     {
         yield return new WaitForSeconds(1.5f);

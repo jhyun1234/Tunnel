@@ -253,8 +253,9 @@ public static class BuildM1
         }
         Bounds hb = headSmr.bounds;
         // 머리 경계 상자엔 헬멧이 들어 있어 가운데가 이마다 — 눈구멍은 그보다 아래 (첫 캡처 09-17: 가운데+10 % 는 헬멧 챙에 떴다)
-        Vector3 eyeCenter = hb.center + stalkerGo.transform.forward * hb.extents.z * 0.85f - Vector3.up * hb.extents.y * 0.2f;
-        float eyeGap = hb.extents.x * 0.4f, eyeSize = 0.08f * Tuning.STALKER_MODEL_SCALE;
+        // 3D-②: 눈구멍 면(앞면 85 %)에서 STALKER_EYE_DEPTH 만큼 안쪽 — 뼈 그늘 속 빛점
+        Vector3 eyeCenter = hb.center + stalkerGo.transform.forward * (hb.extents.z * 0.85f - Tuning.STALKER_EYE_DEPTH) - Vector3.up * hb.extents.y * 0.2f;
+        float eyeGap = hb.extents.x * 0.4f, eyeSize = Tuning.STALKER_EYE_SIZE;
         foreach (float sx in new[] { -1f, 1f })
         {
             var eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
