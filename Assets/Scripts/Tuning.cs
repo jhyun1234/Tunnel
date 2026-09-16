@@ -291,9 +291,13 @@ public static class Tuning
     public const float STALKER_MODEL_YAW = 0f;              // 도. 모델 정면이 이동 방향(+Z)이 아니면 180
     public const string STALKER_MODEL_IDLE = "idle_crouch"; // 3D-① 은 이 동작만 반복. 나머지 13개 연결은 3D-③
     // 3D-② (09-17 판정 "구체 두 개가 눈구멍에 박혀 이질감"): 눈 = 눈구멍 속 작은 빛점. 지름 0.04(눈구멍 폭 0.08 의 절반), 안쪽으로 0.04 m
-    // 1차 실측(09-17): 0.04 · 깊이 0.04 는 해골 속에 묻혀 2 m 얼굴에서 안 보이고 14 m 에선 점 3 px 로 희미했다(눈구멍이 진짜 구멍이 아니라 얕은 홈). → 0.06 · 0.01
-    public const float STALKER_EYE_SIZE = 0.06f;            // m, 세계 크기 (3D-① 은 0.12)
-    public const float STALKER_EYE_DEPTH = 0.01f;           // m, 눈구멍 면에서 안쪽으로
+    // 3D-②b (09-17 판정 "구체 두 개가 너무 잘 보인다"): 눈 구체 없음. 머리 그림의 발광 그림(눈구멍 자리, stage12 4b)이 빛난다.
+    // 아래 셋은 사용자가 실행 파일 DevHud 키로 찾는 값 — 7/8 요철 세기 · ,/. 거칠기 배율 · k/l 눈 발광 (StalkerLook.cs)
+    public const float STALKER_SKIN_NORMAL_SCALE = 1.0f;    // glTF normalTexture.scale 배율
+    public const float STALKER_SKIN_ROUGH_MUL = 1.0f;       // glTF roughnessFactor (거칠기 그림에 곱함: 젖음 0.5 · 살 0.85 · 뼈 0.9)
+    public const float STALKER_EYE_EMISSION = 0.6f;         // 눈구멍 발광 = STALKER_EYE_COLOR × 이 값 (3D-① 구체 Unlit 0.6 과 같은 시작값)
+    public const float STALKER_RELIEF_MIN = 28f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 실측(09-17): 점토 상태 24.6 · flatskin 26.1 · 요철 그림 30.7 → 그 사이
+    public const int STALKER_EYE_BRIGHT_MIN = 2;            // 램프 끄고 5 m 몸 영역에서 밝기 0.2 넘는 표본 픽셀(3픽셀 간격) 수 하한. 실측 발광 0.6 에서 4, dimeyes 0
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
     // 7 m 보임 = 모델을 그렸을 때와 숨겼을 때 같은 화면 영역의 차이. 모델이 검댕처럼 어두워 밝기 자체(첫 실측 0.036)로는 바탕(0.05)과 못 가른다
     public const float STALKER_MODEL_CONTRAST_MIN_7M = 0.010f;   // 제안값: 밝기 차 ≥ 0.010 또는 구조(이웃 밝기 차×1000) 차 ≥ 3

@@ -22,7 +22,6 @@ public static class BuildM1
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
     const string MonsterPath = "Assets/Tunnel/Monster/miner_rigged.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
-    const string StalkerEyeMatPath = "Assets/Settings/M4_StalkerEye.mat";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
@@ -240,33 +239,8 @@ public static class BuildM1
             smr.updateWhenOffscreen = true;                          // 뼈가 움직여도 화면 사각형(ScreenRect)이 맞게
         // 앞 표시 — 눈 두 개 (사용자 09-15 "캡슐이라 플레이어를 보는지 배회인지 판정이 안 선다"). 눈높이 STALKER_EYE_H, 몸 앞면
         // Unlit — 빛과 무관하게 늘 같은 밝기로 보인다 (램프를 꺼도 눈은 보인다). Lit + _EMISSION 은 빌드에서 변형이 빠져 검게 나왔다(09-15)
-        var eyeMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "M4_StalkerEye", color = Tuning.STALKER_EYE_COLOR * Tuning.STALKER_EYE_GLOW };
-        AssetDatabase.DeleteAsset(StalkerEyeMatPath);
-        AssetDatabase.CreateAsset(eyeMat, StalkerEyeMatPath);
-        // 3D-①: 눈은 모델 머리뼈에 붙인다 — 캡슐 때 자리(2.4 m, 몸 앞)는 모델 가슴 앞에 뜬다. 자리 = 머리 메시 경계 상자(쉬는 자세) 앞면 위쪽
-        var headSmr = model.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s => s.name == "Miner_Head");
-        var headBone = headSmr != null ? headSmr.bones.FirstOrDefault(b => b.name.EndsWith("Head")) : null;
-        if (headSmr == null || headBone == null)
-        {
-            Debug.LogError($"괴물 머리 메시/머리뼈를 못 찾았다 (Miner_Head {headSmr != null}, bones {(headSmr != null ? string.Join(",", headSmr.bones.Select(b => b.name)) : "-")})");
-            EditorApplication.Exit(7);
-        }
-        Bounds hb = headSmr.bounds;
-        // 머리 경계 상자엔 헬멧이 들어 있어 가운데가 이마다 — 눈구멍은 그보다 아래 (첫 캡처 09-17: 가운데+10 % 는 헬멧 챙에 떴다)
-        // 3D-②: 눈구멍 면(앞면 85 %)에서 STALKER_EYE_DEPTH 만큼 안쪽 — 뼈 그늘 속 빛점
-        Vector3 eyeCenter = hb.center + stalkerGo.transform.forward * (hb.extents.z * 0.85f - Tuning.STALKER_EYE_DEPTH) - Vector3.up * hb.extents.y * 0.2f;
-        float eyeGap = hb.extents.x * 0.4f, eyeSize = Tuning.STALKER_EYE_SIZE;
-        foreach (float sx in new[] { -1f, 1f })
-        {
-            var eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            eye.name = sx < 0 ? "EyeL" : "EyeR";
-            UnityEngine.Object.DestroyImmediate(eye.GetComponent<Collider>());
-            eye.transform.position = eyeCenter + stalkerGo.transform.right * sx * eyeGap;
-            eye.transform.localScale = Vector3.one * eyeSize;
-            eye.transform.SetParent(headBone, true);   // 세계 크기·자리 유지 (뼈 밑은 비균등 크기)
-            eye.GetComponent<MeshRenderer>().sharedMaterial = eyeMat;
-        }
-        Debug.Log($"STALKER_EYES head bounds center {hb.center} size {hb.size} → eyes at {eyeCenter} gap ±{eyeGap:F3} size {eyeSize:F2}, bone {headBone.name}");
+        // 3D-②b: 눈 구체 없음(사용자 09-17 "구체 두 개가 너무 잘 보인다"). 눈은 머리 그림의 발광(stage12 4b) — StalkerLook 이 세기를 넣는다
+        model.AddComponent<StalkerLook>();
         var stalker = stalkerGo.AddComponent<Stalker>();
         stalker.player = player.transform;
         stalker.playerHead = head;

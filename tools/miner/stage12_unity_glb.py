@@ -123,21 +123,86 @@ if not SKIP_NORMAL:
     body.data.uv_layers.active = body.data.uv_layers[0]
     bpy.ops.object.bake(type="NORMAL")
     print("baked NORMAL", BAKE_PX)
+def blur(a, r):
+    """상자 흐림 r 텍셀 (누적합)"""
+    if r <= 0:
+        return a
+    pad = np.pad(a, r, mode="wrap")
+    c = np.cumsum(np.cumsum(pad, 0), 1)
+    c = np.pad(c, ((1, 0), (1, 0)))
+    n = 2 * r + 1
+    return (c[n:, n:] - c[:-n, n:] - c[n:, :-n] + c[:-n, :-n]) / (n * n)
+
+def normal_from_height(hgt, strength):
+    """높이 그림 -> 탄젠트 노멀 (OpenGL +Y), -1~1"""
+    dx = (np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1)) * 0.5
+    dy = (np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0)) * 0.5
+    n = np.dstack((-dx * strength, -dy * strength, np.ones_like(hgt)))
+    return n / np.linalg.norm(n, axis=2, keepdims=True)
+
+def island_dev(n01, isl):
+    return float(np.abs(n01[isl][:, :2] - 0.5).mean()) if isl.any() else 0.0
+
+def fit_strength(hgt, isl, target):
+    """섬 안 기울기 평균이 target 이 되는 세기 (기울기는 세기에 거의 비례 — 세 번 맞춘다)"""
+    s = 1.0
+    for _ in range(3):
+        d = island_dev(normal_from_height(hgt, s) * 0.5 + 0.5, isl)
+        s *= target / max(d, 1e-6)
+    return s
+
+RELIEF_TARGET = float(os.environ.get("RELIEF_TARGET", "0.12"))   # 색→요철 섬 안 기울기 평균 (3D-②b 제안값)
+GRAIN_TARGET = float(os.environ.get("GRAIN_TARGET", "0.05"))     # 잔결
+GRAIN_BLUR = 2                                                    # 텍셀 (2048 에서 약 2~4 mm)
+rng = np.random.default_rng(12)
 for nm in SKIN_MATS:
     arr = px(targets[nm])
+    isl = arr[..., 2] > 0.3                      # UV 섬 안(파란 채널 ≈ 1) 만 잰다 — 바깥은 검정
+    dev_geo = island_dev(arr, isl)
+    alb = src_px[nm][..., :3]
+    lum = 0.2126 * alb[..., 0] + 0.7152 * alb[..., 1] + 0.0722 * alb[..., 2]
     if SKIP_NORMAL:
         arr[..., :3] = (0.5, 0.5, 1.0)
-    isl = arr[..., 2] > 0.3                      # UV 섬 안(파란 채널 ≈ 1) 만 잰다 — 바깥은 검정
-    dev = float(np.abs(arr[isl][:, :2] - 0.5).mean()) if isl.any() else 0.0
-    print("%s normal: island %.1f%%  mean|xy-0.5| %.4f" % (nm, isl.mean() * 100, dev))
-    check(dev > 0.02, "%s 노멀맵이 평평한 판이 아니다 (섬 안 기울기 평균 %.4f > 0.02)" % (nm, dev))
+    else:
+        # 3D-②b: 구운 노멀(형태 차이) ⊕ 색 그림에서 뽑은 요철(근육 결·핏줄·뼈 이음) ⊕ 잔결. 탄젠트 공간에서 xy 는 더하고 z 는 곱한다
+        hgt = blur(lum, 1)
+        s_rel = fit_strength(hgt, isl, RELIEF_TARGET)
+        n_rel = normal_from_height(hgt, s_rel)
+        grain = blur(rng.random(lum.shape), GRAIN_BLUR)
+        s_gr = fit_strength(grain, isl, GRAIN_TARGET)
+        n_gr = normal_from_height(grain, s_gr)
+        n_geo = arr[..., :3] * 2.0 - 1.0
+        n = np.dstack((n_geo[..., 0] + n_rel[..., 0] + n_gr[..., 0], n_geo[..., 1] + n_rel[..., 1] + n_gr[..., 1], n_geo[..., 2] * n_rel[..., 2] * n_gr[..., 2]))
+        n /= np.linalg.norm(n, axis=2, keepdims=True)
+        n01 = n * 0.5 + 0.5
+        arr[..., :3] = np.where(isl[..., None], n01, arr[..., :3])
+        print("%s relief strength %.2f grain strength %.2f" % (nm, s_rel, s_gr))
+    dev = island_dev(arr, isl)
+    print("%s normal: island %.1f%%  mean|xy-0.5| geometry %.4f -> combined %.4f" % (nm, isl.mean() * 100, dev_geo, dev))
+    check(dev >= 0.15, "%s 노멀맵에 요철이 있다 (섬 안 기울기 평균 %.4f >= 0.15)" % (nm, dev))
     png = new_png("skin_%s_normal" % ("body" if nm == "살" else "head"), arr, "Non-Color")
     nt = new_mats[nm].node_tree; tn = nt.nodes["normal"]; tn.image = png
     bpy.data.images.remove(targets[nm])
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
     if not SKIP_NORMAL:
         nmap = nt.nodes.new("ShaderNodeNormalMap"); nmap.inputs["Strength"].default_value = 1.0
-        bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
         nt.links.new(tn.outputs["Color"], nmap.inputs["Color"]); nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
+    # 3D-②b 거칠기 그림: 붉은 근육·검은 구멍 = 젖음 0.5 · 회청색 살 0.85 · 흰 뼈 0.9 (glTF metallicRoughness G 채널, 금속 0)
+    red = alb[..., 0] - 0.5 * (alb[..., 1] + alb[..., 2])
+    sat = alb.max(-1) - alb.min(-1)
+    # 문턱은 그림마다 분포로 잡는다 (그림 전체가 살짝 붉어 절대값으로는 41 % 가 젖음, 뼈 0 % 였다): 젖음 = 붉음 상위 15 %, 뼈 = 밝기 상위 15 % 이면서 채도 하위 절반
+    r85, r97 = np.percentile(red[isl], [85, 97]); l85, l97 = np.percentile(lum[isl], [85, 97]); s50 = np.percentile(sat[isl], 50)
+    wet = np.clip((red - r85) / max(r97 - r85, 1e-3), 0, 1)
+    wet = np.maximum(wet, np.clip((0.10 - lum) / 0.05, 0, 1))          # 검은 구멍
+    bone = np.clip((lum - l85) / max(l97 - l85, 1e-3), 0, 1) * np.clip((s50 - sat) / max(s50, 1e-3) + 0.5, 0, 1)
+    rough = 0.85 * np.ones_like(lum)
+    rough = rough * (1 - wet) + 0.5 * wet
+    rough = rough * (1 - bone * (1 - wet)) + 0.9 * bone * (1 - wet)
+    print("%s roughness: wet %.1f%%  bone %.1f%%  mean %.3f" % (nm, (wet > 0.5).mean() * 100, (bone > 0.5).mean() * 100, rough.mean()))
+    rimg = new_png("skin_%s_rough" % ("body" if nm == "살" else "head"), np.dstack((np.ones_like(rough), rough, np.zeros_like(rough), np.ones_like(rough))), "Non-Color")
+    rt = nt.nodes.new("ShaderNodeTexImage"); rt.image = rimg; rt.name = "rough"
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    nt.links.new(rt.outputs["Color"], sep.inputs["Color"]); nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
 
 # 고폴리·옛 재질 정리 (내보내기에 안 들어가게)
 bpy.data.objects.remove(hi, do_unlink=True)
@@ -158,6 +223,66 @@ for o in parts:
     print("part", o.name, len(o.data.polygons), [s.material.name for s in o.material_slots], "groups", len(o.vertex_groups), "mods", [m.type for m in o.modifiers])
 check(len(parts) == 2 and all(len(o.material_slots) == 1 for o in parts), "몸이 재질별 두 물체로 갈라짐 (%s)" % [(o.name, len(o.material_slots)) for o in parts])
 body = next(o for o in parts if o.name == "Miner_Body")
+
+# ---------------------------------------------------------------- 4b. 눈구멍 발광 그림 (3D-②b: 눈 구체 대신 눈구멍 면이 빛난다)
+# 재질 나누기(살/살_머리)는 해골과 안 맞는다(살_머리 정점이 온몸에 퍼져 있다, 09-17 실측) → 해골 자리는 정점 좌표로 잡는다: 맨 위 0.44 m (Unity 머리 상자 0.66/1.5)
+EYE_R = 0.025   # m (Blender, 게임 1.5배에서 3.75 cm)
+allco = {o: np.array([[c.x, c.y, c.z] for c in (o.matrix_world @ v.co for v in o.data.vertices)]) for o in parts}
+top = max(c[:, 2].max() for c in allco.values())
+skull = np.concatenate([c[c[:, 2] > top - 0.44] for c in allco.values()])
+hlo, hhi = skull.min(0), skull.max(0); hc = (hlo + hhi) * 0.5; he = (hhi - hlo) * 0.5
+eye_pts = [Vector((hc[0] + sx * he[0] * 0.4, hlo[1] + he[1] * 0.15, hc[2] - he[2] * 0.2)) for sx in (-1, 1)]   # 앞면(-Y 쪽 15 %)·가운데 아래 20 %·좌우 ±40 %
+# 점이 얼굴 앞 허공에 뜬다(앞면 끝은 헬멧 챙·턱) → 가장 가까운 해골 정점에 붙인다
+snapped = []
+for pt in eye_pts:
+    d = np.linalg.norm(skull - np.array([pt.x, pt.y, pt.z]), axis=1); i = int(d.argmin())
+    snapped.append(Vector(skull[i])); print("eye point %s -> nearest skull vertex %s (%.3f m)" % (tuple(round(c, 3) for c in pt), tuple(skull[i].round(3)), d[i]))
+eye_pts = snapped
+print("skull box lo %s hi %s -> eye points %s" % (hlo.round(3), hhi.round(3), [tuple(round(c, 3) for c in p) for p in eye_pts]))
+painted = {}
+for o in parts:
+    attr = o.data.color_attributes.new("eye", "FLOAT_COLOR", "POINT")
+    co = allco[o]
+    vals = np.zeros(len(co))
+    cnt = [0, 0]
+    for k, pt in enumerate(eye_pts):
+        d = np.linalg.norm(co - np.array([pt.x, pt.y, pt.z]), axis=1)
+        m = d < EYE_R
+        vals = np.maximum(vals, np.where(m, 1.0 - (d / EYE_R) ** 2, 0.0)); cnt[k] = int(m.sum())
+    for i, v in enumerate(vals):
+        attr.data[i].color = (v, v, v, 1.0)
+    painted[o.name] = cnt
+print("eye sockets painted verts", painted)
+tot = [sum(painted[o][k] for o in painted) for k in (0, 1)]
+check(min(tot) >= 10, "눈구멍 자리마다 정점 10개 이상 칠해짐 %s" % tot)
+emit_mat = bpy.data.materials.new("eye_emit"); emit_mat.use_nodes = True
+ent = emit_mat.node_tree; ent.nodes.clear()
+eo = ent.nodes.new("ShaderNodeOutputMaterial"); ee = ent.nodes.new("ShaderNodeEmission"); ea = ent.nodes.new("ShaderNodeAttribute"); ea.attribute_name = "eye"
+ent.links.new(ea.outputs["Color"], ee.inputs["Color"]); ent.links.new(ee.outputs["Emission"], eo.inputs["Surface"])
+etgt = bpy.data.images.new("bake_eye", BAKE_PX, BAKE_PX, alpha=False); etgt.colorspace_settings.name = "Non-Color"
+etn = ent.nodes.new("ShaderNodeTexImage"); etn.image = etgt; ent.nodes.active = etn
+scene.render.engine = "CYCLES"; scene.cycles.samples = 1; scene.cycles.device = "CPU"
+b = scene.render.bake; b.use_selected_to_active = False; b.margin = 8; b.use_clear = True
+emissive_mats = []
+for o in parts:
+    if sum(painted[o.name]) == 0:
+        continue
+    real = o.material_slots[0].material
+    o.material_slots[0].material = emit_mat
+    bpy.ops.object.select_all(action="DESELECT"); o.select_set(True); bpy.context.view_layer.objects.active = o
+    bpy.ops.object.bake(type="EMIT")
+    o.material_slots[0].material = real
+    earr = px(etgt); em = blur(earr[..., 0], 1)
+    white = float((em > 0.5).mean() * 100)
+    print("eye emissive %s (%s): white %.3f%% of texture" % (o.name, real.name, white))
+    check(0.0 < white < 2.0, "%s 발광 그림에 눈구멍 얼룩이 있고 2 %% 미만 (%.3f%%)" % (real.name, white))
+    eimg = new_png("skin_%s_emissive" % ("body" if real.name == "살" else "head"), np.dstack((em, em, em, np.ones_like(em))), "sRGB")
+    hnt = real.node_tree; hbsdf = next(n for n in hnt.nodes if n.type == "BSDF_PRINCIPLED")
+    et = hnt.nodes.new("ShaderNodeTexImage"); et.image = eimg; et.name = "emissive"
+    hnt.links.new(et.outputs["Color"], hbsdf.inputs["Emission Color"]); hbsdf.inputs["Emission Strength"].default_value = 1.0
+    emissive_mats.append(real.name)
+bpy.data.images.remove(etgt); bpy.data.materials.remove(emit_mat)
+print("emissive materials", emissive_mats)
 
 def parts_bbox():
     los, his = zip(*[world_bbox(o) for o in parts])
@@ -234,6 +359,8 @@ for nm in SKIN_MATS:
     check(m is not None and "normalTexture" in m, "%s 재질에 normalTexture" % nm)
     check(m is not None and m.get("pbrMetallicRoughness", {}).get("baseColorTexture") is not None, "%s 재질에 색 그림" % nm)
     check(m is not None and m.get("pbrMetallicRoughness", {}).get("metallicFactor", 1) == 0, "%s 금속 0" % nm)
+    check(m is not None and m.get("pbrMetallicRoughness", {}).get("metallicRoughnessTexture") is not None, "%s 재질에 거칠기 그림" % nm)
+check(all("emissiveTexture" in mats.get(nm, {}) for nm in emissive_mats) and len(emissive_mats) >= 1, "눈구멍 발광 그림이 든 재질 %s (emissiveFactor %s)" % (emissive_mats, [mats.get(nm, {}).get("emissiveFactor") for nm in emissive_mats]))
 anims = [a["name"] for a in j.get("animations", [])]
 check(len(anims) == 14, "동작 14개 (%d) %s" % (len(anims), anims))
 multi = [(m.get("name"), len(m["primitives"])) for m in j["meshes"] if len(m["primitives"]) != 1]

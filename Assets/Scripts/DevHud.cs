@@ -56,6 +56,19 @@ public class DevHud : MonoBehaviour
         if (kb.digit4Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(10f);
         if (kb.digit5Key.wasPressedThisFrame) player.stamina = Mathf.Max(0f, player.stamina - 20f);      // 스태미나 (UI-1b, 설계서 Step 6)
         if (kb.digit6Key.wasPressedThisFrame) player.stamina = Mathf.Min(Tuning.STAMINA_MAX, player.stamina + 20f);
+        var look = stalker != null ? stalker.GetComponentInChildren<StalkerLook>() : null;   // 3D-②b: 살 요철·거칠기·눈 발광 — 사용자가 값을 찾는다
+        if (look != null)
+        {
+            bool changed = true;
+            if (kb.digit7Key.wasPressedThisFrame) look.normalScale /= 1.25f;
+            else if (kb.digit8Key.wasPressedThisFrame) look.normalScale *= 1.25f;
+            else if (kb.commaKey.wasPressedThisFrame) look.roughMul *= 0.9f;
+            else if (kb.periodKey.wasPressedThisFrame) look.roughMul /= 0.9f;
+            else if (kb.kKey.wasPressedThisFrame) look.eyeEmission *= 0.8f;
+            else if (kb.lKey.wasPressedThisFrame) look.eyeEmission /= 0.8f;
+            else changed = false;
+            if (changed) look.Apply();
+        }
     }
 
     void OnGUI()
@@ -63,7 +76,8 @@ public class DevHud : MonoBehaviour
         if (!show || fog == null)
             return;
         string monster = stalker == null ? "" :
-            $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m";
+            $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
+            (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]" : "");
         GUI.Label(new Rect(10, 10, 900, 120),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +

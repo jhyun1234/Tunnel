@@ -162,9 +162,10 @@ public class M1Check : MonoBehaviour
         }
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
-        if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
-            foreach (var r in stalker.GetComponentsInChildren<Renderer>())
-                if (r.name.StartsWith("Eye")) r.material.color = Color.black;
+        if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
+        {
+            var lk = stalker.GetComponentInChildren<StalkerLook>(); lk.eyeEmission = 0f; lk.Apply();
+        }
         Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
         StartCoroutine(sweep ? (Array.IndexOf(args, "-bias") >= 0 ? BiasSweep() : Sweep()) : Run(fog));
     }
@@ -1243,13 +1244,13 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.2f);
         lamp.lampOn = false;
         st.Teleport(P + fwd * 5f, 180f);
-        var eyeR = new List<Renderer>();
-        foreach (var r in st.GetComponentsInChildren<Renderer>()) if (r.name.StartsWith("Eye")) eyeR.Add(r);
+        // 3D-②b: 눈 구체가 없다 — 머리 메시 화면 영역에서 밝기 0.2 넘는 표본 픽셀 수(발광 눈구멍)를 센다
+        var look = st.GetComponentInChildren<StalkerLook>();
         var camMain = pickaxe.cam.GetComponent<Camera>();
         Vector3 eyes = default;
-        Rect eyeRect = ScreenRect(camMain, eyeR.ToArray());
+        Rect eyeRect = ScreenRect(camMain, look.Renderers);   // 몸 전체 — 어둠 속에서 0.2 를 넘는 건 발광 눈구멍뿐
         yield return Capture("16_eyes_in_dark", x => eyes = x, eyeRect);
-        Check("stalker_eyes_glow_in_dark", eyeRect.width > 0f && eyes.x > 0.05f, $"eye region lum {eyes.x:F3} in {eyeRect.width:F0}x{eyeRect.height:F0} px at 5 m, lamp off, adapt {lamp.adapt:F2}");
+        Check("stalker_eyes_glow_in_dark", eyeRect.width > 0f && lastBright >= Tuning.STALKER_EYE_BRIGHT_MIN, $"model region {eyeRect.width:F0}x{eyeRect.height:F0} px at 5 m: bright samples {lastBright} (min {Tuning.STALKER_EYE_BRIGHT_MIN}), lum {eyes.x:F3}, lamp off, adapt {lamp.adapt:F2}, eye emission {look.eyeEmission:F2}");
         lamp.lampOn = true;
         st.enabled = true;
     }
@@ -1317,11 +1318,19 @@ public class M1Check : MonoBehaviour
             if (i == 0) vis[2.5f] = v;   // 정면 2 m 의 탄 픽셀 비율
         }
         Check("monster_no_magenta_no_burn", magenta == 0 && vis[2.5f].z < Tuning.STALKER_BURN_MAX, $"magenta pixels {magenta} (want 0), burnt at 2 m front {vis[2.5f].z * 100f:F2} % (max {Tuning.STALKER_BURN_MAX * 100f:F0} %)");
+        // 3D-②b ⑧ 살 요철: 2 m 정면 구조값(이웃 밝기 차) — 점토 상태 24.6, 색→요철·잔결·거칠기 그림 뒤 올라야 한다. flatskin(노멀 뺌)이 FAIL
+        Check("monster_skin_has_relief", vis[2.5f].y >= Tuning.STALKER_RELIEF_MIN, $"2 m front structure {vis[2.5f].y:F1} (min {Tuning.STALKER_RELIEF_MIN}), normal scale {st.GetComponentInChildren<StalkerLook>().normalScale:F2}");
         // 얼굴: 2 m 정면은 머리가 화면 위로 나간다(모델 키 3.7 m) — 30° 올려다보고 한 장 (Player.Look — 마우스와 같은 길)
         st.Teleport(P + Vector3.forward * 2f, 180f);
         float px = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);
         player.Look(new Vector2(0f, 30f * px));
         yield return Capture("13_monster_2m_face", x => { });
+        // 램프 끄고 같은 자리 — 눈구멍 발광이 어둠에서 두 점으로 남는지 (사용자가 본다)
+        lamp.lampOn = false;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
+        yield return Capture("13_monster_2m_face_dark", x => { });
+        lamp.lampOn = true;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
         player.Look(new Vector2(0f, -30f * px));
 
         // 3D-② ⑦ 살 얼룩: 2 m 정면 몸 밝기, 모델 그림자 켬 ÷ 끔 (URP 기본 편차 0.1·0.5 에서 0.58 — 살이 검게 지직거렸다, 사용자 09-17)
@@ -1603,7 +1612,7 @@ public class M1Check : MonoBehaviour
             y1 = Mathf.Clamp((int)region.yMax, y0 + 1, h - 1);
         }
         double sum = 0, grad = 0;
-        int n = 0, burnt = 0, magenta = 0;
+        int n = 0, burnt = 0, magenta = 0, bright = 0;
         for (int y = y0; y < y1; y += 3)
             for (int x = x0; x < x1; x += 3)
             {
@@ -1613,13 +1622,16 @@ public class M1Check : MonoBehaviour
                 n++;
                 if (l > BurntLum) burnt++;
                 if (c.r > 200 && c.b > 200 && c.g < 80) magenta++;   // 재질 없음 표시(분홍) — glTF 텍스처를 못 읽으면 뜬다
+                if (l > 0.2f) bright++;
                 grad += Mathf.Abs(Lum(px[y * w + x + 1]) - l) + Mathf.Abs(Lum(px[(y + 1) * w + x]) - l);
             }
         n = Mathf.Max(n, 1);
         lastMagenta = magenta;
+        lastBright = bright;
         result(new Vector3((float)(sum / n), (float)(grad / n * 1000.0), (float)burnt / n));
     }
     int lastMagenta;   // 마지막 Capture 영역에서 3픽셀 간격으로 센 분홍 픽셀 수
+    int lastBright;    // 마지막 Capture 영역에서 3픽셀 간격으로 센 밝기 0.2 넘는 픽셀 수 (어둠 속 눈 발광)
 
     static float Lum(Color32 c) => (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255f;
 
