@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// 채굴 연출 한 곳: 먼지(Godot Dust.gd), 자갈(WallChunk.gd), 광석 생성(Ore.spawn), 타격음.
+// 채굴 연출 한 곳: 먼지(Godot Dust.gd), 자갈(WallChunk.gd), 광석 생성(Ore.spawn), 타격음, 부서진 곡괭이 조각(UI-1a).
 // 에셋 참조는 씬 생성기(BuildM1)가 넣는다 — 실행 파일에 에셋이 따라 들어가게.
 // 자갈과 광석은 Ignore Raycast 레이어(2)에 둔다 — 곡괭이 판정·램프 감광 광선을 막지 않게. 플레이어와는 안 부딪친다.
 public class MiningFx : MonoBehaviour
@@ -66,23 +66,38 @@ public class MiningFx : MonoBehaviour
     {
         for (int i = 0; i < Tuning.CHIP_PER_HIT; i++)
         {
-            var go = new GameObject("Chip", typeof(MeshFilter), typeof(MeshRenderer)) { layer = IgnoreRaycastLayer };
-            go.GetComponent<MeshFilter>().sharedMesh = chipMeshes[Random.Range(0, chipMeshes.Length)];
-            go.GetComponent<MeshRenderer>().sharedMaterial = chipMaterial;
-            go.transform.position = hitPoint + outDir * 0.1f;
-            Physics.IgnoreCollision(go.AddComponent<BoxCollider>(), player.Controller);
-            var rb = go.AddComponent<Rigidbody>();
             Vector3 spread = new Vector3(Random.Range(-1f, 1f), Random.Range(-0.2f, 1f), Random.Range(-1f, 1f)).normalized;
-            rb.linearVelocity = (outDir + spread * 0.7f).normalized * Tuning.CHIP_POP;
-            rb.angularVelocity = RandomBox() * Tuning.CHUNK_SPIN;
-            chips.Add(go);
-            while (chips.Count > Tuning.CHUNK_LIMIT)
-            {
-                if (chips[0] != null) Destroy(chips[0]);
-                chips.RemoveAt(0);
-            }
-            StartCoroutine(FadeOut(go, Tuning.CHIP_LIFE));
+            Chip("Chip", hitPoint + outDir * 0.1f, (outDir + spread * 0.7f).normalized * Tuning.CHIP_POP, chipMaterial, Tuning.CHIP_LIFE);
         }
+    }
+
+    // 곡괭이가 부서진다 (UI-1a): 손 자리에서 곡괭이 재질 조각이 튀어 바닥에 떨어지고 PICK_BREAK_LIFE 뒤 줄어들며 사라진다. 자갈과 같은 물체
+    public void Shatter(Vector3 at, Material[] materials)
+    {
+        for (int i = 0; i < Tuning.PICK_BREAK_PIECES; i++)
+            Chip("PickPiece", at, (RandomBox() + Vector3.up * 0.5f).normalized * Tuning.PICK_BREAK_POP, materials[Random.Range(0, materials.Length)], Tuning.PICK_BREAK_LIFE, Tuning.PICK_BREAK_SCALE);
+    }
+
+    public int PiecesAlive => chips.FindAll(g => g != null && g.name == "PickPiece").Count;   // 검사가 센다
+
+    void Chip(string name, Vector3 at, Vector3 velocity, Material material, float life, float scale = 1f)
+    {
+        var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer)) { layer = IgnoreRaycastLayer };
+        go.transform.localScale = Vector3.one * scale;
+        go.GetComponent<MeshFilter>().sharedMesh = chipMeshes[Random.Range(0, chipMeshes.Length)];
+        go.GetComponent<MeshRenderer>().sharedMaterial = material;
+        go.transform.position = at;
+        Physics.IgnoreCollision(go.AddComponent<BoxCollider>(), player.Controller);
+        var rb = go.AddComponent<Rigidbody>();
+        rb.linearVelocity = velocity;
+        rb.angularVelocity = RandomBox() * Tuning.CHUNK_SPIN;
+        chips.Add(go);
+        while (chips.Count > Tuning.CHUNK_LIMIT)
+        {
+            if (chips[0] != null) Destroy(chips[0]);
+            chips.RemoveAt(0);
+        }
+        StartCoroutine(FadeOut(go, life));
     }
 
     public void SpawnOre(Vector3 at, Vector3 velocity)
@@ -126,9 +141,10 @@ public class MiningFx : MonoBehaviour
     IEnumerator FadeOut(GameObject go, float life)
     {
         yield return new WaitForSeconds(life);
+        Vector3 full = go != null ? go.transform.localScale : Vector3.one;
         for (float t = 0f; go != null && t < Tuning.CHUNK_FADE; t += Time.deltaTime)
         {
-            go.transform.localScale = Vector3.one * (1f - t / Tuning.CHUNK_FADE);
+            go.transform.localScale = full * (1f - t / Tuning.CHUNK_FADE);
             yield return null;
         }
         if (go != null)

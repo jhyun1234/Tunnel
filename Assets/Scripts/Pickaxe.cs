@@ -8,6 +8,8 @@ using UnityEngine.Rendering;
 // 휘두르기: 뒤로 들기 → 내려치기 → 끝나는 순간 다시 쏴서 맞은 것을 친다(휘두르는 사이 시점이 돌았을 수 있다) → 박힌 채 잠깐 멈춤 → 되돌리기.
 // 곡괭이는 ViewModel 레이어라 오버레이 카메라가 그린다(벽 속으로 들어가도 벽 위에 보인다). 헤드램프는 안 비추고 PickLight 만 비춘다.
 // 우클릭 = 던지기 (M6). 곡괭이는 하나뿐 — 던지면 hasPick 이 false 라 못 캐고, ThrownPick 옆에서 E 로 주워야(Return) 다시 캔다.
+// 내구도 (UI-1a): 닿은 타격 −1, 던지기 −5. PICK_SHAKY_BELOW 이하면 닿은 타격 뒤 뷰모델이 떨린다. 0 이 되는 순간 Break — 손에서 조각나
+// 바닥에 떨어졌다 사라지고 빈손(hasPick=false, ThrownPick 없음). 고치기 없음, 새 곡괭이는 상점(나중). 42 m 판은 DevHud 3/4 키(Adjust)
 public class Pickaxe : MonoBehaviour
 {
     public const int ViewModelLayer = 8;                 // ProjectSettings/TagManager "ViewModel"
@@ -25,10 +27,19 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public float aimRadius = Tuning.PICK_AIM_RADIUS;
     [System.NonSerialized] public bool oneOnly = true;   // 사보타주 twopicks 가 끈다 — 던져도 손에 남는 상태
     [System.NonSerialized] public bool hasPick = true;
+    [System.NonSerialized] public float durability = Tuning.PICK_DURABILITY_MAX;
+    [System.NonSerialized] public int hitsLanded;        // 검사용: 포켓·괴물에 닿은 타격 수
+    [System.NonSerialized] public bool dulls = true;     // 사보타주 nodull 이 끈다 — 안 닳는 상태
+    [System.NonSerialized] public bool shaky = true;     // 사보타주 steadyhands 가 끈다 — 떨림 없는 상태
+    [System.NonSerialized] public bool breaks = true;    // 사보타주 everlasting 이 끈다 — 0 이어도 손에 남고 캐지는 상태
+
+    public bool Broken => !hasPick && (thrown == null || !thrown.gameObject.activeSelf);   // 빈손인데 주울 곡괭이도 없다
 
     static readonly RaycastHit[] Hits = new RaycastHit[16];
     float cooldown;
     bool swinging;
+    Vector3 basePos = Tuning.PICK_POS;                   // 흔들림(걷기)까지 더한 자리. 떨림은 이 위에 얹는다
+    float shakeLeft;
 
     void Awake()
     {
@@ -55,13 +66,17 @@ public class Pickaxe : MonoBehaviour
             cooldown = cooldownTime;
             StartCoroutine(Swing());
         }
-        if (swinging || !hasPick)
-            return;
-        // 걸을 때만 흔들린다. 서 있으면 멎는다. 위상은 Player.gait — 발이 땅에 닿는 순간(π 마다) 곡괭이가 맨 아래를 지난다 = 발소리와 같은 때
-        if (player.gait <= 0f)
-            transform.localPosition = Vector3.Lerp(transform.localPosition, Tuning.PICK_POS, Mathf.Min(Time.deltaTime * 8f, 1f));
-        else
-            transform.localPosition = Tuning.PICK_POS + new Vector3(Mathf.Cos(player.gait), Mathf.Abs(Mathf.Sin(player.gait)), 0f) * Tuning.PICK_BOB_AMOUNT;
+        if (!swinging && hasPick)
+        {
+            // 걸을 때만 흔들린다. 서 있으면 멎는다. 위상은 Player.gait — 발이 땅에 닿는 순간(π 마다) 곡괭이가 맨 아래를 지난다 = 발소리와 같은 때
+            if (player.gait <= 0f)
+                basePos = Vector3.Lerp(basePos, Tuning.PICK_POS, Mathf.Min(Time.deltaTime * 8f, 1f));
+            else
+                basePos = Tuning.PICK_POS + new Vector3(Mathf.Cos(player.gait), Mathf.Abs(Mathf.Sin(player.gait)), 0f) * Tuning.PICK_BOB_AMOUNT;
+        }
+        // 손 떨림 (내구도 PICK_SHAKY_BELOW 이하, 닿은 타격 뒤 PICK_SHAKE_S). 곡괭이만 — 머리(Player.Shake)는 안 흔든다
+        shakeLeft = Mathf.Max(0f, shakeLeft - Time.deltaTime);
+        transform.localPosition = shakeLeft > 0f ? basePos + Random.insideUnitSphere * Tuning.PICK_SHAKE_AMOUNT : basePos;
     }
 
     public bool HasTarget => Target(out _, out _, out _);   // 검사가 읽는다
@@ -127,6 +142,8 @@ public class Pickaxe : MonoBehaviour
     {
         if (!Target(out var pocket, out var stalker, out var hit))
             return;
+        hitsLanded++;
+        Wear(Tuning.PICK_WEAR_HIT);
         if (stalker != null)
         {
             stalker.Hit(Tuning.STALKER_HIT_DMG, cam.forward);
@@ -153,6 +170,7 @@ public class Pickaxe : MonoBehaviour
             hasPick = false;
             mesh.gameObject.SetActive(false);
         }
+        Wear(Tuning.PICK_WEAR_THROW);                    // 던져서 0 이 되면 주워 드는 순간(Return) 깨진다
         Vector3 dir = Quaternion.AngleAxis(-Tuning.THROW_UP_DEG, cam.right) * cam.forward;
         thrown.Launch(cam.position + cam.forward * 0.6f, dir * Tuning.THROW_SPEED, cam.right * 8f);
     }
@@ -163,6 +181,45 @@ public class Pickaxe : MonoBehaviour
         hasPick = true;
         mesh.gameObject.SetActive(true);
         thrown.gameObject.SetActive(false);
+        if (durability <= 0f) Break();
+    }
+
+    void Wear(float amount)
+    {
+        if (!dulls)
+            return;
+        durability = Mathf.Max(0f, durability - amount);
+        if (durability <= Tuning.PICK_SHAKY_BELOW && shaky && hasPick)
+            shakeLeft = Tuning.PICK_SHAKE_S;
+        if (durability <= 0f && hasPick)
+            Break();
+    }
+
+    // 부서진다: 뷰모델이 사라지고 그 자리에서 곡괭이 재질 조각이 튀어 바닥에 떨어졌다 사라진다. 빈손 — 주울 것 없음
+    void Break()
+    {
+        if (!breaks)
+            return;
+        hasPick = false;
+        shakeLeft = 0f;
+        mesh.gameObject.SetActive(false);
+        var renderers = mesh.GetComponentsInChildren<Renderer>(true);
+        var materials = new Material[renderers.Length];
+        for (int i = 0; i < renderers.Length; i++) materials[i] = renderers[i].sharedMaterial;
+        MiningFx.I.Shatter(mesh.position, materials);
+    }
+
+    // DevHud 3/4 키 (상점이 생기기 전 판정용). 0 이 되면 손에서 깨지고, 깨진 뒤 올리면 손에 다시 난다
+    public void Adjust(float delta)
+    {
+        durability = Mathf.Clamp(durability + delta, 0f, Tuning.PICK_DURABILITY_MAX);
+        if (durability <= 0f && hasPick)
+            Break();
+        else if (durability > 0f && Broken)
+        {
+            hasPick = true;
+            mesh.gameObject.SetActive(true);
+        }
     }
 
     void SetTilt(float deg) => transform.localRotation = Quaternion.Euler(deg, 0f, 0f);

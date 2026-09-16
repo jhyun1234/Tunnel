@@ -151,6 +151,18 @@ public static class Tuning
     public const float HIT_MIN_DISTANCE = 2.0f;    // m, 이 안에서는 최대 음량
     public const float PICK_BOB_AMOUNT = 0.02f;    // m
     // PICK_BOB_SPEED 12 rad/s(Godot)는 지웠다 — 흔들림 위상은 Player.gait(π / 자세별 STEP_INTERVAL)라 발소리와 같은 박자 (사용자 09-16)
+    // Unity 전용 (제안서 UI-1a, 설계서 ui_ux Step 2): 곡괭이 내구도. 숫자는 화면에 없다 — 15 이하면 닿은 타격마다 손이 떨리고,
+    // 0 이 되는 순간 손에서 조각나 바닥에 떨어졌다 사라진다. 고치기 없음, 새 곡괭이는 상점(나중) — 사용자 09-16 결정
+    public const float PICK_DURABILITY_MAX = 100f;
+    public const float PICK_WEAR_HIT = 1f;         // 포켓·괴물에 닿은 타격마다. 허공은 안 닳는다
+    public const float PICK_WEAR_THROW = 5f;       // 던지기마다
+    public const float PICK_SHAKY_BELOW = 15f;     // 이하면 떨림 (타격 15번 = 캐기 7번)
+    public const float PICK_SHAKE_AMOUNT = 0.04f;  // m, 뷰모델 무작위 흔들림 (걸을 때 흔들림의 2배). 머리는 안 흔든다
+    public const float PICK_SHAKE_S = 0.5f;        // s
+    public const int PICK_BREAK_PIECES = 8;        // 부서질 때 튀는 조각 수 (곡괭이 재질, 자갈과 같은 물체)
+    public const float PICK_BREAK_POP = 1.5f;      // m/s, 조각이 튀는 속도 — 자갈(2.4)보다 느리게, 손에서 흘러내리듯
+    public const float PICK_BREAK_LIFE = 1.5f;     // s, 바닥에 놓였다가 줄어들며 사라지기까지
+    public const float PICK_BREAK_SCALE = 0.5f;    // 자갈 메시 기준 크기 — 1.0 이면 0.6 m 앞이라 곡괭이 머리보다 크게 보였다(09-16 캡처)
     // 소음. 반경 m
     public const float NOISE_PICK = 25.0f;         // 곡괭이가 포켓에 닿은 타격
     public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간

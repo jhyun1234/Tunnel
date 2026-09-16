@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase|retreat|throw|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase|retreat|throw|pick|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -126,6 +126,12 @@ public class M1Check : MonoBehaviour
             player.stepNoiseMul = 0f;
         if (sabotage == "rockflesh")            // 괴물을 쳐도 광물 소리 — 구분이 안 되던(옛) 상태
             NoiseSound.I.fleshClips = MiningFx.I.hitClips;
+        if (sabotage == "nodull")               // 곡괭이가 안 닳는다 (UI-1a 전 상태)
+            pickaxe.dulls = false;
+        if (sabotage == "steadyhands")          // 15 이하에서도 손이 안 떨린다
+            pickaxe.shaky = false;
+        if (sabotage == "everlasting")          // 0 이어도 안 부서지고 캐진다
+            pickaxe.breaks = false;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -153,9 +159,125 @@ public class M1Check : MonoBehaviour
             yield return RetreatStage(cc);
         if (only == "" || only == "throw")
             yield return ThrowStage(cc);
+        if (only == "" || only == "pick")
+            yield return PickStage(cc);
         if (only == "" || only == "sound")
             yield return SoundStage(cc);
         Finish();
+    }
+
+    // UI-1a: 곡괭이 내구도. 닿은 타격 −1 · 던지기 −5 · PICK_SHAKY_BELOW 이하 떨림 · 0 이면 손에서 조각나 떨어졌다 사라지고 빈손
+    IEnumerator PickStage(CharacterController cc)
+    {
+        var st = stalker;
+        var mouse = InputSystem.AddDevice<Mouse>("PickMouse");
+        var kb = InputSystem.AddDevice<Keyboard>("PickKeyboard");
+        var thrown = pickaxe.thrown;
+        var fx = MiningFx.I;
+        float t;
+        st.enabled = false;
+        lamp.lampOn = true;
+        player.frozen = false;
+        if (!pickaxe.hasPick) pickaxe.Return();
+        pickaxe.durability = Tuning.PICK_DURABILITY_MAX;
+        pickaxe.hitsLanded = 0;
+        float dmg0 = pickaxe.damage;
+        pickaxe.damage = 0f;                     // 포켓이 안 빠지게 — 한 포켓을 여러 번 친다 (닳음은 닿은 타격 수로 센다)
+        var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
+        pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
+        OrePocket pk = pockets.Find(x => !x.Breaking) ?? pockets[0];
+
+        // ① 포켓을 여러 번 치면 닿은 타격마다 PICK_WEAR_HIT
+        StandAt(cc, pk);
+        yield return null;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN * 10f + 0.3f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN);
+        int hits = pickaxe.hitsLanded;
+        Check("pick_wears_per_landed_hit", hits >= 8 && pickaxe.hasPick && pickaxe.durability == Tuning.PICK_DURABILITY_MAX - hits * Tuning.PICK_WEAR_HIT,
+            $"{hits} landed hits, durability {Tuning.PICK_DURABILITY_MAX:0} → {pickaxe.durability:0} (expect {Tuning.PICK_DURABILITY_MAX - hits * Tuning.PICK_WEAR_HIT:0})");
+
+        // ② 한 번 던지고 주우면 PICK_WEAR_THROW
+        float d0 = pickaxe.durability;
+        Vector3 P = new Vector3(0f, 0.1f, 6f);
+        Teleport(cc, P, 0f);
+        yield return null;
+        yield return RightClick(mouse);
+        t = 0f;
+        while (!thrown.Frozen && t < Tuning.THROW_STUCK_S + 4f) { t += Time.deltaTime; yield return null; }
+        Vector3 land = thrown.transform.position;
+        Teleport(cc, new Vector3(land.x, 0.1f, land.z - 2f), 0f);
+        yield return null;
+        yield return PressKey(kb, Key.E);
+        Check("pick_wears_on_throw", pickaxe.hasPick && pickaxe.durability == d0 - Tuning.PICK_WEAR_THROW,
+            $"durability {d0:0} → {pickaxe.durability:0} (expect {d0 - Tuning.PICK_WEAR_THROW:0}), hasPick {pickaxe.hasPick}");
+
+        // ③ 40 이면 닿은 타격 뒤 뷰모델이 제자리, PICK_SHAKY_BELOW 이면 0.02 m 이상 흔들린다 (서 있을 때, 머리는 안 흔든다)
+        float devAt40 = 0f, devAt15 = 0f;
+        int hitsAt40 = 0, hitsAt15 = 0;
+        foreach (float d in new[] { 40f, Tuning.PICK_SHAKY_BELOW })
+        {
+            pickaxe.durability = d;
+            pickaxe.hitsLanded = 0;
+            StandAt(cc, pk);
+            yield return new WaitForSeconds(0.3f);               // 걷기 흔들림이 멎게
+            float dev = 0f;
+            InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+            for (t = 0f; t < 1.0f; t += Time.deltaTime)
+            {
+                dev = Mathf.Max(dev, (pickaxe.transform.localPosition - Tuning.PICK_POS).magnitude);
+                yield return null;
+            }
+            InputSystem.QueueStateEvent(mouse, new MouseState());
+            yield return new WaitForSeconds(Tuning.MINE_COOLDOWN);
+            if (d == 40f) { devAt40 = dev; hitsAt40 = pickaxe.hitsLanded; } else { devAt15 = dev; hitsAt15 = pickaxe.hitsLanded; }
+        }
+        Check("pick_shakes_below_15", hitsAt40 >= 1 && hitsAt15 >= 1 && devAt40 < 0.005f && devAt15 >= 0.02f && player.gait <= 0f,
+            $"viewmodel max offset at 40: {devAt40:F3} m ({hitsAt40} hits) · at {Tuning.PICK_SHAKY_BELOW:0}: {devAt15:F3} m ({hitsAt15} hits), PICK_SHAKE_AMOUNT {Tuning.PICK_SHAKE_AMOUNT}, gait {player.gait:F2}");
+
+        // ④ 1 에서 한 대 → 0: 손이 비고(뷰모델 꺼짐·던진 곡괭이 없음) 조각 PICK_BREAK_PIECES 가 생겼다가 사라진다
+        pickaxe.durability = 1f;
+        pickaxe.hitsLanded = 0;
+        StandAt(cc, pk);
+        yield return null;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        t = 0f;
+        while (pickaxe.hitsLanded < 1 && t < 1.5f) { t += Time.deltaTime; yield return null; }
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return null;
+        int pieces = fx.PiecesAlive;
+        bool emptyHand = !pickaxe.hasPick && !pickaxe.mesh.gameObject.activeSelf && !thrown.gameObject.activeSelf && pickaxe.Broken;
+        Check("pick_breaks_at_zero", pickaxe.hitsLanded == 1 && pickaxe.durability == 0f && emptyHand && pieces == Tuning.PICK_BREAK_PIECES,
+            $"hits {pickaxe.hitsLanded}, durability {pickaxe.durability:0}, hasPick {pickaxe.hasPick}, viewmodel {pickaxe.mesh.gameObject.activeSelf}, thrown active {thrown.gameObject.activeSelf}, pieces {pieces} (expect {Tuning.PICK_BREAK_PIECES})");
+        for (int i = 0; i < 4; i++)                                         // 조각이 손에서 바닥으로 가는 사이 (0.15 s 마다) — 사람이 볼 캡처
+        {
+            yield return new WaitForEndOfFrame();
+            ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"15_pick_broken_{i * 0.15f:0.00}s.png"));
+            yield return new WaitForSeconds(0.15f);
+        }
+        t = 0.6f;
+        while (fx.PiecesAlive > 0 && t < Tuning.PICK_BREAK_LIFE + Tuning.CHUNK_FADE + 1.5f) { t += Time.deltaTime; yield return null; }
+        Check("pick_pieces_vanish", fx.PiecesAlive == 0, $"pieces {fx.PiecesAlive} after {t:F1} s (PICK_BREAK_LIFE {Tuning.PICK_BREAK_LIFE} + fade {Tuning.CHUNK_FADE})");
+
+        // ⑤ 빈손: 포켓 앞 좌클릭 → 포켓 체력 그대로·소음 0, 우클릭 → 던진 곡괭이 안 생김
+        pickaxe.damage = dmg0;
+        float hp0 = pk.health;
+        int noise0 = NoiseBus.Total, hits0 = pickaxe.hitsLanded;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(0.6f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return null;
+        yield return RightClick(mouse);
+        Check("broken_pick_cannot_mine_or_throw", pk.health == hp0 && NoiseBus.Total == noise0 && pickaxe.hitsLanded == hits0 && !pickaxe.hasPick && !thrown.gameObject.activeSelf,
+            $"pocket hp {hp0:0} → {pk.health:0}, noises +{NoiseBus.Total - noise0}, hits +{pickaxe.hitsLanded - hits0}, hasPick {pickaxe.hasPick}, thrown active {thrown.gameObject.activeSelf}");
+
+        // ⑥ 되살리기 — DevHud 4 키와 같은 길 (상점이 생기기 전 판정용)
+        pickaxe.Adjust(Tuning.PICK_DURABILITY_MAX);
+        yield return null;
+        Check("pick_restored_by_devhud_key", pickaxe.hasPick && pickaxe.mesh.gameObject.activeSelf && pickaxe.durability == Tuning.PICK_DURABILITY_MAX,
+            $"hasPick {pickaxe.hasPick}, viewmodel {pickaxe.mesh.gameObject.activeSelf}, durability {pickaxe.durability:0}");
+        st.enabled = true;
     }
 
     // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 타격, 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다

@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
-// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · F1 표시 끄기
+// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · F1 표시 끄기
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
@@ -44,6 +44,8 @@ public class DevHud : MonoBehaviour
         if (kb.digit0Key.wasPressedThisFrame && stalker != null) stalker.enabled = !stalker.enabled;
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
         if (kb.digit2Key.wasPressedThisFrame) lamp.darkAdaptAmbient *= 1.25f;
+        if (kb.digit3Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(-10f);   // 곡괭이 내구도 (UI-1a, 설계서 Step 6)
+        if (kb.digit4Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(10f);
     }
 
     void OnGUI()
@@ -56,6 +58,6 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}  pick {(pickaxe == null || pickaxe.hasPick ? "held" : "thrown [E]")}   [F1] hide" + monster);
+            $"{player.stance}  stamina {player.stamina:0}  pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + monster);
     }
 }
