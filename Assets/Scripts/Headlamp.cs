@@ -22,6 +22,8 @@ public class Headlamp : MonoBehaviour
     [System.NonSerialized] public float bobDeg = Tuning.LAMP_BOB_DEG;   // 검사가 읽는다 (사용자 판정값 0.6, 09-16)
     [System.NonSerialized] public bool soonNod = true;  // 사보타주 flatnod 가 끈다 — 곧 단계에도 폭 그대로
     [System.NonSerialized] public float nodDeg;    // 지금 더해진 끄덕임 (검사가 읽는다)
+    [System.NonSerialized] public float pulseEnergy; // 탈진 박동이 적용된 세기(감광·페이드 전). 탈진 아니면 energy (검사가 읽는다)
+    float pulsePhase;
 
     static readonly Vector3[] RayDirs = BuildRays();
     Light lamp;
@@ -79,7 +81,17 @@ public class Headlamp : MonoBehaviour
 
         float kDim = 1f - Mathf.Exp(-Time.deltaTime / Tuning.LAMP_NEAR_TIME);
         nearDim = Mathf.Lerp(nearDim, NearDim(), kDim);
-        lamp.intensity = energy * nearDim * fade;
+        // 탈진(3차 판정 09-16): 세기가 LAMP_EXHAUST_MIN~MAX 사이를 빠른 심장 박동처럼 — 박동 순간 MAX 로 뛰고 지수로 MIN 까지 잦아든다. 탈진 정도(pant)로 섞는다
+        pulseEnergy = energy;
+        if (player != null && player.pant > 0f)
+        {
+            pulsePhase = (pulsePhase + Time.deltaTime / Tuning.EXHAUST_PULSE_S) % 1f;
+            float beat = Mathf.Exp(-pulsePhase * 4f);                    // 1 → 0.02
+            pulseEnergy = Mathf.Lerp(energy, Mathf.Lerp(Tuning.LAMP_EXHAUST_MIN, Tuning.LAMP_EXHAUST_MAX, beat), player.pant);
+        }
+        else
+            pulsePhase = 0f;
+        lamp.intensity = pulseEnergy * nearDim * fade;
         // 어둠 적응: 끄면 DARK_ADAPT_TIME 에 걸쳐 오르고, 켜면 즉시 평소 (Godot Atmosphere.gd 트윈과 같다)
         adapt = lampOn ? 0f : Mathf.MoveTowards(adapt, 1f, Time.deltaTime / Tuning.DARK_ADAPT_TIME);
         RenderSettings.ambientLight = Tuning.AMBIENT_COLOR * Mathf.Lerp(Tuning.AMBIENT_ENERGY, darkAdaptAmbient, adapt);

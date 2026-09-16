@@ -40,12 +40,15 @@ public static class Tuning
     public const float EXHAUST_BREATH_M = 0.03f;     // m, 숨 한 번에 머리가 오르내리는 폭 (제안값: 곡괭이 걷기 흔들림 0.02 보다 크게)
     public const float EXHAUST_BREATH_DEG = 1.5f;    // 도, 숨 한 번에 시야가 끄덕이는 각 (제안값)
     public const float EXHAUST_BREATH_S = 0.7f;      // s, 숨 한 번 (헐떡임 ≈ 85회/분, 제안값)
-    // 2차 판정(09-16): "탈진 전과 시야가 같아 보인다" → 시야각 절반 + 흐릿함, 시점은 좌우 ±90° 만(위아래 잠금) — 옆에서 오는 괴물은 소리로만
-    public const float EXHAUST_FOV_MUL = 0.5f;       // 시야각 배율 (80° → 40°)
+    // 2차 판정(09-16): "탈진 전과 시야가 같아 보인다" → 흐릿함 + 시점은 좌우만(위아래 잠금) — 옆에서 오는 괴물은 소리로만.
+    // 3차 판정(09-16): 시야각 절반(80° → 40°)은 뜻이 아니었다 → 원복. 대신 **램프 세기가 빠른 심장 박동처럼 오르내린다**(아래 LAMP_EXHAUST_*). 좌우 90° 는 답답 → 120°
     public const float EXHAUST_BLUR_RADIUS = 1.5f;   // 가우시안 흐림 반지름 (URP DepthOfField, 0.5~1.5). 손의 곡괭이(오버레이 카메라)는 안 흐려진다
     public const float EXHAUST_BLUR_START = 0.3f;    // m, 이 거리부터 흐려지기 시작
     public const float EXHAUST_BLUR_END = 2.5f;      // m, 이 거리부터 완전히 흐림
-    public const float EXHAUST_YAW_LIMIT_DEG = 90.0f; // 탈진 시작 방향에서 좌우로 이만큼만 돌아본다
+    public const float EXHAUST_YAW_LIMIT_DEG = 120.0f; // 탈진 시작 방향에서 좌우로 이만큼만 돌아본다 (3차 판정: 90 은 답답)
+    public const float LAMP_EXHAUST_MIN = 15.8f;     // 탈진 램프 세기 최소 — 사용자가 −/= 키로 찾은 값(75.2 ÷ 1.25^7)
+    public const float LAMP_EXHAUST_MAX = 38.5f;     // 최대 (75.2 ÷ 1.25^3)
+    public const float EXHAUST_PULSE_S = 0.5f;       // s, 박동 하나 (120회/분, 제안값). 박동 순간 MAX 로 뛰고 다음 박동까지 MIN 으로 잦아든다
     public const float BREATH_SOON_MUL = 0.3f;       // 곧 단계(≤ STAMINA_SOON)에도 숨 들썩임을 이 배율로 (2차 판정: "작게 넣어라")
 
     public const float GRID_CELL = 7.0f;           // m, 조각 한 칸

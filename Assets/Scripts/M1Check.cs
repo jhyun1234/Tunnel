@@ -287,7 +287,7 @@ public class M1Check : MonoBehaviour
     }
 
     // UI-1b: 지쳤을 때 자세. 걸으면 램프가 LAMP_BOB_DEG 끄덕이고, 스태미나 ≤ STAMINA_SOON 이면 3배 + 작은 숨 들썩임, 탈진하면 눈 EXHAUST_EYE·시야 EXHAUST_LOOK_DOWN_DEG 아래·
-    // 시야각 절반·흐림·좌우 ±90° 만·숨 들썩임
+    // 흐림·좌우 ±EXHAUST_YAW_LIMIT_DEG 만·숨 들썩임·램프 세기 박동
     IEnumerator TiredStage(CharacterController cc)
     {
         var st = stalker;
@@ -348,7 +348,7 @@ public class M1Check : MonoBehaviour
         Check("lamp_nod_triples_when_tired", amp30 >= expect3 * 0.8f && amp30 <= expect3 * 1.2f,
             $"walking at 30: max {amp30:F3}° (expect {expect3:F3} ±20 %, x{Tuning.LAMP_BOB_SOON_MUL} of {amp100:F3})");
 
-        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 시야 EXHAUST_LOOK_DOWN_DEG 아래(±숨 끄덕임), 시야각 ×EXHAUST_FOV_MUL, 1 s 동안 머리가 EXHAUST_BREATH_M 로 오르내림, 0.3 m 안 움직임.
+        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 시야 EXHAUST_LOOK_DOWN_DEG 아래(±숨 끄덕임), 1 s 동안 머리가 EXHAUST_BREATH_M 로 오르내림, 0.3 m 안 움직임, 램프 세기 박동.
         //    갱도 가운데(z≈16, 북쪽 21 m 남음)에서 탈진하게 2 s 달린 뒤 스태미나를 1 로 — 5 s 를 다 달리면 끝 벽 앞이라 화면이 벽으로 찬다(09-16)
         player.stamina = Tuning.STAMINA_MAX;
         Teleport(cc, new Vector3(0f, 0.1f, 2f), 0f);
@@ -361,42 +361,52 @@ public class M1Check : MonoBehaviour
         float tEx = t;
         yield return new WaitForSeconds(0.5f);
         Vector3 pe = player.transform.position;
-        float downEx = CameraPitch(), yMin = float.MaxValue, yMax = float.MinValue;
-        for (t = 0f; t < 1f; t += Time.deltaTime)                        // 숨 한 번 0.7 s 를 넘게 재서 위아래를 다 본다
+        float downEx = CameraPitch(), yMin = float.MaxValue, yMax = float.MinValue, eMin = float.MaxValue, eMax = float.MinValue, ePrev = lamp.pulseEnergy;
+        int beats = 0;
+        for (t = 0f; t < 1.3f; t += Time.deltaTime)                      // 숨 한 번 0.7 s 를 넘게 재서 위아래를 다 본다. 램프는 박동 0.5 s 라 2~3번 뛴다(창의 시작 위상에 따라)
         {
             yMin = Mathf.Min(yMin, player.head.localPosition.y);
             yMax = Mathf.Max(yMax, player.head.localPosition.y);
+            eMin = Mathf.Min(eMin, lamp.pulseEnergy);
+            eMax = Mathf.Max(eMax, lamp.pulseEnergy);
+            if (lamp.pulseEnergy > ePrev + 5f) beats++;                    // 박동 = 한 프레임에 확 뛰는 순간
+            ePrev = lamp.pulseEnergy;
             yield return null;
         }
         float eyeEx = (yMin + yMax) * 0.5f, breathEx = yMax - yMin;
         float movedEx = Flat(player.transform.position - pe);
-        float fovEx = Camera.main.fieldOfView;
         // 시점: 좌우는 탈진 시작 방향에서 ±EXHAUST_YAW_LIMIT_DEG 까지만, 위아래는 안 움직인다 (Player.Look — 마우스와 같은 길)
         float yaw0 = player.transform.eulerAngles.y, pitch0 = CameraPitch();
         float px = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);      // 1° 에 해당하는 마우스 픽셀
         player.Look(new Vector2(0f, 126f * px));                          // 위로 126° 요청 — 잠김 (360° 를 넘기면 각이 감겨 못 잰다)
         yield return null;
         float pitchAfter = CameraPitch();
-        player.Look(new Vector2(126f * px, 0f));
+        player.Look(new Vector2(150f * px, 0f));
         float yawR = Mathf.DeltaAngle(yaw0, player.transform.eulerAngles.y);
-        player.Look(new Vector2(-216f * px, 0f));
+        player.Look(new Vector2(-270f * px, 0f));
         float yawL = Mathf.DeltaAngle(yaw0, player.transform.eulerAngles.y);
-        player.Look(new Vector2(90f * px, 0f));                           // 정면으로 (−90 + 90)
+        player.Look(new Vector2(120f * px, 0f));                          // 정면으로 (−120 + 120)
         Check("exhausted_posture", player.exhausted && tEx < 1f && Mathf.Abs(eyeEx - Tuning.EXHAUST_EYE) < 0.05f && Mathf.Abs(downEx - Tuning.EXHAUST_LOOK_DOWN_DEG) <= Tuning.EXHAUST_BREATH_DEG + 0.5f && breathEx >= Tuning.EXHAUST_BREATH_M * 2f * 0.8f && movedEx < 0.3f,
-            $"exhausted {player.exhausted} {tEx:F2} s after stamina 1 (z {player.transform.position.z:F1}), +0.5 s: eye {eyeEx:F2} m (EXHAUST_EYE {Tuning.EXHAUST_EYE}), camera {downEx:F1}° down (EXHAUST_LOOK_DOWN_DEG {Tuning.EXHAUST_LOOK_DOWN_DEG} ±{Tuning.EXHAUST_BREATH_DEG}), head up-down {breathEx * 100f:F1} cm in 1 s (EXHAUST_BREATH_M ×2 = {Tuning.EXHAUST_BREATH_M * 200f:F0} cm), moved {movedEx:F2} m in 1 s");
-        Check("exhausted_tunnel_vision", Mathf.Abs(fovEx - Tuning.CAMERA_FOV * Tuning.EXHAUST_FOV_MUL) < 1f && Mathf.Abs(yawR - Tuning.EXHAUST_YAW_LIMIT_DEG) < 1f && Mathf.Abs(yawL + Tuning.EXHAUST_YAW_LIMIT_DEG) < 1f && Mathf.Abs(pitchAfter - pitch0) <= Tuning.EXHAUST_BREATH_DEG * 2f + 0.5f,
-            $"fov {fovEx:F1}° (CAMERA_FOV {Tuning.CAMERA_FOV} × {Tuning.EXHAUST_FOV_MUL}), look right 126° → yaw {yawR:F1}°, left → {yawL:F1}° (limit ±{Tuning.EXHAUST_YAW_LIMIT_DEG}), look up 126° → camera pitch {pitch0:F1} → {pitchAfter:F1}° (locked)");
+            $"exhausted {player.exhausted} {tEx:F2} s after stamina 1 (z {player.transform.position.z:F1}), +0.5 s: eye {eyeEx:F2} m (EXHAUST_EYE {Tuning.EXHAUST_EYE}), camera {downEx:F1}° down (EXHAUST_LOOK_DOWN_DEG {Tuning.EXHAUST_LOOK_DOWN_DEG} ±{Tuning.EXHAUST_BREATH_DEG}), head up-down {breathEx * 100f:F1} cm in 1.3 s (EXHAUST_BREATH_M ×2 = {Tuning.EXHAUST_BREATH_M * 200f:F0} cm), moved {movedEx:F2} m in 1.3 s");
+        Check("exhausted_look_limits", Mathf.Abs(yawR - Tuning.EXHAUST_YAW_LIMIT_DEG) < 1f && Mathf.Abs(yawL + Tuning.EXHAUST_YAW_LIMIT_DEG) < 1f && Mathf.Abs(pitchAfter - pitch0) <= Tuning.EXHAUST_BREATH_DEG * 2f + 0.5f && Mathf.Abs(Camera.main.fieldOfView - Tuning.CAMERA_FOV) < 0.5f,
+            $"look right 150° → yaw {yawR:F1}°, left → {yawL:F1}° (limit ±{Tuning.EXHAUST_YAW_LIMIT_DEG}), look up 126° → camera pitch {pitch0:F1} → {pitchAfter:F1}° (locked), fov {Camera.main.fieldOfView:F0}° (unchanged)");
+        Check("exhausted_lamp_pulses", eMin >= Tuning.LAMP_EXHAUST_MIN - 0.5f && eMin <= Tuning.LAMP_EXHAUST_MIN + 2f && eMax >= Tuning.LAMP_EXHAUST_MAX - 2f && eMax <= Tuning.LAMP_EXHAUST_MAX + 0.5f && beats >= 2 && beats <= 3,
+            $"lamp energy over 1 s: {eMin:F1} ~ {eMax:F1} (LAMP_EXHAUST_MIN {Tuning.LAMP_EXHAUST_MIN} ~ MAX {Tuning.LAMP_EXHAUST_MAX}, normal {lamp.energy}), {beats} beats in 1.3 s (EXHAUST_PULSE_S {Tuning.EXHAUST_PULSE_S} → 2~3)");
         // 바닥을 비춘다: 화면 아래 절반이 밝아지고 위 절반은 어두워진다 — 같은 자리·같은 방향의 회복 뒤 화면과 비교
         Vector3 botEx = default, topEx = default, botOk = default, topOk = default;
         Rect bottom = new Rect(0f, 0f, Screen.width, Screen.height * 0.5f), top = new Rect(0f, Screen.height * 0.5f, Screen.width, Screen.height * 0.5f);
+        // 램프가 0.5 s 박동이라 캡처 사이를 1.0 s(= Capture 의 0.6 + 0.4)로 맞춰 셋을 같은 위상에서 찍는다
         yield return Capture("17_exhausted", v => botEx = v, bottom);
+        yield return new WaitForSeconds(1f - 0.6f);
         yield return Capture("17_exhausted_top", v => topEx = v, top);
         // 흐림: 같은 탈진 화면에서 흐림만 끄면 구조(밝기 기울기)가 살아난다
         Vector3 sharp = default;
         player.blurMul = 0f;
+        yield return new WaitForSeconds(1f - 0.6f);
         yield return Capture("17_exhausted_noblur", v => sharp = v, bottom);
         player.blurMul = 1f;
-        Check("exhausted_blur", botEx.y < sharp.y * 0.7f, $"bottom-half gradient blurred {botEx.y:F2} vs blur off {sharp.y:F2} ({botEx.y / Mathf.Max(sharp.y, 1e-6f) * 100f:F0} %, need < 70 %)");
+        float gBlur = botEx.y / Mathf.Max(botEx.x, 1e-6f), gSharp = sharp.y / Mathf.Max(sharp.x, 1e-6f);   // 밝기로 나눈다 — 램프 박동으로 두 캡처의 밝기가 다르다
+        Check("exhausted_blur", gBlur < gSharp * 0.8f, $"bottom-half gradient/lum blurred {gBlur:F1} vs blur off {gSharp:F1} ({gBlur / Mathf.Max(gSharp, 1e-6f) * 100f:F0} %, need < 80 %; raw {botEx.y:F2}@{botEx.x:F3} vs {sharp.y:F2}@{sharp.x:F3})");
 
         // ④ 100 이 차면 풀린다 — 0.5 s 안에 눈 EYE_HEIGHT, 램프 각 0
         InputSystem.QueueStateEvent(kb, new KeyboardState());
@@ -407,14 +417,16 @@ public class M1Check : MonoBehaviour
         float eyeBack = player.head.localPosition.y, pitchBack = CameraPitch();
         yield return Capture("18_recovered", v => botOk = v, bottom);
         yield return Capture("18_recovered_top", v => topOk = v, top);
-        Check("exhausted_lamp_lights_floor", botEx.x > botOk.x * 1.3f,                                   // 위 절반은 시야각 40° 라 탈진 때도 가까운 바닥 — 비교 안 함
-            $"screen lum bottom half exhausted {botEx.x:F4} vs recovered {botOk.x:F4} (x{botEx.x / Mathf.Max(botOk.x, 1e-6f):F2}), top half {topEx.x:F4} vs {topOk.x:F4}");
+        // 램프가 탈진 중엔 어두워지므로(15.8~38.5) 절대 밝기가 아니라 아래/위 몫으로 본다: 빛이 바닥으로 몰린다
+        float shareEx = botEx.x / Mathf.Max(botEx.x + topEx.x, 1e-6f), shareOk = botOk.x / Mathf.Max(botOk.x + topOk.x, 1e-6f);
+        Check("exhausted_looks_at_floor", shareEx > 0.75f && shareEx > shareOk + 0.15f,
+            $"bottom half share of light exhausted {shareEx * 100f:F0} % (bottom {botEx.x:F4} top {topEx.x:F4}) vs recovered {shareOk * 100f:F0} % ({botOk.x:F4} / {topOk.x:F4})");
         float yawFree0 = player.transform.eulerAngles.y;
-        player.Look(new Vector2(126f * px, 0f));
+        player.Look(new Vector2(150f * px, 0f));
         float yawFree = Mathf.Abs(Mathf.DeltaAngle(yawFree0, player.transform.eulerAngles.y));
-        player.Look(new Vector2(-126f * px, 0f));
-        Check("exhaustion_recovers", !player.exhausted && tBack < 6f && player.stamina >= Tuning.STAMINA_MAX - 0.5f && Mathf.Abs(eyeBack - Tuning.EYE_HEIGHT) < 0.05f && Mathf.Abs(pitchBack) < 0.5f && Mathf.Abs(Camera.main.fieldOfView - Tuning.CAMERA_FOV) < 0.5f && yawFree > Tuning.EXHAUST_YAW_LIMIT_DEG + 5f,
-            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, camera {pitchBack:F2}°, fov {Camera.main.fieldOfView:F1}°, look right 126° → {yawFree:F0}° (free)");
+        player.Look(new Vector2(-150f * px, 0f));
+        Check("exhaustion_recovers", !player.exhausted && tBack < 6f && player.stamina >= Tuning.STAMINA_MAX - 0.5f && Mathf.Abs(eyeBack - Tuning.EYE_HEIGHT) < 0.05f && Mathf.Abs(pitchBack) < 0.5f && !player.BlurOn && Mathf.Abs(lamp.pulseEnergy - lamp.energy) < 0.01f && yawFree > Tuning.EXHAUST_YAW_LIMIT_DEG + 5f,
+            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, camera {pitchBack:F2}°, blur {player.BlurOn}, lamp {lamp.pulseEnergy:F1} (normal {lamp.energy}), look right 150° → {yawFree:F0}° (free)");
         Teleport(cc, P, 0f);
         st.enabled = true;
     }

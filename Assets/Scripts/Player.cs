@@ -18,9 +18,9 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
     [System.NonSerialized] public bool stagger = true;        // 사보타주 nostagger 가 끈다 — 탈진해도 자세 없는(옛) 상태
     [System.NonSerialized] public float blurMul = 1f;         // 검사가 흐림만 끄고 비교한다
+    public bool BlurOn => dof != null && dof.active;          // 검사: 탈진 아닐 때 흐림이 없어야 한다
     [System.NonSerialized] public float lookDown, breathAmp, pant;   // 탈진 자세: 시야 숙임 각 · 숨 들썩임 폭(0~1) · 탈진 정도(0~1, 시야각·흐림·시점 잠금) (검사가 읽는다)
     float breathPhase, pantYaw;
-    Camera cam;
     DepthOfField dof;                      // 탈진 흐림. 씬 Volume 의 실행 중 프로필에 넣는다 — 에셋은 안 바뀐다
 
     CharacterController cc;
@@ -54,9 +54,8 @@ public class Player : MonoBehaviour
 
     void Start()
     {
-        cam = head.GetComponentInChildren<Camera>();
         var volume = FindFirstObjectByType<Volume>();
-        if (volume != null && cam != null)
+        if (volume != null)
         {
             if (!volume.profile.TryGet(out dof))
                 dof = volume.profile.Add<DepthOfField>(true);
@@ -171,7 +170,7 @@ public class Player : MonoBehaviour
             shakeLeft -= dt;
             shake = new Vector3(Random.Range(-1f, 1f), Random.Range(-1f, 1f), 0f) * shakeAmount * Mathf.Max(shakeLeft, 0f) / shakeSpan;
         }
-        // 탈진 자세 (UI-1b 1·2차 판정): 시야가 EXHAUST_LOOK_DOWN_DEG 숙여지고 시야각 절반·흐릿함·좌우 ±90° 만, 숨 박자(EXHAUST_BREATH_S)로 머리가 오르내리며 끄덕인다.
+        // 탈진 자세 (UI-1b 1~3차 판정): 시야가 EXHAUST_LOOK_DOWN_DEG 숙여지고 흐릿함·좌우 ±EXHAUST_YAW_LIMIT_DEG 만, 숨 박자(EXHAUST_BREATH_S)로 머리가 오르내리며 끄덕인다. 램프 박동은 Headlamp.
         // 곧 단계(≤ STAMINA_SOON)에도 숨 들썩임은 BREATH_SOON_MUL 로 작게
         bool panting = exhausted && stagger;
         if (panting && pant <= 0f) pantYaw = transform.eulerAngles.y;   // 탈진 시작 방향 — 좌우 한계의 기준
@@ -184,12 +183,10 @@ public class Player : MonoBehaviour
         float breath = Mathf.Sin(breathPhase) * breathAmp;
         head.localPosition = new Vector3(0f, eye + breath * Tuning.EXHAUST_BREATH_M, 0f) + shake;
         head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG, 0f, 0f);
-        if (cam != null)
-            cam.fieldOfView = Tuning.CAMERA_FOV * Mathf.Lerp(1f, Tuning.EXHAUST_FOV_MUL, pant);
-        if (dof != null)
+        if (dof != null)                                             // 흐림은 탈진 중에만 — 풀리는 순간 바로 끈다 (3차 판정: 탈진 아닐 때 흐릿함 금지)
         {
-            dof.gaussianMaxRadius.value = Tuning.EXHAUST_BLUR_RADIUS * pant * blurMul;
-            dof.active = dof.gaussianMaxRadius.value > 0f;
+            dof.gaussianMaxRadius.value = panting ? Tuning.EXHAUST_BLUR_RADIUS * pant * blurMul : 0f;
+            dof.active = panting && dof.gaussianMaxRadius.value > 0f;
         }
     }
 
