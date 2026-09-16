@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
-// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · F1 표시 끄기
+// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 7 8 던진 곡괭이 머리 빛 ÷1.25 ×1.25 (UI-1c 판정용 임시) · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · F1 표시 끄기
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
@@ -16,14 +16,19 @@ public class DevHud : MonoBehaviour
     float fps, acc;
     int frames;
     bool show = true;
+    public MiningHud miningHud;                            // 소음 원·마지막 소음 (UI-1c: 원은 DevHud 켰을 때만)
+    public static bool Visible { get; private set; }       // F1 상태 — MiningHud 가 본다. 컴포넌트가 꺼지면(검사) false
 
     void Start()
     {
         volume.profile.TryGet(out fog);    // .profile 은 실행 중 사본 — 에셋을 안 바꾼다
     }
 
+    void OnDisable() => Visible = false;
+
     void Update()
     {
+        Visible = show;
         acc += Time.unscaledDeltaTime;
         frames++;
         if (acc >= 0.5f)
@@ -48,6 +53,8 @@ public class DevHud : MonoBehaviour
         if (kb.digit4Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(10f);
         if (kb.digit5Key.wasPressedThisFrame) player.stamina = Mathf.Max(0f, player.stamina - 20f);      // 스태미나 (UI-1b, 설계서 Step 6)
         if (kb.digit6Key.wasPressedThisFrame) player.stamina = Mathf.Min(Tuning.STAMINA_MAX, player.stamina + 20f);
+        if (kb.digit7Key.wasPressedThisFrame && pickaxe != null && pickaxe.thrown != null) pickaxe.thrown.glow /= 1.25f;   // 곡괭이 머리 빛 — 사용자가 찾는다 (임시, 확정되면 뺀다)
+        if (kb.digit8Key.wasPressedThisFrame && pickaxe != null && pickaxe.thrown != null) pickaxe.thrown.glow *= 1.25f;
     }
 
     void OnGUI()
@@ -60,6 +67,6 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   PICK_GLOW {(pickaxe == null || pickaxe.thrown == null ? 0f : pickaxe.thrown.glow):0.###}   [ 7 8 ]   [F1] hide" + monster);
     }
 }

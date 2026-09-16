@@ -10,8 +10,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase|retreat|throw|pick|tired|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|stalker|chase|retreat|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -136,6 +136,10 @@ public class M1Check : MonoBehaviour
             lamp.soonNod = false;
         if (sabotage == "nostagger")            // 탈진해도 자세 없음 (UI-1b 전 상태)
             player.stagger = false;
+        if (sabotage == "hudtext")              // 갱도 화면에 "철 N" 글자 (UI-1c 전 상태)
+            FindFirstObjectByType<MiningHud>().oreText = true;
+        if (sabotage == "noglow")               // 던진 곡괭이 머리가 안 빛난다
+            pickaxe.thrown.glows = false;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -167,6 +171,8 @@ public class M1Check : MonoBehaviour
             yield return PickStage(cc);
         if (only == "" || only == "tired")
             yield return TiredStage(cc);
+        if (only == "" || only == "hud")
+            yield return HudStage(cc);
         if (only == "" || only == "sound")
             yield return SoundStage(cc);
         Finish();
@@ -433,6 +439,84 @@ public class M1Check : MonoBehaviour
 
     float LampPitch() => Vector3.SignedAngle(lamp.cam.forward, lamp.transform.forward, lamp.cam.right);   // 도, + 면 램프가 카메라보다 아래
     float CameraPitch() => Vector3.SignedAngle(player.transform.forward, lamp.cam.forward, player.transform.right);   // 도, + 면 시야가 몸보다 아래
+
+    // UI-1c: 갱도 화면 글자 0. 소음 원은 DevHud 켰을 때만. 던진 곡괭이는 reach 안에서 머리가 빛난다
+    IEnumerator HudStage(CharacterController cc)
+    {
+        var st = stalker;
+        var mouse = InputSystem.AddDevice<Mouse>("HudMouse");
+        var kb = InputSystem.AddDevice<Keyboard>("HudKeyboard");
+        var thrown = pickaxe.thrown;
+        var hud = GetComponent<DevHud>();
+        float t;
+        st.enabled = false;
+        lamp.lampOn = true;
+        player.frozen = false;
+        if (!pickaxe.hasPick) pickaxe.Return();
+        Vector3 P = new Vector3(0f, 0.1f, 6f);
+
+        // ① DevHud 꺼진 채: 소음(포켓 타격)을 내고 던져 빈손이어도 플레이어 화면에 글자 0·원 0, 왼쪽 아래 글자 자리에 흰 픽셀 0
+        var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
+        pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
+        OrePocket pk = pockets.Find(x => !x.Breaking) ?? pockets[0];
+        float dmg0 = pickaxe.damage;
+        pickaxe.damage = 0f;
+        StandAt(cc, pk);
+        yield return null;
+        int noise0 = NoiseBus.Total;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        yield return new WaitForSeconds(0.3f);
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN);
+        pickaxe.damage = dmg0;
+        Teleport(cc, P, 0f);
+        yield return null;
+        yield return RightClick(mouse);
+        int labels0 = MiningHud.LabelsDrawn, circles0 = MiningHud.CirclesDrawn;
+        Vector3 corner = default;
+        yield return Capture("19_no_text", v => corner = v, new Rect(0f, 0f, 320f, 130f));   // Capture 의 0.6 s 안에 소음 원(NOISE_HUD_FADE 1 s)이 아직 살아 있다
+        Check("tunnel_screen_has_no_text", NoiseBus.Total > noise0 && !pickaxe.hasPick && !hud.enabled && MiningHud.LabelsDrawn == labels0 && MiningHud.CirclesDrawn == circles0 && corner.z == 0f,
+            $"noises +{NoiseBus.Total - noise0}, hasPick {pickaxe.hasPick}, DevHud {(hud.enabled ? "on" : "off")}, labels +{MiningHud.LabelsDrawn - labels0}, circles +{MiningHud.CirclesDrawn - circles0}, bottom-left 320x130 bright pixels {corner.z * 100f:F1} %");
+
+        // ② DevHud 켜면 소음 원이 그려진다
+        hud.enabled = true;
+        yield return null;
+        circles0 = MiningHud.CirclesDrawn;
+        NoiseBus.Make(player.transform.position, Tuning.NOISE_STEP, "step", player);
+        yield return new WaitForSeconds(0.3f);
+        int circlesOn = MiningHud.CirclesDrawn - circles0;
+        hud.enabled = false;
+        yield return null;
+        Check("noise_circle_only_with_devhud", circlesOn >= 1 && DevHud.Visible == false, $"circles drawn with DevHud on: {circlesOn}, Visible after off: {DevHud.Visible}");
+
+        // ③ 던진 곡괭이 머리: 4 m 에서 원래 재질·어두움, 2 m 에서 빛남 재질·밝음(램프 끄고), 주우면 원래대로
+        t = 0f;
+        while (!thrown.Frozen && t < Tuning.THROW_STUCK_S + 4f) { t += Time.deltaTime; yield return null; }
+        Vector3 land = thrown.transform.position;
+        lamp.lampOn = false;
+        var camMain = pickaxe.cam.GetComponent<Camera>();
+        float px = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);
+        Vector3 lumFar = default, lumNear = default;
+        bool farOrig = false, nearGlow = false;
+        foreach (float d in new[] { 4f, 2f })
+        {
+            Vector3 at = new Vector3(land.x, 0.1f, land.z - d);
+            Teleport(cc, at, Quaternion.LookRotation(Flat3(land - at)).eulerAngles.y);
+            player.Look(new Vector2(0f, -30f * px));                    // 바닥의 곡괭이가 화면에 들어오게 30° 내려본다
+            yield return null;
+            Rect headRect = ScreenRect(camMain, new[] { thrown.head });
+            if (d == 4f) { farOrig = !thrown.Glowing; yield return Capture("20_pick_head_far", v => lumFar = v, headRect); }
+            else { nearGlow = thrown.Glowing; yield return Capture("20_pick_head_near", v => lumNear = v, headRect); }
+            player.Look(new Vector2(0f, 30f * px));
+        }
+        yield return PressKey(kb, Key.E);
+        bool restored = pickaxe.hasPick && !thrown.gameObject.activeSelf && !thrown.Glowing;
+        Check("pick_head_glows_within_reach", farOrig && lumFar.x < 0.005f && nearGlow && lumNear.x > 0.01f && lumNear.x > lumFar.x * 10f && restored,   // 실측 0.024(머리 사각형엔 바닥도 섞인다) vs 0.0001
+            $"lamp off — 4 m: glowing {!farOrig}, head lum {lumFar.x:F4} · 2 m: glowing {nearGlow}, head lum {lumNear.x:F4} (PICK_GLOW {Tuning.PICK_GLOW}) · after E: hasPick {pickaxe.hasPick}, glowing {thrown.Glowing}");
+        lamp.lampOn = true;
+        Teleport(cc, P, 0f);
+        st.enabled = true;
+    }
 
     // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 타격, 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다
     IEnumerator SoundStage(CharacterController cc)

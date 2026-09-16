@@ -23,6 +23,7 @@ public static class BuildM1
     const string StalkerMatPath = "Assets/Settings/M3_StalkerBody.mat";
     const string StalkerEyeMatPath = "Assets/Settings/M4_StalkerEye.mat";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
+    const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
     const string PlayerSoundDir = "Assets/Audio/Player";  // 발소리·착지 (Freesound CC0, SOURCES.txt)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
@@ -296,6 +297,12 @@ public static class BuildM1
         thrown.pickaxe = pickaxe;
         thrown.player = p;
         pickaxe.thrown = thrown;
+        // UI-1c: reach 안이면 머리가 빛난다 — Unlit (괴물 눈과 같은 방법, Lit 발광은 빌드에서 안 나온다)
+        var glowMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "M7_PickGlow", color = Tuning.PICK_GLOW_COLOR * Tuning.PICK_GLOW };
+        AssetDatabase.DeleteAsset(PickGlowMatPath);
+        AssetDatabase.CreateAsset(glowMat, PickGlowMatPath);
+        thrown.glowMaterial = glowMat;
+        thrown.head = thrownMesh.GetComponentsInChildren<Renderer>().First(r => r.name == "PICK_Head");
         thrownGo.SetActive(false);
 
         var mining = new GameObject("Mining");
@@ -313,6 +320,7 @@ public static class BuildM1
         noiseSound.landClips = landClips;
         noiseSound.fleshClips = fleshClips;
         var miningHud = mining.AddComponent<MiningHud>();
+        hud.miningHud = miningHud;
         miningHud.player = p;
         miningHud.pickaxe = pickaxe;
 

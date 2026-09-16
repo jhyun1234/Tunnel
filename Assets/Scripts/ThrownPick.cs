@@ -5,12 +5,19 @@ using UnityEngine.InputSystem;
 // 첫 충돌에서 큰 소음(NOISE_PICK_LAND) 한 번 = 유인 (소리도 그 소음에서 난다, NoiseSound). 착지 뒤 THROW_STUCK_S 지나면 얼린다(틈에 끼지 않게).
 // 괴물에 닿으면 휘두른 한 대와 같다(Stalker.Hit) 하고 그 자리에 떨어진다. CARRY_REACH 안에서 E → Pickaxe.Return.
 // 레이어는 광석과 같은 Ignore Raycast — 시선·채굴 조준 구에 안 걸린다. 플레이어 몸과는 안 부딪힌다.
+// UI-1c: 착지 뒤 플레이어가 reach 안에 오면 머리(PICK_Head)가 Unlit 빛남 재질로 바뀐다 — "빛나면 주울 수 있다", 글자 대신.
 [RequireComponent(typeof(Rigidbody), typeof(SphereCollider))]
 public class ThrownPick : MonoBehaviour
 {
     public Pickaxe pickaxe;
     public Player player;
+    public Renderer head;                                  // PICK_Head (BuildM1 이 넣는다)
+    public Material glowMaterial;                          // M7_PickGlow.mat (Unlit)
     [System.NonSerialized] public float reach = Tuning.CARRY_REACH;   // 검사 사보타주가 바꾼다
+    [System.NonSerialized] public bool glows = true;       // 사보타주 noglow 가 끈다
+    [System.NonSerialized] public float glow = Tuning.PICK_GLOW;   // 빛 세기 — 사용자가 DevHud 7/8(임시) 로 찾는다
+    public bool Glowing => head != null && head.sharedMaterial == glowMaterial;
+    Material headMaterial;                                 // 원래 재질
     [System.NonSerialized] public bool landed;
     [System.NonSerialized] public Vector3 landPos;
     [System.NonSerialized] public string landedOn = "-";   // 검사용: 처음 닿은 충돌체
@@ -30,6 +37,12 @@ public class ThrownPick : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.interpolation = RigidbodyInterpolation.None;      // Interpolate 면 첫 Launch 의 transform.position 을 이전(원점) 자세로 되돌려 원점 바닥에 '착지'했다 (09-15)
         GetComponent<SphereCollider>().radius = Tuning.THROW_BODY_R;
+        if (head != null) headMaterial = head.sharedMaterial;
+    }
+
+    void OnDisable()
+    {
+        if (head != null && headMaterial != null) head.sharedMaterial = headMaterial;
     }
 
     public void Launch(Vector3 at, Vector3 velocity, Vector3 spin)
@@ -92,10 +105,18 @@ public class ThrownPick : MonoBehaviour
             Land();
             rb.isKinematic = true;
         }
-        var kb = Keyboard.current;
-        if (kb == null || !kb.eKey.wasPressedThisFrame || player == null || player.frozen)
+        if (player == null)
             return;
-        if (Vector3.Distance(transform.position, player.transform.position + Vector3.up * Tuning.EYE_HEIGHT * 0.5f) <= reach)
+        bool near = Vector3.Distance(transform.position, player.transform.position + Vector3.up * Tuning.EYE_HEIGHT * 0.5f) <= reach;
+        if (head != null && headMaterial != null && glowMaterial != null)
+        {
+            head.sharedMaterial = landed && near && glows ? glowMaterial : headMaterial;
+            glowMaterial.color = Tuning.PICK_GLOW_COLOR * glow;
+        }
+        var kb = Keyboard.current;
+        if (kb == null || !kb.eKey.wasPressedThisFrame || player.frozen)
+            return;
+        if (near)
             pickaxe.Return();
     }
 }

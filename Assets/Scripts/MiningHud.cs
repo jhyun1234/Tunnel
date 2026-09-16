@@ -1,7 +1,7 @@
 using UnityEngine;
 
-// 왼쪽 아래 "철 N" 과 소음 원 (Godot OreHud.gd · NoiseHud.gd).
-// 내가 낸 마지막 소음 반경만큼 원이 뜨고 NOISE_HUD_FADE 동안 사라진다. 소리 파일은 없다 — 이 원이 "소리를 냈다"를 보여준다.
+// 왼쪽 아래 소음 원 (Godot NoiseHud.gd). 내가 낸 마지막 소음 반경만큼 원이 뜨고 NOISE_HUD_FADE 동안 사라진다.
+// UI-1c(09-16): 갱도 화면에 글자 0 — "철 N"·"곡괭이 없음" 글자는 지웠고(설계서 결정 변경 제안 1·3), 원은 판정용이라 DevHud 를 켰을 때만 그린다(제안 2).
 public class MiningHud : MonoBehaviour
 {
     public Player player;
@@ -12,6 +12,11 @@ public class MiningHud : MonoBehaviour
     Texture2D disk, ring;
     GUIStyle label;
     float radius, left;
+    [System.NonSerialized] public bool oreText;            // 사보타주 hudtext 가 켠다 — "철 N" 글자가 있던(옛) 상태
+    public static int LabelsDrawn, CirclesDrawn;           // 검사용: 플레이어 화면에 그린 글자·원 수
+    public string LastKind { get; private set; } = "-";
+    public float LastRadius => radius;
+    public float Left => left;
 
     void OnEnable() => NoiseBus.Made += OnNoise;
     void OnDisable() => NoiseBus.Made -= OnNoise;
@@ -22,6 +27,7 @@ public class MiningHud : MonoBehaviour
             return;
         radius = r;
         left = Tuning.NOISE_HUD_FADE;
+        LastKind = kind;
     }
 
     void Update() => left = Mathf.Max(0f, left - Time.deltaTime);
@@ -35,11 +41,14 @@ public class MiningHud : MonoBehaviour
             disk = Circle(128, false);
             ring = Circle(128, true);
         }
-        GUI.Label(new Rect(24f, Screen.height - 64f, 236f, 40f), $"철 {player.ore}", label);
-        if (pickaxe != null && !pickaxe.hasPick)
-            GUI.Label(new Rect(24f, Screen.height - 104f, 600f, 40f), pickaxe.Broken ? "곡괭이 부러짐" : "곡괭이 없음 — E 로 줍기", label);   // 글자는 UI-1c 에서 지운다
-        if (left <= 0f)
+        if (oreText)
+        {
+            GUI.Label(new Rect(24f, Screen.height - 64f, 236f, 40f), $"철 {player.ore}", label);
+            LabelsDrawn++;
+        }
+        if (left <= 0f || !DevHud.Visible)                    // 원은 DevHud 를 켰을 때만
             return;
+        CirclesDrawn++;
         float a = left / Tuning.NOISE_HUD_FADE;
         float r = radius * Tuning.NOISE_HUD_PX_PER_M * 0.5f;
         var c = new Vector2(Center.x, Screen.height + Center.y);
