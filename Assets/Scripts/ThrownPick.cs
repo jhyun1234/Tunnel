@@ -5,8 +5,9 @@ using UnityEngine.InputSystem;
 // 첫 충돌에서 큰 소음(NOISE_PICK_LAND) 한 번 = 유인 (소리도 그 소음에서 난다, NoiseSound). 착지 뒤 THROW_STUCK_S 지나면 얼린다(틈에 끼지 않게).
 // 괴물에 닿으면 휘두른 한 대와 같다(Stalker.Hit) 하고 그 자리에 떨어진다. CARRY_REACH 안에서 E → Pickaxe.Return.
 // 레이어는 광석과 같은 Ignore Raycast — 시선·채굴 조준 구에 안 걸린다. 플레이어 몸과는 안 부딪힌다.
+// 충돌체는 곡괭이 모양대로 상자 3개(자루·목·머리, BuildM1) — 공 하나였을 땐 공만 바닥에 닿아 머리가 바닥을 뚫었다(사용자 09-16).
 // UI-1c: 착지 뒤 플레이어가 reach 안에 오면 머리(PICK_Head)가 Unlit 빛남 재질로 바뀐다 — "빛나면 주울 수 있다", 글자 대신.
-[RequireComponent(typeof(Rigidbody), typeof(SphereCollider))]
+[RequireComponent(typeof(Rigidbody))]
 public class ThrownPick : MonoBehaviour
 {
     public Pickaxe pickaxe;
@@ -18,6 +19,18 @@ public class ThrownPick : MonoBehaviour
     [System.NonSerialized] public float glow = Tuning.PICK_GLOW;   // 빛 세기 — 사용자가 DevHud 7/8(임시) 로 찾는다
     public bool Glowing => head != null && head.sharedMaterial == glowMaterial;
     Material headMaterial;                                 // 원래 재질
+
+    // 검사용: 메시 전체의 가장 낮은/높은 점 (바닥에 누웠는지)
+    public Bounds MeshBounds
+    {
+        get
+        {
+            var rs = GetComponentsInChildren<Renderer>();
+            Bounds b = rs[0].bounds;
+            foreach (var r in rs) b.Encapsulate(r.bounds);
+            return b;
+        }
+    }
     [System.NonSerialized] public bool landed;
     [System.NonSerialized] public Vector3 landPos;
     [System.NonSerialized] public string landedOn = "-";   // 검사용: 처음 닿은 충돌체
@@ -36,7 +49,6 @@ public class ThrownPick : MonoBehaviour
         rb.angularDamping = 4f;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.interpolation = RigidbodyInterpolation.None;      // Interpolate 면 첫 Launch 의 transform.position 을 이전(원점) 자세로 되돌려 원점 바닥에 '착지'했다 (09-15)
-        GetComponent<SphereCollider>().radius = Tuning.THROW_BODY_R;
         if (head != null) headMaterial = head.sharedMaterial;
     }
 
@@ -48,7 +60,8 @@ public class ThrownPick : MonoBehaviour
     public void Launch(Vector3 at, Vector3 velocity, Vector3 spin)
     {
         gameObject.SetActive(true);
-        Physics.IgnoreCollision(GetComponent<Collider>(), player.Controller);   // 끄면 풀린다 — 켤 때마다 다시
+        foreach (var col in GetComponentsInChildren<Collider>())
+            Physics.IgnoreCollision(col, player.Controller);   // 끄면 풀린다 — 켤 때마다 다시
         rb.isKinematic = false;
         transform.position = at;
         rb.position = at;

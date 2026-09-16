@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|stalker|chase|retreat|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -140,6 +140,11 @@ public class M1Check : MonoBehaviour
             FindFirstObjectByType<MiningHud>().oreText = true;
         if (sabotage == "noglow")               // 던진 곡괭이 머리가 안 빛난다
             pickaxe.thrown.glows = false;
+        if (sabotage == "ballpick")             // 충돌체가 공 하나(옛) — 머리가 바닥을 뚫던 상태
+        {
+            foreach (var col in pickaxe.thrown.GetComponentsInChildren<Collider>()) col.enabled = false;
+            pickaxe.thrown.gameObject.AddComponent<SphereCollider>().radius = 0.15f;
+        }
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -744,6 +749,9 @@ public class M1Check : MonoBehaviour
         while (!thrown.Frozen && t < Tuning.THROW_STUCK_S + 2f) { t += Time.deltaTime; yield return null; }
         Vector3 land = thrown.transform.position;
         float rolled = Flat(land - thrown.landPos);
+        Bounds lying = thrown.MeshBounds;                                 // 바닥(y 0)에 눕는다 — 어느 점도 바닥 아래로 안 가고, 서 있지도 않는다
+        Check("thrown_pick_rests_on_floor", thrown.Frozen && lying.min.y > -0.03f && lying.max.y < 0.35f,
+            $"mesh lowest {lying.min.y:F3} m, highest {lying.max.y:F3} m above floor after freeze (frozen {thrown.Frozen})");
         Teleport(cc, new Vector3(land.x, 0.1f, land.z - 4f), 0f);
         yield return null;
         yield return PressKey(kb, Key.E);

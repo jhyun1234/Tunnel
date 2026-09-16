@@ -267,13 +267,13 @@ public static class Tuning
     public const float THROW_SPEED = 9.8f;
     public const float THROW_RANGE_M = 6.0f;            // m, 사용자 판정 사거리 — 검사가 ±0.5 m 로 확인한다 (Unity 전용)
     public const float THROW_UP_DEG = 10.0f;            // 카메라 앞에서 위로
-    public const float THROW_BODY_R = 0.15f;            // m, 던진 곡괭이 충돌 구
+    // THROW_BODY_R 0.15(충돌 구 하나)는 지웠다 — 공만 바닥에 닿아 자루·머리가 바닥을 뚫고 거꾸로 매달렸다(사용자 09-16). 충돌체는 자루·목·머리 상자 3개(BuildM1)
     public const float NOISE_PICK_LAND = 20.0f;         // m, 착지 소음 (광차와 같은 급). 유인 — 배회·수색 중에만 먹힌다 (Stalker.OnNoise)
     public const float THROW_STUCK_S = 3.0f;            // s, 착지 뒤 이만큼 지나면 얼린다 (틈에 끼지 않게)
     public const float CARRY_REACH = 2.5f;              // m, E 가 먹는 거리 (줍기)
     // Unity 전용 (제안서 UI-1c, 설계서 결정 변경 제안 3): 글자 대신 — 이 거리 안이면 던진 곡괭이 머리가 Unlit 로 살짝 빛난다(괴물 눈과 같은 방법)
     public static readonly Color PICK_GLOW_COLOR = new Color(1.0f, 0.85f, 0.5f);   // 녹슨 쇠 + 약간 노랑
-    public const float PICK_GLOW = 0.3f;                // 괴물 눈 0.6 의 절반 — 눈보다 덜 띄게 (제안값)
+    public const float PICK_GLOW = 2.235f;              // 사용자가 7/8 키로 찾은 값 (09-16 1차 판정: 0.3 은 안 보임, 2.235 면 가까이 가면 반짝인다)
     // Unity 전용 제안값: 괴물 눈 두 개가 약하게 빛난다 — 램프를 꺼도 괴물 자리는 보인다 (사용자 09-15 A+C 결정)
     public const float STALKER_EYE_GLOW = 0.6f;    // Unlit 색 배율
     public static readonly Color STALKER_EYE_COLOR = new Color(0.90f, 0.80f, 0.60f);
