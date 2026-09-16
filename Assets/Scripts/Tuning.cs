@@ -81,6 +81,7 @@ public static class Tuning
     // 공기 (LOOK_REFERENCE 4-3, 4-4)
     public static readonly Color AMBIENT_COLOR = new Color(0.1f, 0.12f, 0.2f);
     public const float AMBIENT_ENERGY = 0.03f;
+    public const bool DEVHUD_START_VISIBLE = false;  // Unity 전용 (UI-1d, 설계서 Step 6 빌드 규칙): 실행하면 갱도 화면, F1 로 켠다. 사보타주 hudon 이 true 로
     public static readonly Color BACKGROUND = new Color(0.02f, 0.02f, 0.03f);
     public const float FOG_DENSITY = 0.03f;        // 거리 안개 (Exponential)
     public static readonly Color FOG_COLOR = new Color(0.006f, 0.008f, 0.008f);

@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
+// 시작할 때 꺼져 있다(UI-1d) — F1 로 켠다. 손잡이 키는 꺼져 있어도 먹는다.
 // V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · F1 표시 끄기
 public class DevHud : MonoBehaviour
 {
@@ -15,7 +16,8 @@ public class DevHud : MonoBehaviour
     VolumetricFogVolumeComponent fog;
     float fps, acc;
     int frames;
-    bool show = true;
+    bool show, started;
+    [System.NonSerialized] public bool startVisible = Tuning.DEVHUD_START_VISIBLE;   // 첫 Update 에서 한 번 적용 (UI-1d: 꺼진 채 시작). 사보타주 hudon 이 켠다
     public MiningHud miningHud;                            // 소음 원·마지막 소음 (UI-1c: 원은 DevHud 켰을 때만)
     public static bool Visible { get; private set; }       // F1 상태 — MiningHud 가 본다. 컴포넌트가 꺼지면(검사) false
 
@@ -28,6 +30,7 @@ public class DevHud : MonoBehaviour
 
     void Update()
     {
+        if (!started) { show = startVisible; started = true; }
         Visible = show;
         acc += Time.unscaledDeltaTime;
         frames++;

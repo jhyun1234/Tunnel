@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|stalker|chase|retreat|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -140,6 +140,8 @@ public class M1Check : MonoBehaviour
             FindFirstObjectByType<MiningHud>().oreText = true;
         if (sabotage == "noglow")               // 던진 곡괭이 머리가 안 빛난다
             pickaxe.thrown.glows = false;
+        if (sabotage == "hudon")                // DevHud 가 켜진 채 시작 (UI-1d 전 상태)
+            hud.startVisible = true;
         if (sabotage == "ballpick")             // 충돌체가 공 하나(옛) — 머리가 바닥을 뚫던 상태
         {
             foreach (var col in pickaxe.thrown.GetComponentsInChildren<Collider>()) col.enabled = false;
@@ -483,16 +485,25 @@ public class M1Check : MonoBehaviour
         Check("tunnel_screen_has_no_text", NoiseBus.Total > noise0 && !pickaxe.hasPick && !hud.enabled && MiningHud.LabelsDrawn == labels0 && MiningHud.CirclesDrawn == circles0 && corner.z == 0f,
             $"noises +{NoiseBus.Total - noise0}, hasPick {pickaxe.hasPick}, DevHud {(hud.enabled ? "on" : "off")}, labels +{MiningHud.LabelsDrawn - labels0}, circles +{MiningHud.CirclesDrawn - circles0}, bottom-left 320x130 bright pixels {corner.z * 100f:F1} %");
 
-        // ② DevHud 켜면 소음 원이 그려진다
+        // ② DevHud 는 꺼진 채 시작(UI-1d) — 컴포넌트를 켜고 한 프레임 지나도 표시 없음, F1 → 표시 + 소음 원, F1 → 다시 없음
         hud.enabled = true;
         yield return null;
+        yield return null;
+        bool startsHidden = !DevHud.Visible;
+        yield return PressKey(kb, Key.F1);
+        yield return null;
+        bool shownByF1 = DevHud.Visible;
         circles0 = MiningHud.CirclesDrawn;
         NoiseBus.Make(player.transform.position, Tuning.NOISE_STEP, "step", player);
         yield return new WaitForSeconds(0.3f);
         int circlesOn = MiningHud.CirclesDrawn - circles0;
+        yield return PressKey(kb, Key.F1);
+        yield return null;
+        bool hiddenAgain = !DevHud.Visible;
         hud.enabled = false;
         yield return null;
-        Check("noise_circle_only_with_devhud", circlesOn >= 1 && DevHud.Visible == false, $"circles drawn with DevHud on: {circlesOn}, Visible after off: {DevHud.Visible}");
+        Check("devhud_starts_hidden_f1_toggles", startsHidden && shownByF1 && hiddenAgain, $"visible at start {!startsHidden} (DEVHUD_START_VISIBLE {Tuning.DEVHUD_START_VISIBLE}), after F1 {shownByF1}, after F1 again {!hiddenAgain}");
+        Check("noise_circle_only_with_devhud", circlesOn >= 1 && DevHud.Visible == false, $"circles drawn with DevHud shown: {circlesOn}, Visible after off: {DevHud.Visible}");
 
         // ③ 던진 곡괭이 머리: 4 m 에서 원래 재질·어두움, 2 m 에서 빛남 재질·밝음(램프 끄고), 주우면 원래대로
         t = 0f;
