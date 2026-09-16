@@ -278,6 +278,13 @@ public static class Tuning
     // Unity 전용 제안값: 괴물 눈 두 개가 약하게 빛난다 — 램프를 꺼도 괴물 자리는 보인다 (사용자 09-15 A+C 결정)
     public const float STALKER_EYE_GLOW = 0.6f;    // Unlit 색 배율
     public static readonly Color STALKER_EYE_COLOR = new Color(0.90f, 0.80f, 0.60f);
+    // Unity 전용 (제안서 3D-①, 09-17): 괴물 모델 Assets/Tunnel/Monster/miner_rigged.glb (TRELLIS.2 몸 + Mixamo 동작 14개, stage12 로 노멀·PNG 구움)
+    public const float STALKER_MODEL_SCALE = 1.5f;          // Godot MINER_SCALE (사용자 09-11 "1.0 은 안 무섭다")
+    public const float STALKER_MODEL_YAW = 0f;              // 도. 모델 정면이 이동 방향(+Z)이 아니면 180
+    public const string STALKER_MODEL_IDLE = "idle_crouch"; // 3D-① 은 이 동작만 반복. 나머지 13개 연결은 3D-③
+    public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
+    // 7 m 보임 = 모델을 그렸을 때와 숨겼을 때 같은 화면 영역의 차이. 모델이 검댕처럼 어두워 밝기 자체(첫 실측 0.036)로는 바탕(0.05)과 못 가른다
+    public const float STALKER_MODEL_CONTRAST_MIN_7M = 0.010f;   // 제안값: 밝기 차 ≥ 0.010 또는 구조(이웃 밝기 차×1000) 차 ≥ 3
 
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;

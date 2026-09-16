@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
@@ -31,8 +32,6 @@ public class M1Check : MonoBehaviour
     const float MaxBurntPick = 0.05f;             // 곡괭이 화면 영역의 탄 픽셀 비율 상한
     // 램프 안 괴물 캡슐 영역의 평균 밝기 하한 (사용자 09-15 "절대 보이지 않는다"). 갱도 바탕 0.05. 램프 사거리 14 m 라 13 m 는 0.01 이 맞다.
     // 실측(09-15): 검정 재질(0.12) 3 m 0.159 · 7 m 0.055 = 바탕과 같음 → 회갈색(0.40) 3 m 0.303 · 7 m 0.127. 안 그리면(ghost) 0.077 · 0.009
-    const float MinStalkerLum3m = 0.20f;
-    const float MinStalkerLum7m = 0.09f;
     static readonly Vector3 NearWallPos = new Vector3(2.75f, 0.1f, 15.75f);   // 오른쪽 벽에 몸이 닿는 자리, 기둥 사이
     static readonly Vector3 MidTunnel = new Vector3(0f, 1.9f, 17.5f);
     readonly List<string> fails = new List<string>();
@@ -100,6 +99,12 @@ public class M1Check : MonoBehaviour
             stalker.earMul = 2f;
         if (sabotage == "ghost")                // 괴물 몸을 안 그린다 — 보임 검사가 잡는지
             foreach (var r in stalker.GetComponentsInChildren<Renderer>()) r.enabled = false;
+        if (sabotage == "capsule")              // 3D-①: 모델 없음 (옛 캡슐 자리표시 상태) — 모델 검사가 잡는지
+            stalker.transform.Find("Body/Model")?.gameObject.SetActive(false);
+        if (sabotage == "flatskin")             // 3D-①: 살 노멀맵 뺌 — 노멀 검사·그늘 값이 잡는지
+            foreach (var r in stalker.GetComponentsInChildren<Renderer>())
+                foreach (var m in r.materials)
+                    if (m.name.StartsWith("살")) { m.SetTexture("normalTexture", null); m.DisableKeyword("_NORMALMAP"); }
         if (sabotage == "blind")                // 눈 0 m — 램프를 봐도 모른다
             stalker.eyeM = 0f;
         if (sabotage == "slowchase")            // 추격 3.0 m/s — 걷는 사람도 못 잡는다
@@ -166,6 +171,8 @@ public class M1Check : MonoBehaviour
         if (only == "" || only == "mining")
             yield return Mining(cc);
         stalker.enabled = true;
+        if (only == "" || only == "monster")
+            yield return MonsterStage(cc);
         if (only == "" || only == "stalker")
             yield return StalkerStage(cc);
         if (only == "" || only == "chase")
@@ -1240,6 +1247,94 @@ public class M1Check : MonoBehaviour
     }
 
     // M3: 소음을 듣는 괴물. 포켓은 안 캐지게(health 1e6) 두고 소음만 낸다. 괴물 자리는 소리를 내기 직전에 놓는다 — 그 순간의 거리가 기준이다
+    // 3D-①: 괴물 모델 miner_rigged (캡슐 대신). 램프 켜고 행동을 끈 채 갱도 가운데 앞 14·7·2 m 에 세워 찍고, 2 m 에서 4방향과 램프 좌우 20° 를 찍는다.
+    // 형태·색 판정은 사용자 몫(캡처 13_monster_*). 여기서는 모델·동작·노멀이 들어왔는지, 밝기가 캡슐 때 기준 안인지, 분홍(재질 없음)·흰 점이 없는지만 잰다
+    IEnumerator MonsterStage(CharacterController cc)
+    {
+        var st = stalker;
+        st.enabled = false;
+        lamp.lampOn = true;
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var model = st.transform.Find("Body/Model");
+        bool modelOn = model != null && model.gameObject.activeInHierarchy;
+        var anim = modelOn ? model.GetComponent<Animator>() : null;
+        var skinMats = new List<Material>();
+        if (modelOn)
+            foreach (var r in model.GetComponentsInChildren<Renderer>())
+                foreach (var m in r.sharedMaterials)
+                    if (m != null && m.name.StartsWith("살")) skinMats.Add(m);
+        yield return null;
+        int clipCount = anim != null && anim.runtimeAnimatorController != null ? anim.runtimeAnimatorController.animationClips.Length : 0;
+        bool idle = anim != null && anim.GetCurrentAnimatorStateInfo(0).IsName(Tuning.STALKER_MODEL_IDLE);
+        bool normals = skinMats.Count > 0 && skinMats.TrueForAll(m => m.GetTexture("normalTexture") != null);
+        Check("monster_model_animated_with_normals", modelOn && clipCount == 14 && idle && normals,
+            $"model {(model == null ? "none" : modelOn ? "on" : "off")}, clips {clipCount} (want 14), playing {Tuning.STALKER_MODEL_IDLE} {idle}, skin materials {skinMats.Count} with normal map {normals}");
+
+        var bodyR = modelOn ? model.GetComponentsInChildren<Renderer>() : st.GetComponentsInChildren<Renderer>();
+        Vector3 P = new Vector3(0f, 0.1f, 3.5f);
+        Teleport(cc, P, 0f);
+        var vis = new Dictionary<float, Vector3>();
+        var hid = new Dictionary<float, Vector3>();
+        var rects = new Dictionary<float, Rect>();
+        int magenta = 0;
+        foreach (float dist in new[] { 14f, 7f, 2f })
+        {
+            st.Teleport(P + Vector3.forward * dist, 180f);        // 플레이어를 본다
+            Rect r = default;
+            Vector3 v = default, h = default;
+            yield return Capture($"13_monster_at_{dist:0}m", x => v = x, default, () => r = ScreenRect(mainCam, bodyR));
+            vis[dist] = v; rects[dist] = r; magenta += lastMagenta;
+            // 같은 자리에서 모델을 숨기고 한 번 더 — 둘의 차이가 "보인다"의 잣대 (어두운 모델은 밝기만으로 바탕과 못 가른다)
+            bool[] was = bodyR.Select(x => x.enabled).ToArray();
+            foreach (var x in bodyR) x.enabled = false;
+            yield return Capture($"13_monster_at_{dist:0}m_hidden", x => h = x, r);
+            for (int k = 0; k < bodyR.Length; k++) bodyR[k].enabled = was[k];
+            hid[dist] = h;
+            Debug.Log($"MONSTER_VIS {dist:0} m lum {v.x:F4} (hidden {h.x:F4}) structure {v.y:F2} (hidden {h.y:F2}) burnt {v.z * 100f:F2} % magenta {lastMagenta} rect {r.width:F0}x{r.height:F0}");
+        }
+        float dLum7 = Mathf.Abs(vis[7f].x - hid[7f].x), dStr7 = vis[7f].y - hid[7f].y;
+        Check("monster_dark_at_14m_visible_at_7m", rects[7f].width > 0f && vis[14f].x <= Tuning.STALKER_MODEL_LUM_MAX_14M && (dLum7 >= Tuning.STALKER_MODEL_CONTRAST_MIN_7M || dStr7 >= 3f),
+            $"14 m lum {vis[14f].x:F3} (max {Tuning.STALKER_MODEL_LUM_MAX_14M}) · 7 m shown vs hidden: lum {vis[7f].x:F3}/{hid[7f].x:F3} Δ{dLum7:F3} (min {Tuning.STALKER_MODEL_CONTRAST_MIN_7M}), structure {vis[7f].y:F1}/{hid[7f].y:F1} Δ{dStr7:F1} (min 3) · 2 m lum {vis[2f].x:F3}");
+
+        // 2 m 4방향 — 사용자가 뭉개진 곳을 표시할 캡처 (3D-②). yaw 180 = 플레이어를 본다. 이름은 플레이어가 보는 쪽 (yaw 90 = 모델이 +X 를 봄 → 왼쪽 옆구리가 보인다)
+        string[] dirNames = { "front", "left", "right", "back" };
+        float[] dirYaw = { 180f, 90f, 270f, 0f };
+        for (int i = 0; i < 4; i++)
+        {
+            st.Teleport(P + Vector3.forward * 2f, dirYaw[i]);
+            Vector3 v = default;
+            yield return Capture($"13_monster_2m_{dirNames[i]}", x => v = x, default, () => ScreenRect(mainCam, bodyR));
+            magenta += lastMagenta;
+            Debug.Log($"MONSTER_2M {dirNames[i]} lum {v.x:F4} structure {v.y:F2} burnt {v.z * 100f:F2} % magenta {lastMagenta}");
+            if (i == 0) vis[2.5f] = v;   // 정면 2 m 의 탄 픽셀 비율
+        }
+        Check("monster_no_magenta_no_burn", magenta == 0 && vis[2.5f].z < 0.01f, $"magenta pixels {magenta} (want 0), burnt at 2 m front {vis[2.5f].z * 100f:F2} % (max 1 %)");
+        // 얼굴: 2 m 정면은 머리가 화면 위로 나간다(모델 키 3.7 m) — 30° 올려다보고 한 장 (Player.Look — 마우스와 같은 길)
+        st.Teleport(P + Vector3.forward * 2f, 180f);
+        float px = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);
+        player.Look(new Vector2(0f, 30f * px));
+        yield return Capture("13_monster_2m_face", x => { });
+        player.Look(new Vector2(0f, -30f * px));
+
+        // 그늘: 2 m 정면에서 램프(머리)를 왼쪽·오른쪽 20° 로 — 몸 영역의 구조값(이웃 밝기 차)을 기록한다. 문턱은 flatskin 실측 뒤 (제안서 ⑤)
+        st.Teleport(P + Vector3.forward * 2f, 180f);
+        float[] shade = new float[2];
+        string[] side = { "left", "right" };
+        for (int i = 0; i < 2; i++)
+        {
+            Teleport(cc, P, i == 0 ? -20f : 20f);
+            Vector3 v = default;
+            yield return Capture($"13_monster_2m_lamp_{side[i]}", x => v = x, default, () => ScreenRect(mainCam, bodyR));
+            shade[i] = v.y;
+        }
+        // 09-17 실측: 노멀 있음 29.8/27.7 · flatskin 29.7/27.7 — 차이가 잡음 이하라 문턱을 못 세운다 (베이크한 노멀은 12만 면 몸이 이미 가진 요철이라 거의 안 보인다). 값만 남긴다
+        Debug.Log($"MONSTER_SHADE structure lamp left {shade[0]:F2} · right {shade[1]:F2}");
+
+        st.Teleport(st.homePos);
+        Teleport(cc, P, 0f);
+        st.enabled = true;
+    }
+
     IEnumerator StalkerStage(CharacterController cc)
     {
         var st = stalker;
@@ -1251,23 +1346,7 @@ public class M1Check : MonoBehaviour
         var mouse = InputSystem.AddDevice<Mouse>("StalkerMouse");
         lamp.lampOn = true;
 
-        // 0. 보이는가 (사용자 09-15 "절대 보이지 않는다"). 갱도 가운데서 앞 3·7·13 m 에 세우고 캡슐 화면 영역 밝기를 잰다
-        var mainCam = pickaxe.cam.GetComponent<Camera>();
-        var bodyR = st.GetComponentsInChildren<Renderer>();
-        Teleport(cc, new Vector3(0f, 0.1f, 3.5f), 0f);
-        var vis = new Dictionary<float, Vector3>();
-        float minRect = 1e9f;
-        foreach (float dist in new[] { 3f, 7f, 13f })
-        {
-            st.Teleport(new Vector3(0f, 0.1f, 3.5f + dist));   // 놓인 뒤 1 s 는 서 있다 (STALKER_WANDER_PAUSE_S)
-            Rect r = default;
-            Vector3 v = default;
-            yield return Capture($"12_stalker_at_{dist:0}m", x => v = x, default, () => r = ScreenRect(mainCam, bodyR));
-            vis[dist] = v;
-            minRect = Mathf.Min(minRect, r.width);
-            Debug.Log($"STALKER_VIS {dist:0} m lum {v.x:F4} burnt {v.z * 100f:F1} % rect {r.width:F0}x{r.height:F0}");
-        }
-        Check("stalker_visible_in_lamp", minRect > 0f && vis[3f].x > MinStalkerLum3m && vis[7f].x > MinStalkerLum7m, $"lum 3 m {vis[3f].x:F3} (min {MinStalkerLum3m}) · 7 m {vis[7f].x:F3} (min {MinStalkerLum7m}) · 13 m {vis[13f].x:F3} (램프 14 m 밖은 안 보이는 게 맞다)");
+        // 0. 보이는가 — 캡슐 때 밝기 검사(12_stalker_at_*)는 3D-① 의 MonsterStage(13_monster_at_*, 그림/숨김 차이)로 옮겼다
         lamp.lampOn = false;                       // 귀 검사는 램프를 끄고 — M4 눈·빛이 끼어들지 않게 (램프 끄면 소리만 남는 것이 규칙이다)
         yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
 
@@ -1453,19 +1532,23 @@ public class M1Check : MonoBehaviour
             y1 = Mathf.Clamp((int)region.yMax, y0 + 1, h - 1);
         }
         double sum = 0, grad = 0;
-        int n = 0, burnt = 0;
+        int n = 0, burnt = 0, magenta = 0;
         for (int y = y0; y < y1; y += 3)
             for (int x = x0; x < x1; x += 3)
             {
-                float l = Lum(px[y * w + x]);
+                var c = px[y * w + x];
+                float l = Lum(c);
                 sum += l;
                 n++;
                 if (l > BurntLum) burnt++;
+                if (c.r > 200 && c.b > 200 && c.g < 80) magenta++;   // 재질 없음 표시(분홍) — glTF 텍스처를 못 읽으면 뜬다
                 grad += Mathf.Abs(Lum(px[y * w + x + 1]) - l) + Mathf.Abs(Lum(px[(y + 1) * w + x]) - l);
             }
         n = Mathf.Max(n, 1);
+        lastMagenta = magenta;
         result(new Vector3((float)(sum / n), (float)(grad / n * 1000.0), (float)burnt / n));
     }
+    int lastMagenta;   // 마지막 Capture 영역에서 3픽셀 간격으로 센 분홍 픽셀 수
 
     static float Lum(Color32 c) => (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255f;
 

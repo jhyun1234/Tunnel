@@ -20,7 +20,8 @@ public static class BuildM1
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
-    const string StalkerMatPath = "Assets/Settings/M3_StalkerBody.mat";
+    const string MonsterPath = "Assets/Tunnel/Monster/miner_rigged.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
+    const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
     const string StalkerEyeMatPath = "Assets/Settings/M4_StalkerEye.mat";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";
@@ -40,9 +41,10 @@ public static class BuildM1
         var pick = AssetDatabase.LoadAssetAtPath<GameObject>(PickPath);
         var ore = AssetDatabase.LoadAssetAtPath<GameObject>(OrePath);
         var chips = AssetDatabase.LoadAssetAtPath<GameObject>(ChipsPath);
-        if (piece == null || pick == null || ore == null || chips == null)
+        var monster = AssetDatabase.LoadAssetAtPath<GameObject>(MonsterPath);
+        if (piece == null || pick == null || ore == null || chips == null || monster == null)
         {
-            Debug.LogError("piece_straight / pick / ore / mine_chips glTF 를 못 읽었다 (glTFast 임포트 확인)");
+            Debug.LogError("piece_straight / pick / ore / mine_chips / miner_rigged glTF 를 못 읽었다 (glTFast 임포트 확인)");
             EditorApplication.Exit(3);
             return;
         }
@@ -211,40 +213,59 @@ public static class BuildM1
         check.pieces = pieces;
         check.pickaxe = pickaxe;
 
-        // M3 괴물 — 캡슐 하나 (모델은 텍스처 확정 뒤). 북쪽 끝에서 시작
+        // M3 괴물. 북쪽 끝에서 시작. 충돌은 캡슐(R 0.6 · H 2.8) 그대로, 겉모습은 3D-① 모델
         var stalkerGo = new GameObject("Stalker");
         stalkerGo.transform.position = new Vector3(0f, 0.1f, (PieceCount - 1) * Tuning.GRID_CELL);
         var scc = stalkerGo.AddComponent<CharacterController>();
         scc.radius = Tuning.STALKER_R;
         scc.height = Tuning.STALKER_H;
         scc.center = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
-        var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        body.name = "Body";
-        UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+        // Body = 캡슐 크기의 빈 축. Stalker.cs 가 맞을 때 0.3 s 납작하게 하는 것이 이 축의 localScale 이라 남긴다 (M5 판정 통과한 피격 표시).
+        // 캡슐 렌더러(회갈색 자리표시, M3~UI-1 판정용)는 3D-① 에서 뗐다
+        var body = new GameObject("Body");
         body.transform.SetParent(stalkerGo.transform);
         body.transform.localPosition = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
-        body.transform.localScale = new Vector3(Tuning.STALKER_R * 2f, Tuning.STALKER_H * 0.5f, Tuning.STALKER_R * 2f);  // 기본 캡슐 = 반지름 0.5 · 높이 2
-        // 자리표시 캡슐 색. 검정(0.12)은 램프 앞 7 m 에서 밝기 0.055 = 갱도 바탕 0.05 과 같아 "절대 보이지 않는다"(사용자 09-15) → 밝은 회갈색
-        var bodyMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M3_StalkerBody", color = new Color(0.40f, 0.36f, 0.32f) };
-        bodyMat.SetFloat("_Smoothness", 0.25f);
-        AssetDatabase.DeleteAsset(StalkerMatPath);
-        AssetDatabase.CreateAsset(bodyMat, StalkerMatPath);
-        body.GetComponent<MeshRenderer>().sharedMaterial = bodyMat;
+        body.transform.localScale = new Vector3(Tuning.STALKER_R * 2f, Tuning.STALKER_H * 0.5f, Tuning.STALKER_R * 2f);
+        // 3D-①: 모델을 Body 밑에. Body 의 비균등 크기를 되돌려 모델은 STALKER_MODEL_SCALE 배 균등, 발이 괴물 뿌리(바닥)에 온다
+        var model = Instance(monster, body.transform);
+        model.name = "Model";
+        var bs = body.transform.localScale;
+        model.transform.localScale = new Vector3(Tuning.STALKER_MODEL_SCALE / bs.x, Tuning.STALKER_MODEL_SCALE / bs.y, Tuning.STALKER_MODEL_SCALE / bs.z);
+        model.transform.localPosition = new Vector3(0f, -body.transform.localPosition.y / bs.y, 0f);
+        model.transform.localRotation = Quaternion.Euler(0f, Tuning.STALKER_MODEL_YAW, 0f);
+        var animator = model.GetComponent<Animator>() ?? model.AddComponent<Animator>();
+        animator.runtimeAnimatorController = MakeStalkerAnimator();
+        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;   // 화면 밖에서도 움직인다 — 검사가 순간이동시켜 찍는다
+        foreach (var smr in model.GetComponentsInChildren<SkinnedMeshRenderer>())
+            smr.updateWhenOffscreen = true;                          // 뼈가 움직여도 화면 사각형(ScreenRect)이 맞게
         // 앞 표시 — 눈 두 개 (사용자 09-15 "캡슐이라 플레이어를 보는지 배회인지 판정이 안 선다"). 눈높이 STALKER_EYE_H, 몸 앞면
         // Unlit — 빛과 무관하게 늘 같은 밝기로 보인다 (램프를 꺼도 눈은 보인다). Lit + _EMISSION 은 빌드에서 변형이 빠져 검게 나왔다(09-15)
         var eyeMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "M4_StalkerEye", color = Tuning.STALKER_EYE_COLOR * Tuning.STALKER_EYE_GLOW };
         AssetDatabase.DeleteAsset(StalkerEyeMatPath);
         AssetDatabase.CreateAsset(eyeMat, StalkerEyeMatPath);
-        foreach (float sx in new[] { -0.16f, 0.16f })
+        // 3D-①: 눈은 모델 머리뼈에 붙인다 — 캡슐 때 자리(2.4 m, 몸 앞)는 모델 가슴 앞에 뜬다. 자리 = 머리 메시 경계 상자(쉬는 자세) 앞면 위쪽
+        var headSmr = model.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s => s.name == "Miner_Head");
+        var headBone = headSmr != null ? headSmr.bones.FirstOrDefault(b => b.name.EndsWith("Head")) : null;
+        if (headSmr == null || headBone == null)
+        {
+            Debug.LogError($"괴물 머리 메시/머리뼈를 못 찾았다 (Miner_Head {headSmr != null}, bones {(headSmr != null ? string.Join(",", headSmr.bones.Select(b => b.name)) : "-")})");
+            EditorApplication.Exit(7);
+        }
+        Bounds hb = headSmr.bounds;
+        // 머리 경계 상자엔 헬멧이 들어 있어 가운데가 이마다 — 눈구멍은 그보다 아래 (첫 캡처 09-17: 가운데+10 % 는 헬멧 챙에 떴다)
+        Vector3 eyeCenter = hb.center + stalkerGo.transform.forward * hb.extents.z * 0.85f - Vector3.up * hb.extents.y * 0.2f;
+        float eyeGap = hb.extents.x * 0.4f, eyeSize = 0.08f * Tuning.STALKER_MODEL_SCALE;
+        foreach (float sx in new[] { -1f, 1f })
         {
             var eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             eye.name = sx < 0 ? "EyeL" : "EyeR";
             UnityEngine.Object.DestroyImmediate(eye.GetComponent<Collider>());
-            eye.transform.SetParent(stalkerGo.transform);
-            eye.transform.localPosition = new Vector3(sx, Tuning.STALKER_EYE_H, Tuning.STALKER_R * 0.92f);
-            eye.transform.localScale = Vector3.one * 0.2f;
+            eye.transform.position = eyeCenter + stalkerGo.transform.right * sx * eyeGap;
+            eye.transform.localScale = Vector3.one * eyeSize;
+            eye.transform.SetParent(headBone, true);   // 세계 크기·자리 유지 (뼈 밑은 비균등 크기)
             eye.GetComponent<MeshRenderer>().sharedMaterial = eyeMat;
         }
+        Debug.Log($"STALKER_EYES head bounds center {hb.center} size {hb.size} → eyes at {eyeCenter} gap ±{eyeGap:F3} size {eyeSize:F2}, bone {headBone.name}");
         var stalker = stalkerGo.AddComponent<Stalker>();
         stalker.player = player.transform;
         stalker.playerHead = head;
@@ -350,6 +371,29 @@ public static class BuildM1
         var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
         PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
         return go;
+    }
+
+    // 3D-①: 괴물 동작 상태기. GLB 의 클립 14개를 상태 하나씩으로, 기본 상태 = STALKER_MODEL_IDLE 반복 (glTFast 가 loopTime 을 켠다).
+    // 상태 사이 전이는 3D-③ 에서 (지금은 기본 상태만 돈다)
+    static RuntimeAnimatorController MakeStalkerAnimator()
+    {
+        var clips = AssetDatabase.LoadAllAssetsAtPath(MonsterPath).OfType<AnimationClip>().OrderBy(c => c.name).ToArray();
+        if (clips.Length != 14 || clips.All(c => c.name != Tuning.STALKER_MODEL_IDLE))
+        {
+            Debug.LogError($"{MonsterPath} 클립이 14개가 아니거나 {Tuning.STALKER_MODEL_IDLE} 이 없다: {string.Join(", ", clips.Select(c => c.name))}");
+            EditorApplication.Exit(6);
+        }
+        AssetDatabase.DeleteAsset(StalkerAnimPath);
+        var ctrl = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(StalkerAnimPath);
+        var sm = ctrl.layers[0].stateMachine;
+        foreach (var clip in clips)
+        {
+            var state = sm.AddState(clip.name);
+            state.motion = clip;
+            if (clip.name == Tuning.STALKER_MODEL_IDLE) sm.defaultState = state;
+        }
+        Debug.Log($"STALKER_ANIM clips {clips.Length}: {string.Join(", ", clips.Select(c => $"{c.name} {c.length:F2}s"))}");
+        return ctrl;
     }
 
     // 먼지 재질: URP 기본 파티클 재질(반투명)을 복사해 조명을 받는 Simple Lit 으로 — 램프 밖 먼지가 어둠에서 빛나지 않게
