@@ -286,7 +286,7 @@ public class M1Check : MonoBehaviour
         st.enabled = true;
     }
 
-    // UI-1b: 지쳤을 때 자세. 걸으면 램프가 LAMP_BOB_DEG 끄덕이고, 스태미나 ≤ STAMINA_SOON 이면 3배, 탈진하면 눈 EXHAUST_EYE·램프 EXHAUST_LAMP_DOWN_DEG 아래
+    // UI-1b: 지쳤을 때 자세. 걸으면 램프가 LAMP_BOB_DEG 끄덕이고, 스태미나 ≤ STAMINA_SOON 이면 3배, 탈진하면 눈 EXHAUST_EYE·시야 EXHAUST_LOOK_DOWN_DEG 아래·숨 들썩임
     IEnumerator TiredStage(CharacterController cc)
     {
         var st = stalker;
@@ -328,7 +328,7 @@ public class M1Check : MonoBehaviour
         Check("lamp_nod_triples_when_tired", amp30 >= expect3 * 0.8f && amp30 <= expect3 * 1.2f,
             $"walking at 30: max {amp30:F3}° (expect {expect3:F3} ±20 %, x{Tuning.LAMP_BOB_SOON_MUL} of {amp100:F3})");
 
-        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 램프 EXHAUST_LAMP_DOWN_DEG 아래, 0.5 s 동안 0.3 m 안 움직임.
+        // ③ 0 에서 Shift+W 를 계속 누르면 탈진 — 0.5 s 안에 눈 EXHAUST_EYE, 시야 EXHAUST_LOOK_DOWN_DEG 아래(±숨 끄덕임), 1 s 동안 머리가 EXHAUST_BREATH_M 로 오르내림, 0.3 m 안 움직임.
         //    갱도 가운데(z≈16, 북쪽 21 m 남음)에서 탈진하게 2 s 달린 뒤 스태미나를 1 로 — 5 s 를 다 달리면 끝 벽 앞이라 화면이 벽으로 찬다(09-16)
         player.stamina = Tuning.STAMINA_MAX;
         Teleport(cc, new Vector3(0f, 0.1f, 2f), 0f);
@@ -341,11 +341,17 @@ public class M1Check : MonoBehaviour
         float tEx = t;
         yield return new WaitForSeconds(0.5f);
         Vector3 pe = player.transform.position;
-        float eyeEx = player.head.localPosition.y, downEx = LampPitch();
-        yield return new WaitForSeconds(0.5f);
+        float downEx = CameraPitch(), yMin = float.MaxValue, yMax = float.MinValue;
+        for (t = 0f; t < 1f; t += Time.deltaTime)                        // 숨 한 번 0.7 s 를 넘게 재서 위아래를 다 본다
+        {
+            yMin = Mathf.Min(yMin, player.head.localPosition.y);
+            yMax = Mathf.Max(yMax, player.head.localPosition.y);
+            yield return null;
+        }
+        float eyeEx = (yMin + yMax) * 0.5f, breathEx = yMax - yMin;
         float movedEx = Flat(player.transform.position - pe);
-        Check("exhausted_posture", player.exhausted && tEx < 1f && Mathf.Abs(eyeEx - Tuning.EXHAUST_EYE) < 0.05f && Mathf.Abs(downEx - Tuning.EXHAUST_LAMP_DOWN_DEG) < 2f && movedEx < 0.3f,
-            $"exhausted {player.exhausted} {tEx:F2} s after stamina 1 (z {player.transform.position.z:F1}), +0.5 s: eye {eyeEx:F2} m (EXHAUST_EYE {Tuning.EXHAUST_EYE}), lamp {downEx:F1}° below camera (EXHAUST_LAMP_DOWN_DEG {Tuning.EXHAUST_LAMP_DOWN_DEG}), moved {movedEx:F2} m in 0.5 s");
+        Check("exhausted_posture", player.exhausted && tEx < 1f && Mathf.Abs(eyeEx - Tuning.EXHAUST_EYE) < 0.05f && Mathf.Abs(downEx - Tuning.EXHAUST_LOOK_DOWN_DEG) <= Tuning.EXHAUST_BREATH_DEG + 0.5f && breathEx >= Tuning.EXHAUST_BREATH_M * 2f * 0.8f && movedEx < 0.3f,
+            $"exhausted {player.exhausted} {tEx:F2} s after stamina 1 (z {player.transform.position.z:F1}), +0.5 s: eye {eyeEx:F2} m (EXHAUST_EYE {Tuning.EXHAUST_EYE}), camera {downEx:F1}° down (EXHAUST_LOOK_DOWN_DEG {Tuning.EXHAUST_LOOK_DOWN_DEG} ±{Tuning.EXHAUST_BREATH_DEG}), head up-down {breathEx * 100f:F1} cm in 1 s (EXHAUST_BREATH_M ×2 = {Tuning.EXHAUST_BREATH_M * 200f:F0} cm), moved {movedEx:F2} m in 1 s");
         // 바닥을 비춘다: 화면 아래 절반이 밝아지고 위 절반은 어두워진다 — 같은 자리·같은 방향의 회복 뒤 화면과 비교
         Vector3 botEx = default, topEx = default, botOk = default, topOk = default;
         Rect bottom = new Rect(0f, 0f, Screen.width, Screen.height * 0.5f), top = new Rect(0f, Screen.height * 0.5f, Screen.width, Screen.height * 0.5f);
@@ -358,18 +364,19 @@ public class M1Check : MonoBehaviour
         while (player.exhausted && t < 6f) { t += Time.deltaTime; yield return null; }
         float tBack = t;
         yield return new WaitForSeconds(0.5f);
-        float eyeBack = player.head.localPosition.y, pitchBack = LampPitch();
+        float eyeBack = player.head.localPosition.y, pitchBack = CameraPitch();
         yield return Capture("18_recovered", v => botOk = v, bottom);
         yield return Capture("18_recovered_top", v => topOk = v, top);
         Check("exhausted_lamp_lights_floor", botEx.x > botOk.x * 1.3f && topEx.x < topOk.x,
             $"screen lum bottom half exhausted {botEx.x:F4} vs recovered {botOk.x:F4} (x{botEx.x / Mathf.Max(botOk.x, 1e-6f):F2}), top half {topEx.x:F4} vs {topOk.x:F4}");
         Check("exhaustion_recovers", !player.exhausted && tBack < 6f && player.stamina >= Tuning.STAMINA_MAX - 0.5f && Mathf.Abs(eyeBack - Tuning.EYE_HEIGHT) < 0.05f && Mathf.Abs(pitchBack) < 0.5f,
-            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, lamp {pitchBack:F2}°");
+            $"recovered after {tBack:F1} s (stamina {player.stamina:0}), +0.5 s: eye {eyeBack:F2} m, camera {pitchBack:F2}°");
         Teleport(cc, P, 0f);
         st.enabled = true;
     }
 
     float LampPitch() => Vector3.SignedAngle(lamp.cam.forward, lamp.transform.forward, lamp.cam.right);   // 도, + 면 램프가 카메라보다 아래
+    float CameraPitch() => Vector3.SignedAngle(player.transform.forward, lamp.cam.forward, player.transform.right);   // 도, + 면 시야가 몸보다 아래
 
     // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 타격, 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다
     IEnumerator SoundStage(CharacterController cc)

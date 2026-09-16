@@ -28,13 +28,18 @@ public static class Tuning
     public const float STAMINA_WALK = 10.0f;       // /s 걸으면 참
     public const float STAMINA_IDLE = 20.0f;       // /s 서 있으면 참
     // Unity 전용 (제안서 UI-1b, 설계서 ui_ux Step 2 스태미나 줄): 숫자 없이 몸으로. 걸을 때 램프가 끄덕이고(Godot LAMP_BOB 0.01° 는
-    // 14 m 벽에서 2 mm 라 안 보이는 값 — 새로 정한다), 스태미나 "곧" 단계면 폭 3배, 탈진하면 눈이 내려가고 램프가 바닥을 본다
-    public const float LAMP_BOB_DEG = 0.4f;        // 도, 걷기 끄덕임 폭 (제안값: 5 m 벽에서 빛 원 3.5 cm). 사용자가 DevHud 7/8(임시) 로 찾는다
+    // 14 m 벽에서 2 mm 라 안 보이는 값 — 새로 정한다), 스태미나 "곧" 단계면 폭 3배, 탈진하면 눈이 내려가고 시야가 바닥으로 숙여지며 숨 박자로 화면이 들썩인다
+    public const float LAMP_BOB_DEG = 0.6f;        // 도, 걷기 끄덕임 폭 — 사용자가 실행 파일 안 7/8 키로 찾은 값 (09-16 1차 판정, 제안 0.4)
     public const float LAMP_BOB_SOON_MUL = 3.0f;   // 곧 단계 배율
     public const float STAMINA_SOON = 50.0f;       // 이하면 곧 단계
     public const float EXHAUST_EYE = 1.2f;         // m, 탈진 눈높이 (숙이기 1.0 과 헷갈리지 않게)
     public const float EXHAUST_TIME = 0.3f;        // s, 내려가고 올라오는 시간
-    public const float EXHAUST_LAMP_DOWN_DEG = 20.0f; // 도, 탈진하면 램프가 바닥 쪽으로 숙여지는 각
+    // 1차 판정(09-16): 눈높이만 내리고 램프만 20° 숙이니 "숙이기와 헷갈린다, 바닥을 비추는 5 초가 없다" → 시야(카메라) 자체를 바닥으로 숙이고
+    // 숨 박자로 화면을 위아래로 들썩인다(사용자 "시야 카메라 바운스"). 마우스 시점은 그 위에서 그대로 된다. 램프는 카메라를 따라오니 저절로 바닥
+    public const float EXHAUST_LOOK_DOWN_DEG = 25.0f; // 도, 탈진하면 시야가 아래로 숙여지는 각 (제안값)
+    public const float EXHAUST_BREATH_M = 0.03f;     // m, 숨 한 번에 머리가 오르내리는 폭 (제안값: 곡괭이 걷기 흔들림 0.02 보다 크게)
+    public const float EXHAUST_BREATH_DEG = 1.5f;    // 도, 숨 한 번에 시야가 끄덕이는 각 (제안값)
+    public const float EXHAUST_BREATH_S = 0.7f;      // s, 숨 한 번 (헐떡임 ≈ 85회/분, 제안값)
 
     public const float GRID_CELL = 7.0f;           // m, 조각 한 칸
     public const float CAMERA_FOV = 80.0f;         // Godot Player.tscn Camera3D (세로 fov)

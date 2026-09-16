@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 // 가까운 면을 비추면 세기를 낮춘다(LAMP_NEAR_*) — URP 거리 제곱 감쇠로 벽 앞이 하얗게 타지 않게.
 // 곡괭이는 비추지 않는다(조명 레이어). 곡괭이 전용 약한 등(pickLight)이 램프와 같이 켜지고 꺼진다.
 // F 로 끄고 켠다. 끄면 눈이 어둠에 적응한다(DARK_ADAPT_*: 환경광이 오르고 거리 안개가 짙어진다). 소리는 아직 없다.
-// 몸 상태(UI-1b): 걸으면 Player.gait 박자로 끄덕인다(발 닿는 순간 맨 아래), 스태미나 곧 단계면 폭 3배, 탈진하면 EXHAUST_LAMP_DOWN_DEG 아래를 본다.
+// 몸 상태(UI-1b): 걸으면 Player.gait 박자로 끄덕인다(발 닿는 순간 맨 아래), 스태미나 곧 단계면 폭 3배. 탈진 자세는 Player 가 카메라를 숙이니 램프는 따라만 간다.
 [RequireComponent(typeof(Light))]
 public class Headlamp : MonoBehaviour
 {
@@ -19,14 +19,14 @@ public class Headlamp : MonoBehaviour
     [System.NonSerialized] public float nearDim = 1f;
     [System.NonSerialized] public float darkAdaptAmbient = Tuning.DARK_ADAPT_AMBIENT;
     [System.NonSerialized] public float adapt;     // 0 = 평소, 1 = 어둠에 다 적응
-    [System.NonSerialized] public float bobDeg = Tuning.LAMP_BOB_DEG;   // DevHud 7/8 (임시) 가 바꾼다
+    [System.NonSerialized] public float bobDeg = Tuning.LAMP_BOB_DEG;   // 검사가 읽는다 (사용자 판정값 0.6, 09-16)
     [System.NonSerialized] public bool soonNod = true;  // 사보타주 flatnod 가 끈다 — 곧 단계에도 폭 그대로
-    [System.NonSerialized] public float nodDeg, downDeg;   // 지금 더해진 끄덕임·탈진 숙임 (검사가 읽는다)
+    [System.NonSerialized] public float nodDeg;    // 지금 더해진 끄덕임 (검사가 읽는다)
 
     static readonly Vector3[] RayDirs = BuildRays();
     Light lamp;
     Player player;
-    Quaternion follow;                             // 카메라를 늦게 쫓는 회전. 끄덕임·숙임은 이 위에 얹는다
+    Quaternion follow;                             // 카메라를 늦게 쫓는 회전. 끄덕임은 이 위에 얹는다
     float fade = 1f;
 
     public static void Apply(Light light)
@@ -74,10 +74,8 @@ public class Headlamp : MonoBehaviour
             // 끄덕임: 걸음 위상 π 마다 발이 닿고 그때 맨 아래(cos 2·gait = 1). 속도에 비례, 서면 0. 곧 단계면 LAMP_BOB_SOON_MUL 배 — 바로 바뀐다("갑자기 심해진다"가 신호)
             float mul = player.stamina <= Tuning.STAMINA_SOON && soonNod ? Tuning.LAMP_BOB_SOON_MUL : 1f;
             nodDeg = Mathf.Cos(player.gait * 2f) * bobDeg * mul * Mathf.Clamp01(player.Speed / Tuning.WALK_SPEED * (player.gait > 0f ? 1f : 0f));
-            bool stagger = player.exhausted && player.stagger;
-            downDeg = Mathf.MoveTowards(downDeg, stagger ? Tuning.EXHAUST_LAMP_DOWN_DEG : 0f, Tuning.EXHAUST_LAMP_DOWN_DEG / Tuning.EXHAUST_TIME * Time.deltaTime);
         }
-        transform.SetPositionAndRotation(cam.TransformPoint(Tuning.LAMP_OFFSET), follow * Quaternion.Euler(nodDeg + downDeg, 0f, 0f));
+        transform.SetPositionAndRotation(cam.TransformPoint(Tuning.LAMP_OFFSET), follow * Quaternion.Euler(nodDeg, 0f, 0f));
 
         float kDim = 1f - Mathf.Exp(-Time.deltaTime / Tuning.LAMP_NEAR_TIME);
         nearDim = Mathf.Lerp(nearDim, NearDim(), kDim);

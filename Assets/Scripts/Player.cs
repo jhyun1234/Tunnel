@@ -15,6 +15,8 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
     [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
     [System.NonSerialized] public bool stagger = true;        // 사보타주 nostagger 가 끈다 — 탈진해도 자세 없는(옛) 상태
+    [System.NonSerialized] public float lookDown, breathAmp;   // 탈진 자세: 시야 숙임 각 · 숨 들썩임 폭 (검사가 읽는다)
+    float breathPhase;
 
     CharacterController cc;
     Vector3 velocity;
@@ -60,7 +62,6 @@ public class Player : MonoBehaviour
                 Vector2 d = mouse.delta.ReadValue();
                 transform.Rotate(0f, d.x * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg, 0f);
                 pitch = Mathf.Clamp(pitch - d.y * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg, -Tuning.PITCH_LIMIT_DEG, Tuning.PITCH_LIMIT_DEG);
-                head.localRotation = Quaternion.Euler(pitch, 0f, 0f);
             }
             if (mouse.leftButton.wasPressedThisFrame)
                 Cursor.lockState = CursorLockMode.Locked;
@@ -139,7 +140,14 @@ public class Player : MonoBehaviour
             shakeLeft -= dt;
             shake = new Vector3(Random.Range(-1f, 1f), Random.Range(-1f, 1f), 0f) * shakeAmount * Mathf.Max(shakeLeft, 0f) / shakeSpan;
         }
-        head.localPosition = new Vector3(0f, eye, 0f) + shake;
+        // 탈진 자세 (UI-1b 1차 판정): 시야가 EXHAUST_LOOK_DOWN_DEG 숙여지고(마우스 시점은 그 위에), 숨 박자(EXHAUST_BREATH_S)로 머리가 오르내리며 끄덕인다
+        bool panting = exhausted && stagger;
+        lookDown = Mathf.MoveTowards(lookDown, panting ? Tuning.EXHAUST_LOOK_DOWN_DEG : 0f, Tuning.EXHAUST_LOOK_DOWN_DEG / Tuning.EXHAUST_TIME * dt);
+        breathAmp = Mathf.MoveTowards(breathAmp, panting ? 1f : 0f, dt / Tuning.EXHAUST_TIME);
+        breathPhase = panting || breathAmp > 0f ? breathPhase + dt * Mathf.PI * 2f / Tuning.EXHAUST_BREATH_S : 0f;
+        float breath = Mathf.Sin(breathPhase) * breathAmp;
+        head.localPosition = new Vector3(0f, eye + breath * Tuning.EXHAUST_BREATH_M, 0f) + shake;
+        head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG, 0f, 0f);
     }
 
     // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다. 탈진(UI-1b)이면 EXHAUST_EYE 로 — "무릎 짚고 헐떡임", 숙이기가 우선
