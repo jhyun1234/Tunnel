@@ -153,7 +153,7 @@ public static class Tuning
     // PICK_BOB_SPEED 12 rad/s(Godot)는 지웠다 — 흔들림 위상은 Player.gait(π / 자세별 STEP_INTERVAL)라 발소리와 같은 박자 (사용자 09-16)
     // Unity 전용 (제안서 UI-1a, 설계서 ui_ux Step 2): 곡괭이 내구도. 숫자는 화면에 없다 — 15 이하면 닿은 타격마다 손이 떨리고,
     // 0 이 되는 순간 손에서 조각나 바닥에 떨어졌다 사라진다. 고치기 없음, 새 곡괭이는 상점(나중) — 사용자 09-16 결정
-    public const float PICK_DURABILITY_MAX = 100f;
+    public const float PICK_DURABILITY_MAX = 60f;   // 사용자 판정 09-16: 100(캐기 50번)은 너무 크다 → 캐기 30번 = 60타
     public const float PICK_WEAR_HIT = 1f;         // 포켓·괴물에 닿은 타격마다. 허공은 안 닳는다
     public const float PICK_WEAR_THROW = 5f;       // 던지기마다
     public const float PICK_SHAKY_BELOW = 15f;     // 이하면 떨림 (타격 15번 = 캐기 7번)
