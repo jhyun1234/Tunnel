@@ -12,7 +12,12 @@ CUTS = [
     ("walk_389454.ogg", "step_dirt", 4, 0.55, 0.25, 0.25, "anull"),
     ("crouch_504383.ogg", "step_crouch", 1, 1.3, 0.15, 2.0, "anull"),   # 발 끄는 소리 1.2 s 통째로 (숙이기 간격 1.2 s 와 맞물린다)
     ("land_426848.ogg", "pick_land", 2, 1.4, 0.25, 1.0, "alimiter=level_in=2.5:limit=0.95:level=false"),
-    ("flesh_321810.ogg", "pick_flesh", 1, 0.6, 0.15, 2.0, "anull"),   # 곡괭이가 괴물 몸에 맞는 소리 (사용자 09-16: 광물 캐는 소리와 같으면 안 된다)
+    # pick_flesh 는 아래 MIX 로 만든다 (사용자 09-16 3차: 단일 파일 24개 다 "타격감 없음" → 두 소리를 겹친 것 중 04 선택)
+]
+# 겹쳐 만드는 소리: (출력 이름, [(원본, pitch, 저역만 남길 Hz 또는 None, 세기, 시작 지연 s)])
+MIXES = [
+    ("pick_flesh", [("thud_276600.ogg", 0.7, 700, 1.0, 0.0),      # 몸에 맞는 둔탁음을 낮게·먹먹하게 — '퍽'
+                    ("flesh_321810.ogg", 1.0, None, 0.7, 0.0)]),  # 손으로 막는 소리 — 살 닿는 '탁'
 ]
 
 def decode(path):
@@ -32,8 +37,32 @@ def onsets(a, thresh, min_gap=0.25):
             i += 1
     return found
 
+def load_for_mix(path, pitch, lowpass):
+    af = f"asetrate={int(SR * pitch)},aresample={SR}" + (f",lowpass=f={lowpass}" if lowpass else "")
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(SR), "-af", af, "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    a = np.frombuffer(raw, dtype=np.float32).copy()
+    env = np.abs(a)
+    on = int(np.argmax(env > env.max() * 0.2))                       # 소리가 시작되는 곳에 맞춘다 — 겹칠 때 같은 순간에 나게
+    a = a[max(0, on - int(0.005 * SR)):][:int(1.2 * SR)]
+    return a / max(np.abs(a).max(), 1e-6)
+
+def write(path, clip):
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-", "-c:a", "libvorbis", "-q:a", "5", path],
+                   input=clip.astype(np.float32).tobytes(), check=True)
+
 def main(src):
     os.makedirs(OUT, exist_ok=True)
+    for out, parts in MIXES:
+        clips = [(load_for_mix(os.path.join(src, name), pitch, lp), gain, delay) for name, pitch, lp, gain, delay in parts]
+        n = max(int(d * SR) + len(c) for c, _, d in clips)
+        mix = np.zeros(n + int(0.05 * SR), np.float32)
+        for c, gain, delay in clips:
+            i = int(delay * SR)
+            mix[i:i + len(c)] += c * gain
+        mix /= max(np.abs(mix).max(), 1e-6) / 0.9
+        path = os.path.join(OUT, f"{out}_000.ogg")
+        write(path, mix)
+        print(f"  {os.path.basename(path)} {len(mix) / SR:.2f} s  rms {np.sqrt(np.mean(mix ** 2)):.3f}  (mix of {len(parts)})")
     for name, out, count, maxlen, thresh, gap, filt in CUTS:
         a = decode(os.path.join(src, name))
         on = onsets(a, thresh, gap)

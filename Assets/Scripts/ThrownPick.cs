@@ -17,6 +17,7 @@ public class ThrownPick : MonoBehaviour
 
     Rigidbody rb;
     float age, landAge;
+    bool hitBody;                                          // 괴물 몸에 맞고 떨어졌다 — 착지음은 안 낸다(몸에 맞는 소리가 묻힌다, 사용자 09-16)
 
     public bool Frozen => rb.isKinematic;                   // 착지 뒤 THROW_STUCK_S 지나 멈췄다 (검사가 기다린다)
 
@@ -41,6 +42,7 @@ public class ThrownPick : MonoBehaviour
         rb.linearVelocity = velocity;
         rb.angularVelocity = spin;
         landed = false;
+        hitBody = false;
         landedOn = "-";
         age = landAge = 0f;
     }
@@ -54,6 +56,7 @@ public class ThrownPick : MonoBehaviour
         {
             stalker.Hit(Tuning.STALKER_HIT_DMG, rb.linearVelocity.normalized);
             NoiseSound.I.Flesh(transform.position);
+            hitBody = true;
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
@@ -66,7 +69,7 @@ public class ThrownPick : MonoBehaviour
         landed = true;
         landPos = transform.position;
         Debug.Log($"THROWN landed {landPos} on {landedOn}");
-        NoiseBus.Make(landPos, Tuning.NOISE_PICK_LAND, "pick_land", player);
+        NoiseBus.Make(landPos, Tuning.NOISE_PICK_LAND, hitBody ? "pick_land_body" : "pick_land", player);   // _body 는 NoiseSound 가 소리를 안 낸다 (괴물은 이미 맞아서 소음을 안 듣는다)
     }
 
     void Update()

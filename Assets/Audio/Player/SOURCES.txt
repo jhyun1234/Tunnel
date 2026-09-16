@@ -5,6 +5,8 @@ Assets/Audio/Player — 플레이어가 내는 소리 (제안서 S1). 전부 Fre
 step_dirt_000~003.ogg   "Footsteps_On_Dirt.wav" — lzmraul — https://freesound.org/people/lzmraul/sounds/389454/ — 처음 4걸음을 한 걸음씩 자름
 step_crouch_000.ogg     "Boots Gravel Feet Slide 1_5" — Joao_Janz — https://freesound.org/people/Joao_Janz/sounds/504383/ — 1.2 s 통째로
 pick_land_000~001.ogg   "34 Wrench on concrete floor, indoor, 5 impacts.wav" — Bibow — https://freesound.org/people/Bibow/sounds/426848/ — 처음 두 번의 떨어짐(튄 소리 포함 1.4 s)
-pick_flesh_000.ogg      "Blocking Arm With Hand" — mmasonghi — https://freesound.org/people/mmasonghi/sounds/321810/ — 통째로. 곡괭이가 괴물 몸에 맞는 소리(후보 12개 중 사용자 선택 09-16)
+pick_flesh_000.ogg      두 소리를 겹쳐 만듦(cut_sounds.py MIXES) — 곡괭이가 괴물 몸에 맞는 소리. 단일 파일 후보 24개는 "타격감 없음"(사용자 09-16), 겹친 9개 중 04 선택
+                        "body_hit.wav" — insanity54 — https://freesound.org/people/insanity54/sounds/276600/ — 높낮이 0.7배, 700 Hz 위는 깎음, 세기 1.0
+                        "Blocking Arm With Hand" — mmasonghi — https://freesound.org/people/mmasonghi/sounds/321810/ — 그대로, 세기 0.7
 
 가공: mono 44.1 kHz, 최대값 0.9 로 맞춤, 끝 50 ms 페이드, OGG Vorbis q5. 음량은 Tuning.cs (STEP_VOLUME_*, LAND_VOLUME) 가 정한다.
