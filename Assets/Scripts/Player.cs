@@ -20,7 +20,8 @@ public class Player : MonoBehaviour
     float pitch;
     float eye = Tuning.EYE_HEIGHT;
     float shakeLeft, shakeAmount, shakeSpan;
-    float stepLeft;                        // 다음 발걸음까지 (Godot _step_left). 멈추면 0 — 다시 걸으면 바로 한 걸음
+    [System.NonSerialized] public float gait;   // 걸음 위상(라디안). π 마다 한 발이 땅에 닿는다 — 발소리와 곡괭이 흔들림이 이 하나를 같이 본다. 멈추면 0
+    bool wasMoving;
 
     public CharacterController Controller => cc;
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
@@ -112,20 +113,24 @@ public class Player : MonoBehaviour
         if ((cc.Move(velocity * dt) & CollisionFlags.Above) != 0 && velocity.y > 0f)
             velocity.y = 0f;
 
-        // 발소리: 땅에서 움직이는 동안 자세별 간격마다 소음 한 번 (Godot Player.gd). 소리는 NoiseSound 가 튼다
-        if (grounded && input != Vector2.zero)
+        // 발소리: 땅에서 움직이는 동안 걸음 위상이 π 를 지날 때마다(발이 땅에 닿는 순간) 소음 한 번 (Godot Player.gd 의 간격 = 자세별 STEP_INTERVAL).
+        // 곡괭이 흔들림(Pickaxe)이 같은 위상을 쓰므로 소리와 움직임이 맞는다 (사용자 09-16 "사운드 타이밍과 모션 타이밍이 안 맞는다"). 소리는 NoiseSound 가 튼다
+        bool moving = grounded && input != Vector2.zero;
+        if (moving)
         {
-            stepLeft -= dt;
-            if (stepLeft <= 0f)
+            float interval = stance == "crouch" ? Tuning.STEP_INTERVAL_CROUCH : stance == "run" ? Tuning.STEP_INTERVAL_RUN : Tuning.STEP_INTERVAL;
+            float prev = gait;
+            gait += dt * Mathf.PI / interval;
+            if (!wasMoving || Mathf.Floor(gait / Mathf.PI) > Mathf.Floor(prev / Mathf.PI))
             {
-                stepLeft = stance == "crouch" ? Tuning.STEP_INTERVAL_CROUCH : stance == "run" ? Tuning.STEP_INTERVAL_RUN : Tuning.STEP_INTERVAL;
                 float radius = stance == "crouch" ? Tuning.NOISE_STEP_CROUCH : stance == "run" ? Tuning.NOISE_STEP_RUN : Tuning.NOISE_STEP;
                 steps++;
                 NoiseBus.Make(transform.position, radius * stepNoiseMul, "step", this);
             }
         }
         else
-            stepLeft = 0f;
+            gait = 0f;
+        wasMoving = moving;
 
         Vector3 shake = Vector3.zero;
         if (shakeLeft > 0f)

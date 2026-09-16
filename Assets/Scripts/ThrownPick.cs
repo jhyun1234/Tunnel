@@ -53,6 +53,7 @@ public class ThrownPick : MonoBehaviour
         if (stalker != null)                                   // 날아가다 괴물에 닿음: 한 대와 같다. 튀지 않고 그 자리에 떨어진다
         {
             stalker.Hit(Tuning.STALKER_HIT_DMG, rb.linearVelocity.normalized);
+            NoiseSound.I.Flesh(transform.position);
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }

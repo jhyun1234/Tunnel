@@ -12,10 +12,12 @@ public class NoiseSound : MonoBehaviour
     public AudioClip[] stepClips;      // 걷기·달리기: 흙 발소리 4변주
     public AudioClip[] crouchClips;    // 숙이기: 발 끄는 소리
     public AudioClip[] landClips;      // 던진 곡괭이 착지: 쇠붙이가 바닥에
+    public AudioClip[] fleshClips;     // 곡괭이가 괴물 몸에 맞음 — 광물 캐는 소리와 달라야 한다 (사용자 09-16)
 
     [System.NonSerialized] public bool flat;          // 사보타주 flatsteps: 자세 무관 같은 음량
     [System.NonSerialized] public int maxRepeat;      // 검사: 같은 발소리 파일이 연달아 난 최대 횟수 (0 = 한 번도 안 겹침)
     [System.NonSerialized] public string lastClip = "-";
+    public static string last3D = "-";                  // 검사: 마지막에 튼 3D 소리 파일 이름
 
     AudioSource self;                  // 2D, 자기 소리
     int lastIdx = -1, repeat;
@@ -51,6 +53,9 @@ public class NoiseSound : MonoBehaviour
             Play3D(pos, Pick(landClips), Tuning.LAND_VOLUME, radius);
     }
 
+    // 곡괭이(휘두른 것·던진 것)가 괴물 몸에 닿았다. 소음은 아니다(NoiseBus 안 탐) — 소리만
+    public void Flesh(Vector3 at) => Play3D(at, Pick(fleshClips), Tuning.HIT_VOLUME, Tuning.NOISE_PICK);
+
     // 직전과 다른 변주를 고른다 — 같은 파일이 연달아 나면 기계 소리로 들린다
     AudioClip Pick(AudioClip[] clips)
     {
@@ -71,6 +76,7 @@ public class NoiseSound : MonoBehaviour
     {
         if (clip == null)
             return;
+        last3D = clip.name;
         var go = new GameObject("NoiseSound3D");
         go.transform.position = at;
         var src = go.AddComponent<AudioSource>();

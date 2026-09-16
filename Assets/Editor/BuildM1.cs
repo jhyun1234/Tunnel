@@ -56,10 +56,10 @@ public static class BuildM1
         AudioClip[] Clips(string prefix) => AssetDatabase.FindAssets("t:AudioClip", new[] { PlayerSoundDir })
             .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g)))
             .Where(c => c.name.StartsWith(prefix)).OrderBy(c => c.name).ToArray();
-        AudioClip[] stepClips = Clips("step_dirt"), crouchClips = Clips("step_crouch"), landClips = Clips("pick_land");
-        if (stepClips.Length < 4 || crouchClips.Length == 0 || landClips.Length == 0)
+        AudioClip[] stepClips = Clips("step_dirt"), crouchClips = Clips("step_crouch"), landClips = Clips("pick_land"), fleshClips = Clips("pick_flesh");
+        if (stepClips.Length < 4 || crouchClips.Length == 0 || landClips.Length == 0 || fleshClips.Length == 0)
         {
-            Debug.LogError($"{PlayerSoundDir} 에 step_dirt 4 · step_crouch · pick_land 가 없다 (tools/cut_sounds.py)");
+            Debug.LogError($"{PlayerSoundDir} 에 step_dirt 4 · step_crouch · pick_land · pick_flesh 가 없다 (tools/cut_sounds.py)");
             EditorApplication.Exit(5);
             return;
         }
@@ -311,6 +311,7 @@ public static class BuildM1
         noiseSound.stepClips = stepClips;
         noiseSound.crouchClips = crouchClips;
         noiseSound.landClips = landClips;
+        noiseSound.fleshClips = fleshClips;
         var miningHud = mining.AddComponent<MiningHud>();
         miningHud.player = p;
         miningHud.pickaxe = pickaxe;

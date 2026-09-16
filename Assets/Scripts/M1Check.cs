@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|stalker|chase|retreat|throw|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -124,6 +124,8 @@ public class M1Check : MonoBehaviour
             NoiseSound.I.flat = true;
         if (sabotage == "quietfeet")            // 발소리 반경 0 — 괴물이 발소리를 못 듣는(옛) 상태
             player.stepNoiseMul = 0f;
+        if (sabotage == "rockflesh")            // 괴물을 쳐도 광물 소리 — 구분이 안 되던(옛) 상태
+            NoiseSound.I.fleshClips = MiningFx.I.hitClips;
         if (sabotage == "noadapt")              // 눈 적응 없음 — 램프 끄면 검은 화면 그대로
             lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔
@@ -167,6 +169,7 @@ public class M1Check : MonoBehaviour
         lamp.lampOn = true;
         player.frozen = false;
         if (!pickaxe.hasPick) pickaxe.Return();
+        yield return new WaitForSeconds(2f);        // 앞 구간(던진 곡괭이 착지 1.4 s)의 소리 꼬리가 숙이기 측정에 섞였다 — 전체 실행에서만 FAIL (09-16)
 
         // ① 자세별 2.6 s 이동: 발소리 RMS 최대 · 소음 반경 · 걸음 수
         string[] names = { "crouch", "walk", "run" };
@@ -270,6 +273,21 @@ public class M1Check : MonoBehaviour
             yield return new WaitForSeconds(0.3f);
         }
         Check("stalker_hears_steps", earOk, earInfo);
+
+        // ④ 괴물을 곡괭이로 치면 광물 소리가 아니라 몸에 맞는 소리(pick_flesh)가 난다
+        lamp.lampOn = true;
+        Teleport(cc, P, 0f);
+        st.Teleport(P + Vector3.forward * 2.2f, 180f);
+        st.hp = Tuning.STALKER_HP;
+        st.hitsSeen = 0;
+        yield return null;
+        NoiseSound.last3D = "-";
+        var mouse = InputSystem.AddDevice<Mouse>("SoundMouse");
+        yield return Click(mouse);
+        yield return new WaitForSeconds(0.5f);
+        Check("stalker_hit_sound_is_flesh", st.hitsSeen >= 1 && NoiseSound.last3D.StartsWith("pick_flesh"), $"hits seen {st.hitsSeen}, last 3D sound '{NoiseSound.last3D}'");
+        InputSystem.RemoveDevice(mouse);
+        st.hp = Tuning.STALKER_HP;
         st.enabled = false;
         st.Teleport(st.homePos);
         lamp.lampOn = true;

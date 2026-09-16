@@ -150,7 +150,7 @@ public static class Tuning
     public const float HIT_BREAK_PITCH = 0.8f;     // 덩이가 빠지는 타격은 낮고 크게
     public const float HIT_MIN_DISTANCE = 2.0f;    // m, 이 안에서는 최대 음량
     public const float PICK_BOB_AMOUNT = 0.02f;    // m
-    public const float PICK_BOB_SPEED = 12.0f;     // rad/s
+    // PICK_BOB_SPEED 12 rad/s(Godot)는 지웠다 — 흔들림 위상은 Player.gait(π / 자세별 STEP_INTERVAL)라 발소리와 같은 박자 (사용자 09-16)
     // 소음. 반경 m
     public const float NOISE_PICK = 25.0f;         // 곡괭이가 포켓에 닿은 타격
     public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간

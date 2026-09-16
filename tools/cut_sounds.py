@@ -12,6 +12,7 @@ CUTS = [
     ("walk_389454.ogg", "step_dirt", 4, 0.55, 0.25, 0.25, "anull"),
     ("crouch_504383.ogg", "step_crouch", 1, 1.3, 0.15, 2.0, "anull"),   # 발 끄는 소리 1.2 s 통째로 (숙이기 간격 1.2 s 와 맞물린다)
     ("land_426848.ogg", "pick_land", 2, 1.4, 0.25, 1.0, "alimiter=level_in=2.5:limit=0.95:level=false"),
+    ("flesh_321810.ogg", "pick_flesh", 1, 0.6, 0.15, 2.0, "anull"),   # 곡괭이가 괴물 몸에 맞는 소리 (사용자 09-16: 광물 캐는 소리와 같으면 안 된다)
 ]
 
 def decode(path):

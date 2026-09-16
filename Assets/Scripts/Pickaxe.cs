@@ -27,7 +27,7 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public bool hasPick = true;
 
     static readonly RaycastHit[] Hits = new RaycastHit[16];
-    float cooldown, bob;
+    float cooldown;
     bool swinging;
 
     void Awake()
@@ -57,17 +57,11 @@ public class Pickaxe : MonoBehaviour
         }
         if (swinging || !hasPick)
             return;
-        // 걸을 때만 흔들린다. 서 있으면 멎는다
-        if (player.Speed < 0.2f)
-        {
-            bob = 0f;
+        // 걸을 때만 흔들린다. 서 있으면 멎는다. 위상은 Player.gait — 발이 땅에 닿는 순간(π 마다) 곡괭이가 맨 아래를 지난다 = 발소리와 같은 때
+        if (player.gait <= 0f)
             transform.localPosition = Vector3.Lerp(transform.localPosition, Tuning.PICK_POS, Mathf.Min(Time.deltaTime * 8f, 1f));
-        }
         else
-        {
-            bob += Time.deltaTime * Tuning.PICK_BOB_SPEED;
-            transform.localPosition = Tuning.PICK_POS + new Vector3(Mathf.Cos(bob), Mathf.Abs(Mathf.Sin(bob)), 0f) * Tuning.PICK_BOB_AMOUNT;
-        }
+            transform.localPosition = Tuning.PICK_POS + new Vector3(Mathf.Cos(player.gait), Mathf.Abs(Mathf.Sin(player.gait)), 0f) * Tuning.PICK_BOB_AMOUNT;
     }
 
     public bool HasTarget => Target(out _, out _, out _);   // 검사가 읽는다
@@ -136,7 +130,7 @@ public class Pickaxe : MonoBehaviour
         if (stalker != null)
         {
             stalker.Hit(Tuning.STALKER_HIT_DMG, cam.forward);
-            MiningFx.I.HitSound(hit.point, false);
+            NoiseSound.I.Flesh(hit.point);                             // 몸에 맞는 소리 — 광물 소리와 다르다
             player.Shake(Tuning.PICK_HIT_SHAKE_AMOUNT, Tuning.PICK_HIT_SHAKE_TIME);
             return;
         }
