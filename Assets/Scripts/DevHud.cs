@@ -49,7 +49,14 @@ public class DevHud : MonoBehaviour
         if (kb.equalsKey.wasPressedThisFrame) lamp.energy *= 1.25f;
         if (kb.minusKey.wasPressedThisFrame) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;
-        if (kb.digit0Key.wasPressedThisFrame && stalker != null) stalker.enabled = !stalker.enabled;
+        if ((kb.digit0Key.wasPressedThisFrame || kb.numpad0Key.wasPressedThisFrame) && stalker != null) stalker.enabled = !stalker.enabled;
+        // 9 = 판정용: 괴물 행동을 끄고 내 앞 2.5 m 에 나를 보게 세운다 (사용자 09-17 "계속 접근해서 확인할 수 없다"). 0 으로 다시 켠다
+        if ((kb.digit9Key.wasPressedThisFrame || kb.numpad9Key.wasPressedThisFrame) && stalker != null)
+        {
+            stalker.enabled = false;
+            Vector3 f = player.transform.forward; f.y = 0f; f.Normalize();
+            stalker.Teleport(player.transform.position + f * 2.5f, player.transform.eulerAngles.y + 180f);
+        }
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
         if (kb.digit2Key.wasPressedThisFrame) lamp.darkAdaptAmbient *= 1.25f;
         if (kb.digit3Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(-10f);   // 곡괭이 내구도 (UI-1a, 설계서 Step 6)
@@ -77,7 +84,7 @@ public class DevHud : MonoBehaviour
             return;
         string monster = stalker == null ? "" :
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
-            (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]" : "");
+            (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   [9] freeze monster in front of me · [0] on/off" : "");
         GUI.Label(new Rect(10, 10, 900, 120),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
