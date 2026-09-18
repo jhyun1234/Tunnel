@@ -66,11 +66,11 @@ public class DevHud : MonoBehaviour
         if (sa != null)
         {
             if (kb.nKey.wasPressedThisFrame && !stalker.enabled) { sa.manual = (sa.manual + 1) % StalkerAnim.ManualClips.Length; walkPreview = false; }
-            // U = 배회 걸음 A/B/C. 세운 괴물(9)이면 8 m 앞에서 배회 빠르기로 걸어오기를 되풀이한다 — 행동을 켜면 12 m 에서 나를 보고
+            // U = 배회 걸음 A/B/C/D. 세운 괴물(9)이면 8 m 앞에서 배회 빠르기로 걸어오기를 되풀이한다 — 행동을 켜면 12 m 에서 나를 보고
             // 바로 포효·추격이라 가까이서 배회 걸음을 볼 틈이 없다 (사용자 09-18 "U 를 눌렀을 때 적용이 안 된다")
             if (kb.uKey.wasPressedThisFrame)
             {
-                sa.gait = (sa.gait + 1) % 3;
+                sa.gait = (sa.gait + 1) % Tuning.STALKER_GAIT_COUNT;
                 if (!stalker.enabled && !walkPreview && previewOn) { walkPreview = true; PlaceAhead(Tuning.STALKER_PREVIEW_FROM_M); }
             }
         }

@@ -358,9 +358,9 @@ public static class BuildM1
     static RuntimeAnimatorController MakeStalkerAnimator()
     {
         var clips = AssetDatabase.LoadAllAssetsAtPath(MonsterPath).OfType<AnimationClip>().OrderBy(c => c.name).ToArray();
-        if (clips.Length != 14 || clips.All(c => c.name != Tuning.STALKER_MODEL_IDLE))
+        if (clips.Length != Tuning.STALKER_CLIP_COUNT || clips.All(c => c.name != Tuning.STALKER_MODEL_IDLE))
         {
-            Debug.LogError($"{MonsterPath} 클립이 14개가 아니거나 {Tuning.STALKER_MODEL_IDLE} 이 없다: {string.Join(", ", clips.Select(c => c.name))}");
+            Debug.LogError($"{MonsterPath} 클립이 {Tuning.STALKER_CLIP_COUNT}개가 아니거나 {Tuning.STALKER_MODEL_IDLE} 이 없다: {string.Join(", ", clips.Select(c => c.name))}");
             EditorApplication.Exit(6);
         }
         AssetDatabase.DeleteAsset(StalkerAnimPath);

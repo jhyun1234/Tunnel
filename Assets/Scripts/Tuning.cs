@@ -307,12 +307,18 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_WALK = 0.45f;     // walk_crouch
     public const float STALKER_CLIP_SPEED_RUN = 3.04f;      // run. stage5.log 3.01 → 게임 안 실측(-only anim "ANIM stride": 딛은 발 4.56 m/s ÷ 1.5)으로 고침 — 3.01 이면 발 미끄러짐 0.31 m/s
     public const float STALKER_CLIP_SPEED_CRAWL = 0.57f;    // crawl (벽타기)
+    public const float STALKER_CLIP_SPEED_KNUCKLE = 2.5f / 1.5f;   // walk_knuckle (3D-③b M1): blender/anim/walk_knuckle.py 가 배회 2.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 배회 배수 1.0
+    public const int STALKER_CLIP_COUNT = 15;               // GLB 동작 수 (3D-③b M1: 14 + walk_knuckle). BuildM1·검사가 대조한다
+    public const int STALKER_GAIT_COUNT = 4;                // 배회 걸음 안 A/B/C/D (U 키)
+    public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
+    public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)
     public const float STALKER_ANIM_RUN_ABOVE = 3.0f;       // m/s, 제안값. 이보다 빠르면 run (배회·수색 2.5 는 걷기, 철수 4.0 부터 달리기)
     public const float STALKER_ANIM_STILL = 0.3f;           // m/s, 이보다 느리면 멈춤 동작. 움직임 시작은 2배(0.6)부터 — 경계에서 깜빡이지 않게
     public const float STALKER_ANIM_FADE_S = 0.2f;          // s, 제안값. 두 동작을 겹쳐 넘기는 시간
     public const float STALKER_ANIM_FADE_FAST_S = 0.1f;     // s, 포효·스턴·잡기는 빨리 들어간다
     public const float STALKER_ROAR_START_S = 1.2f;         // s, roar(2.83 s) 중 들킴 1.0 s 동안 틀 구간의 시작 = 두 손이 가장 멀어지는 순간 1.70 s(-only anim 실측 09-18) − 0.5 s
-    // 배회 걸음 (걷기 빠르기 이하일 때): 0 = A 웅크려 걷기, 발 맞춤(약 3.7배) · 1 = B 달리기, 발 맞춤(약 0.56배) · 2 = C 웅크려 걷기 STALKER_WALK_RATE_CAP 배까지만(나머지는 미끄러짐). 사용자가 U 키로 고른다
+    // 배회 걸음 (걷기 빠르기 이하일 때): 0 = A 웅크려 걷기, 발 맞춤(약 3.7배) · 1 = B 달리기, 발 맞춤(약 0.56배) · 2 = C 웅크려 걷기 STALKER_WALK_RATE_CAP 배까지만(나머지는 미끄러짐)
+    // · 3 = D 새 걷기 walk_knuckle 네 점 걸음(배수 1.0, 3D-③b M1). 사용자가 U 키로 고른다 — 기본값은 판정 뒤에 바꾼다
     public const int STALKER_WANDER_GAIT = 0;
     public const float STALKER_WALK_RATE_CAP = 2.0f;
     public const float STALKER_PREVIEW_FROM_M = 8.0f;       // m, DevHud U 걸어오기 미리보기: 세운 괴물이 이 거리에서 출발해

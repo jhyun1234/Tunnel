@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -175,6 +175,8 @@ public class M1Check : MonoBehaviour
             sanim.tiltClimb = false;
         if (sabotage == "armsink" && sanim != null)      // 팔 들어 올리기 끔 — run·crawl 손가락이 바닥·벽 속 0.5 m
             sanim.clampArms = false;
+        if (sabotage == "oldwalk" && sanim != null)      // 3D-③b M1 전 상태: 걸음 D 가 옛 walk_crouch (×3.63 잔걸음)
+            sanim.oldWalk = true;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
@@ -1234,6 +1236,72 @@ public class M1Check : MonoBehaviour
         float walkRate = sa.Rate;
         yield return Sample("walk_crouch", 5f, () => st.state == Stalker.State.Wander);
 
+        // ①b 3D-③b M1 새 걷기 (배회 걸음 D = walk_knuckle): 배수 · 딛은 손발 미끄러짐 · 손 짚는 몫 · 팔 들기 0번 · 어깨 > 엉덩이 · 머리 꼭대기 · 머리 흔들림
+        Transform[] shoulders = { Bone("LeftArm"), Bone("RightArm") }, thighs = { Bone("LeftUpLeg"), Bone("RightUpLeg") };
+        Transform chest = Bone("Spine2"), headTop = Bone("HeadTop_End") ?? head;
+        var handTips = hands.Select(h => h.GetComponentsInChildren<Transform>()).ToArray();
+        int gPrev = sa.gait;
+        sa.gait = 3;
+        st.Teleport(new Vector3(0f, 0.1f, 25f), 180f);
+        t = 0f;
+        yield return new WaitForSeconds(0.5f);                       // 놓인 자리 멈춤(1.0 s) — 순간이동 전 걷던 빠르기가 식게
+        t = 0f;
+        while (!(sa.Current != Tuning.STALKER_MODEL_IDLE && sa.Speed > 2f) && t < 4f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(Tuning.STALKER_ANIM_FADE_S + 0.1f);
+        string kClip = sa.Current;
+        float kRate = sa.Rate, kSpeed = sa.Speed;
+        int liftPrev = sa.LiftCount, kLifts = 0, kFrames = 0;
+        float rawMin = 99f;
+        var kSlip = new List<float>();
+        int[] handOn = new int[2];
+        float shSum = 0f, hipSum = 0f, topMin = 99f;
+        var headYs = new List<float>(); var chestYs = new List<float>();
+        Vector3[] prevC = new Vector3[4];
+        bool kHave = false;
+        t = 0f;
+        while (t < 5f && st.state == Stalker.State.Wander)
+        {
+            yield return new WaitForEndOfFrame();
+            float dt = Time.deltaTime;
+            t += dt;
+            int liftNow = sa.LiftCount, liftD = liftNow - liftPrev;
+            liftPrev = liftNow;
+            if (sa.Current != kClip || anim.IsInTransition(0) || sa.Speed < 2f) { kHave = false; continue; }   // 멈춤과 섞이는 0.2 s 는 뺀다 — 안전망이 거기서 드는 건 옛 동작 몫
+            kLifts += liftD;
+            rawMin = Mathf.Min(rawMin, sa.ArmLowRaw[0], sa.ArmLowRaw[1]);
+            float floor = st.transform.position.y;
+            var c = new Vector3[4];
+            for (int i = 0; i < 2; i++)
+            {
+                c[i] = handTips[i].OrderBy(b => b.position.y).First().position;   // 손: 가장 낮은 발톱 끝
+                c[2 + i] = toes[i].position;
+                if (c[i].y - floor <= 0.05f) handOn[i]++;
+            }
+            if (kHave && dt > 0f)
+            {
+                var planted = Enumerable.Range(0, 4).Where(i => c[i].y - floor <= 0.06f).Select(i => Flat(c[i] - prevC[i]) / dt).ToList();
+                if (planted.Count > 0) kSlip.Add(planted.Min());                 // 딛은 손발 중 가장 덜 움직이는 것 — 걸을 땐 늘 하나는 서 있다
+            }
+            prevC = c;
+            kHave = true;
+            kFrames++;
+            shSum += (shoulders[0].position.y + shoulders[1].position.y) * 0.5f - floor;
+            hipSum += (thighs[0].position.y + thighs[1].position.y) * 0.5f - floor;
+            topMin = Mathf.Min(topMin, headTop.position.y - floor);
+            headYs.Add(head.position.y); chestYs.Add(chest.position.y);
+        }
+        sa.gait = gPrev;
+        float Sd(List<float> l) { if (l.Count == 0) return 0f; float m = l.Average(); return Mathf.Sqrt(l.Average(v => (v - m) * (v - m))); }
+        float kSlipMed = kSlip.Count > 0 ? kSlip.OrderBy(v => v).ElementAt(kSlip.Count / 2) : 99f;
+        float hand0 = kFrames > 0 ? handOn[0] / (float)kFrames : 0f, hand1 = kFrames > 0 ? handOn[1] / (float)kFrames : 0f;
+        float shAvg = kFrames > 0 ? shSum / kFrames : 0f, hipAvg = kFrames > 0 ? hipSum / kFrames : 0f;
+        Check("anim_knuckle_walk_clip_rate", kClip == "walk_knuckle" && Mathf.Abs(kRate - 1f) <= 0.1f,
+            $"wander gait D plays {kClip} x{kRate:F2} at {kSpeed:F2} m/s (want walk_knuckle x0.90–1.10)");
+        Check("anim_knuckle_walk_plants", kFrames >= 60 && kSlipMed <= Tuning.STALKER_FOOT_SLIP_MAX && Mathf.Min(hand0, hand1) >= Tuning.STALKER_HAND_PLANT_MIN && kLifts == 0,
+            $"{kFrames} frames: planted hand/foot moves {kSlipMed:F2} m/s (max {Tuning.STALKER_FOOT_SLIP_MAX}) · claw tips on floor L {hand0:P0} R {hand1:P0} (min {Tuning.STALKER_HAND_PLANT_MIN:P0}) · arm lifts {kLifts} in pure walk frames (want 0), {sa.LiftCount} in total, claw tip before lift lowest {rawMin:F3} m (lift below {Tuning.STALKER_ARM_FLOOR_MARGIN})");
+        Check("anim_knuckle_walk_shape", kFrames >= 60 && shAvg > hipAvg && topMin >= Tuning.STALKER_HEAD_TOP_MIN && Sd(headYs) <= 0.5f * Sd(chestYs) + 0.002f,
+            $"shoulders {shAvg:F2} m > hips {hipAvg:F2} m · head top lowest {topMin:F2} m (min {Tuning.STALKER_HEAD_TOP_MIN}) · head bob {Sd(headYs):F3} vs chest {Sd(chestYs):F3} m");
+
         // ② 들킴 → 포효, 1.0 s 뒤 추격 → run, 잡기 → attack_swipe. 플레이어는 서 있다
         lamp.lampOn = true;
         Vector3 P = new Vector3(0f, 0.1f, 8f);
@@ -1344,7 +1412,7 @@ public class M1Check : MonoBehaviour
             sa.freezeTime = false;
             yield return new WaitForSeconds(Tuning.STALKER_CLIMB_TILT_S + 0.2f);
             sa.freezeTime = true;
-            if (clip == "walk_crouch" || clip == "run" || clip == "crawl")
+            if (clip == "walk_crouch" || clip == "walk_knuckle" || clip == "run" || clip == "crawl")
             {
                 // 진단: 동작 1배일 때 바닥에 닿은 발끝이 모델 뒤쪽으로 가는 빠르기(게임 크기 m/s) = 원래 걸음 빠르기. 가장 낮은 뼈 높이도
                 float len = anim.runtimeAnimatorController.animationClips.First(c => c.name == clip).length;
@@ -1380,10 +1448,25 @@ public class M1Check : MonoBehaviour
             string c0 = clip;
             yield return Sheet($"21_anim_{clip}_sheet", 12, i => PlayAt(anim, c0, i / 12f));
         }
+        // ⑥b 3D-③b M1: 옛 걷기 / 새 걷기 나란히 — 같은 자리·같은 방향, 7 m 정면 · 2 m 옆, 한 주기 12장 (사용자가 비교한다)
+        foreach (var (clip, tag) in new[] { ("walk_crouch", "old"), ("walk_knuckle", "new") })
+        {
+            sa.manual = Array.IndexOf(StalkerAnim.ManualClips, clip);
+            sa.freezeTime = false;
+            st.Teleport(new Vector3(0f, 0.1f, 17f), 180f);
+            Teleport(cc, new Vector3(0f, 0.1f, 10f), 0f);
+            yield return new WaitForSeconds(Tuning.STALKER_ANIM_FADE_S + 0.2f);
+            sa.freezeTime = true;
+            string c0 = clip;
+            yield return Sheet($"22_walk_{tag}_7m_sheet", 12, i => PlayAt(anim, c0, i / 12f));
+            st.Teleport(new Vector3(0.8f, 0.1f, 20f), 0f);
+            Teleport(cc, new Vector3(-1.2f, 0.1f, 20f), 90f);
+            yield return Sheet($"22_walk_{tag}_2m_sheet", 12, i => PlayAt(anim, c0, i / 12f));
+        }
         sa.freezeTime = false;
         sa.manual = 0;
 
-        // ⑦ 판정 키 (사람 길 = 가상 키보드): 9 로 세우고 U → 8 m 에서 걸어오기, U 마다 배회 걸음 B → C → A 가 동작에 먹는다 (사용자 09-18 "U 가 적용 안 된다")
+        // ⑦ 판정 키 (사람 길 = 가상 키보드): 9 로 세우고 U → 8 m 에서 걸어오기, U 마다 배회 걸음 B → C → D → A 가 동작에 먹는다 (사용자 09-18 "U 가 적용 안 된다")
         var hud = GetComponent<DevHud>();
         var kb = InputSystem.AddDevice<Keyboard>("AnimKeyboard");
         hud.enabled = true;
@@ -1393,13 +1476,14 @@ public class M1Check : MonoBehaviour
         int g0 = sa.gait;
         var gaitSeen = new List<string>();
         bool gaitOk = true;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < Tuning.STALKER_GAIT_COUNT; i++)
         {
             yield return PressKey(kb, Key.U);
             yield return new WaitForSeconds(0.8f);
             gaitSeen.Add($"{StalkerAnim.GaitName(sa.gait)} = {sa.Current} x{sa.Rate:F2} at {sa.Speed:F1} m/s");
             gaitOk &= hud.walkPreview && sa.Speed > 2f && (sa.gait == 1 ? sa.Current == "run" && sa.Rate < 0.8f
                 : sa.gait == 2 ? sa.Current == "walk_crouch" && Mathf.Abs(sa.Rate - Tuning.STALKER_WALK_RATE_CAP) < 0.05f
+                : sa.gait == 3 ? sa.Current == "walk_knuckle" && Mathf.Abs(sa.Rate - 1f) < 0.2f
                 : sa.Current == "walk_crouch" && sa.Rate > 3f);
         }
         Check("anim_gait_key_walks_in", gaitOk && sa.gait == g0, string.Join(" · ", gaitSeen) + $", preview {hud.walkPreview}");
@@ -1588,8 +1672,8 @@ public class M1Check : MonoBehaviour
         int clipCount = anim != null && anim.runtimeAnimatorController != null ? anim.runtimeAnimatorController.animationClips.Length : 0;
         bool idle = anim != null && anim.GetCurrentAnimatorStateInfo(0).IsName(Tuning.STALKER_MODEL_IDLE);
         bool normals = skinMats.Count > 0 && skinMats.TrueForAll(m => m.GetTexture("normalTexture") != null);
-        Check("monster_model_animated_with_normals", modelOn && clipCount == 14 && idle && normals,
-            $"model {(model == null ? "none" : modelOn ? "on" : "off")}, clips {clipCount} (want 14), playing {Tuning.STALKER_MODEL_IDLE} {idle}, skin materials {skinMats.Count} with normal map {normals}");
+        Check("monster_model_animated_with_normals", modelOn && clipCount == Tuning.STALKER_CLIP_COUNT && idle && normals,
+            $"model {(model == null ? "none" : modelOn ? "on" : "off")}, clips {clipCount} (want {Tuning.STALKER_CLIP_COUNT}), playing {Tuning.STALKER_MODEL_IDLE} {idle}, skin materials {skinMats.Count} with normal map {normals}");
 
         var bodyR = modelOn ? model.GetComponentsInChildren<Renderer>() : st.GetComponentsInChildren<Renderer>();
         Vector3 P = new Vector3(0f, 0.1f, 3.5f);

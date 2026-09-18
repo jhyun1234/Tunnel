@@ -8,17 +8,19 @@ using UnityEngine;
 [DefaultExecutionOrder(100)]
 public class StalkerAnim : MonoBehaviour
 {
-    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "run", "roar", "hit", "crawl", "attack_swipe" };
+    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "run", "roar", "hit", "crawl", "attack_swipe" };
     [System.NonSerialized] public int gait = Tuning.STALKER_WANDER_GAIT;   // 배회 걸음 A/B/C (U 키)
     [System.NonSerialized] public int manual;                             // 행동 꺼짐일 때 트는 동작 (N 키)
     [System.NonSerialized] public bool rateMatch = true;                  // 사보타주 slide 가 끈다 (늘 1배)
     [System.NonSerialized] public bool tiltClimb = true;                  // 사보타주 uprightclimb 가 끈다 (벽타기 때 안 세움)
     [System.NonSerialized] public bool freezeTime;                        // 검사 연속 사진: 시간을 멈추고 검사가 자리를 정한다
+    [System.NonSerialized] public bool oldWalk;                           // 사보타주 oldwalk: 걸음 D 가 옛 walk_crouch 로 (3D-③b M1 전 상태)
+    public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
     public float Speed { get; private set; }                              // 잰 빠르기 m/s (벽타기는 위로 가는 것 포함)
     public float Tilt { get; private set; }                               // 0 = 서 있음, 1 = 벽에 붙음
-    public static string GaitName(int g) => g == 0 ? "A crouch-walk matched" : g == 1 ? "B slow run" : "C crouch-walk capped";
+    public static string GaitName(int g) => g == 0 ? "A crouch-walk matched" : g == 1 ? "B slow run" : g == 2 ? "C crouch-walk capped" : "D knuckle-walk (new)";
 
     Stalker st;
     Animator anim;
@@ -99,6 +101,11 @@ public class StalkerAnim : MonoBehaviour
             rate = Speed / (Tuning.STALKER_CLIP_SPEED_RUN * Tuning.STALKER_MODEL_SCALE);
             return "run";
         }
+        if (gait == 3 && !oldWalk)
+        {
+            rate = Speed / (Tuning.STALKER_CLIP_SPEED_KNUCKLE * Tuning.STALKER_MODEL_SCALE);   // 3D-③b M1: 두 손·두 발로 짚는 네 점 걸음
+            return "walk_knuckle";
+        }
         rate = Speed / (Tuning.STALKER_CLIP_SPEED_WALK * Tuning.STALKER_MODEL_SCALE);
         if (gait == 2) rate = Mathf.Min(rate, Tuning.STALKER_WALK_RATE_CAP);
         return "walk_crouch";
@@ -110,6 +117,7 @@ public class StalkerAnim : MonoBehaviour
     [System.NonSerialized] public bool clampArms = true;                  // 사보타주 armsink 가 끈다
     Transform[] arms, tips0, tips1;
     public readonly float[] ArmLow = new float[2];                         // 진단: 마지막으로 잰 손끝 높이 (모델 발바닥 면 위 m)
+    public readonly float[] ArmLowRaw = new float[2];                      // 진단: 팔 들기 전 손끝 높이 (게임 m)
 
     void LateUpdate()
     {
@@ -130,8 +138,10 @@ public class StalkerAnim : MonoBehaviour
             // 어깨→가장 깊은 손끝 방향을 위(모델 +y)로 세우는 축으로 STALKER_ARM_LIFT_STEP 씩 — 손끝 하나만 정확히 맞추는 회전은 다른 손끝을
             // 끌어내려 번갈아 뚫었다(09-18). 팔이 거의 수직으로 늘어졌으면 앞(+z, 벽타기에선 위쪽)으로 든다 — 옆으로 비틀려 90° 들어도 못 빠져나왔다
             ArmLow[side] = Lowest(tips, out Vector3 low);
+            ArmLowRaw[side] = ArmLow[side] * Tuning.STALKER_MODEL_SCALE;
             if (ArmLow[side] < floor)
             {
+                LiftCount++;
                 Vector3 dir = low - transform.InverseTransformPoint(arms[side].position);
                 Vector3 horiz = new Vector3(dir.x, 0f, dir.z);
                 if (horiz.magnitude < 0.3f * dir.magnitude) horiz = Vector3.forward;
