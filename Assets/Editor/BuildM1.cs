@@ -240,7 +240,13 @@ public static class BuildM1
         // 앞 표시 — 눈 두 개 (사용자 09-15 "캡슐이라 플레이어를 보는지 배회인지 판정이 안 선다"). 눈높이 STALKER_EYE_H, 몸 앞면
         // Unlit — 빛과 무관하게 늘 같은 밝기로 보인다 (램프를 꺼도 눈은 보인다). Lit + _EMISSION 은 빌드에서 변형이 빠져 검게 나왔다(09-15)
         // 3D-②b: 눈 구체 없음(사용자 09-17 "구체 두 개가 너무 잘 보인다"). 눈은 머리 그림의 발광(stage12 4b) — StalkerLook 이 세기를 넣는다
-        model.AddComponent<StalkerLook>();
+        var look = model.AddComponent<StalkerLook>();
+        look.scaleShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/ScaleNormal.shader");   // 요철 세기용 (glTFast 의 normalTexture_scale 이 URP 에서 안 먹는다)
+        if (look.scaleShader == null)
+        {
+            Debug.LogError("Assets/Shaders/ScaleNormal.shader 를 못 읽었다");
+            EditorApplication.Exit(8);
+        }
         var stalker = stalkerGo.AddComponent<Stalker>();
         stalker.player = player.transform;
         stalker.playerHead = head;

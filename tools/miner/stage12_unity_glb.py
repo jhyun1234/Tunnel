@@ -111,6 +111,106 @@ for s in body.material_slots:
 print("body slots", [s.material.name for s in body.material_slots])
 
 # ---------------------------------------------------------------- 4. 노멀 베이크 (고폴리 -> 게임 몸)
+# ---------------------------------------------------------------- 3b. 사타구니 표현 없애기 (사용자 09-18). 자리는 쉬는 자세 정면·옆 정사영 렌더에서 잰 것
+GROIN = dict(xmax=0.055, zlo=1.035, zhi=1.155, ymax=-0.035)   # m: 좌우 · 높이 · 앞면(y < ymax)
+def blur(a, r):
+    """상자 흐림 r 텍셀 (누적합)"""
+    if r <= 0:
+        return a
+    pad = np.pad(a, r, mode="wrap")
+    c = np.cumsum(np.cumsum(pad, 0), 1)
+    c = np.pad(c, ((1, 0), (1, 0)))
+    n = 2 * r + 1
+    return (c[n:, n:] - c[:-n, n:] - c[n:, :-n] + c[:-n, :-n]) / (n * n)
+
+GROIN_RING = {}
+GROIN_KEEP = 0.08   # 튀어나온 깊이를 이만큼만 남긴다 (8 cm -> 6 mm)
+def flatten_groin(o):
+    """그 부위에서 앞으로 튀어나온 정점만, 주변 앞면에 맞춘 곡면(2차식 y = f(x, z))까지 뒤로 민다. 곡면보다 안쪽인 정점은 안 건드린다
+    (09-18 첫 시도: 이웃 평균으로 펴니 안쪽 껍질까지 끌려가 구멍처럼 꺼졌다). 상자 가장자리 2 cm 는 서서히. 정점색 'groin' 에 자리를 남긴다"""
+    me = o.data; M = np.array(o.matrix_world); Mi = np.linalg.inv(M)
+    n = len(me.vertices)
+    co = np.empty(n * 3, np.float64); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
+    w = co @ M[:3, :3].T + M[:3, 3]
+    nrm = np.empty(n * 3, np.float64); me.vertices.foreach_get("normal", nrm); nrm = nrm.reshape(n, 3) @ M[:3, :3].T
+    x, y, z = w[:, 0], w[:, 1], w[:, 2]
+    box = (np.abs(x) < GROIN["xmax"]) & (z > GROIN["zlo"]) & (z < GROIN["zhi"]) & (y < GROIN["ymax"])
+    ring = (~box) & (np.abs(x) < GROIN["xmax"] + 0.05) & (z > GROIN["zlo"] - 0.04) & (z < GROIN["zhi"] + 0.04) & (y < -0.01) & (nrm[:, 1] < -0.3)
+    A = lambda xx, zz: np.stack([np.ones_like(xx), xx, zz, xx * xx, zz * zz, xx * zz], 1)
+    coef, *_ = np.linalg.lstsq(A(x[ring], z[ring]), y[ring], rcond=None)
+    fit = A(x, z) @ coef
+    edge = np.minimum.reduce([GROIN["xmax"] - np.abs(x), z - GROIN["zlo"], GROIN["zhi"] - z]) / 0.02
+    wgt = np.clip(edge, 0, 1); wgt = wgt * wgt * (3 - 2 * wgt)
+    push = box & (y < fit)                                   # 곡면보다 앞으로 나온 것만
+    # 곡면에 딱 붙이면 겉살과 속껍질(이 몸은 안쪽에 밝은 겹이 하나 더 있다)이 한 자리에 겹쳐 얼룩덜룩 비친다(09-18) → 나온 깊이를 8 % 로 줄여 겹 순서를 지킨다
+    dy = np.where(push, (fit - y) * (1.0 - GROIN_KEEP) * wgt, 0.0)
+    w2 = w.copy(); w2[:, 1] += dy
+    co2 = (w2 - M[:3, 3]) @ Mi[:3, :3].T
+    me.vertices.foreach_set("co", co2.ravel()); me.update()
+    attr = me.color_attributes.get("groin") or me.color_attributes.new("groin", "FLOAT_COLOR", "POINT")
+    col = np.zeros((n, 4), np.float32); col[:, 3] = 1.0; col[box, :3] = 1.0
+    attr.data.foreach_set("color", col.ravel())
+    print("groin %s: box verts %d  ring %d  pushed %d  max %.4f m  mean %.4f m" % (o.name, int(box.sum()), int(ring.sum()), int((dy > 0.001).sum()), dy.max(), dy[dy > 0.001].mean() if (dy > 0.001).any() else 0))
+    GROIN_RING[o.name] = np.where(ring)[0]
+    return int((dy > 0.001).sum()), float(dy.max())
+
+gb, gmax = flatten_groin(body)
+gh, _ = flatten_groin(hi)
+check(gb >= 50 and gmax > 0.005, "사타구니 자리 정점을 찾아 폈다 (몸 %d개, 최대 이동 %.3f m)" % (gb, gmax))
+
+# 색 그림에서 그 자리 가리개를 굽는다 (재질마다 UV 가 따로라 재질별로)
+scene.render.engine = "CYCLES"; scene.cycles.samples = 1; scene.cycles.device = "CPU"
+b = scene.render.bake; b.use_selected_to_active = False; b.margin = 4; b.use_clear = True
+groin_masks, real_mats, tmp = {}, [sl.material for sl in body.material_slots], []
+for sl in body.material_slots:
+    em = bpy.data.materials.new("groin_emit_" + sl.material.name); em.use_nodes = True
+    ent = em.node_tree; ent.nodes.clear()
+    eo = ent.nodes.new("ShaderNodeOutputMaterial"); ee = ent.nodes.new("ShaderNodeEmission"); ea = ent.nodes.new("ShaderNodeAttribute"); ea.attribute_name = "groin"
+    ent.links.new(ea.outputs["Color"], ee.inputs["Color"]); ent.links.new(ee.outputs["Emission"], eo.inputs["Surface"])
+    img = bpy.data.images.new("bake_groin_" + sl.material.name, BAKE_PX, BAKE_PX, alpha=False); img.colorspace_settings.name = "Non-Color"
+    tn = ent.nodes.new("ShaderNodeTexImage"); tn.image = img; ent.nodes.active = tn
+    tmp.append((sl.material.name, em, img)); sl.material = em
+bpy.ops.object.select_all(action="DESELECT"); body.select_set(True); bpy.context.view_layer.objects.active = body
+bpy.ops.object.bake(type="EMIT")
+for sl, real in zip(body.material_slots, real_mats):
+    sl.material = real
+orig_px = {}
+for nm, em, img in tmp:
+    mask = px(img)[..., 0].copy()
+    bpy.data.images.remove(img); bpy.data.materials.remove(em)
+    orig_px[nm] = src_px[nm].copy()
+    groin_masks[nm] = mask
+    frac = float((mask > 0.5).mean() * 100)
+    if frac == 0.0:
+        print("groin mask %s: none" % nm); continue
+    alb = src_px[nm][..., :3]
+    soft = np.clip(blur(np.clip(blur((mask > 0.5).astype(np.float64), 10) * 3.0, 0, 1), 6), 0, 1)      # 가장자리를 넉넉히 덮고 부드럽게
+    lum = 0.2126 * alb[..., 0] + 0.7152 * alb[..., 1] + 0.0722 * alb[..., 2]
+    # 색은 몸 위에서 둘러싼 정점(3D 고리)의 UV 자리에서 뽑는다 — 이 몸의 UV 는 조각조각이라 그림 위 이웃은 몸 위 이웃이 아니다
+    # (09-18: 그림 위 고리 중앙값·번지기 둘 다 엉뚱한 밝은 부위 색을 끌어와 밝은 얼룩이 됐다)
+    me = body.data; H, W = alb.shape[:2]
+    slot = [i for i, sl in enumerate(body.material_slots) if sl.material.name == nm][0]
+    nl = len(me.loops); lv = np.empty(nl, np.int64); me.loops.foreach_get("vertex_index", lv)
+    uv = np.empty(nl * 2, np.float64); me.uv_layers[0].data.foreach_get("uv", uv); uv = uv.reshape(nl, 2)
+    npoly = len(me.polygons); pm = np.empty(npoly, np.int64); me.polygons.foreach_get("material_index", pm)
+    ls = np.empty(npoly, np.int64); me.polygons.foreach_get("loop_start", ls); lt = np.empty(npoly, np.int64); me.polygons.foreach_get("loop_total", lt)
+    loop_mat = np.repeat(pm, lt)
+    in_ring = np.isin(lv, GROIN_RING[body.name]) & (loop_mat == slot)
+    px_y = np.clip((uv[in_ring, 1] * H).astype(int), 0, H - 1); px_x = np.clip((uv[in_ring, 0] * W).astype(int), 0, W - 1)
+    samples = alb[px_y, px_x]
+    samples = samples[(0.2126 * samples[:, 0] + 0.7152 * samples[:, 1] + 0.0722 * samples[:, 2]) > 0.03]
+    med = np.median(samples, axis=0)
+    grain = (blur(np.random.default_rng(7).random(alb.shape[:2]), 2) - 0.5) * 0.06             # 밋밋한 판이 안 되게 잔 얼룩 ±3 %
+    new = np.clip(med[None, None, :] * (1.0 + grain[..., None]), 0, 1)
+    print("groin colour: %d ring samples, median %s" % (len(samples), med.round(3)))
+    src_px[nm][..., :3] = alb * (1 - soft[..., None]) + new * soft[..., None]
+    groin_masks[nm] = soft
+    tag = "body" if nm == "살" else "head"
+    nt = new_mats[nm].node_tree; an = nt.nodes["albedo"]; old_img = an.image
+    an.image = new_png("skin_%s_albedo" % tag, src_px[nm], "sRGB"); bpy.data.images.remove(old_img)
+    print("groin mask %s: %.3f%% of texture, filled colour mean %s -> albedo repainted" % (nm, frac, med.round(3)))
+check(any((m > 0.5).any() for m in groin_masks.values()), "사타구니 자리의 색 그림을 주변 살 색으로 덮었다")
+
 hi_mat = bpy.data.materials.new("hi_plain"); hi_mat.use_nodes = True   # glTF 재질 그대로면 selected->active 가 0 픽셀 (5.2 함정)
 hi.data.materials.clear(); hi.data.materials.append(hi_mat)
 if not SKIP_NORMAL:
@@ -226,19 +326,25 @@ body = next(o for o in parts if o.name == "Miner_Body")
 
 # ---------------------------------------------------------------- 4b. 눈구멍 발광 그림 (3D-②b: 눈 구체 대신 눈구멍 면이 빛난다)
 # 재질 나누기(살/살_머리)는 해골과 안 맞는다(살_머리 정점이 온몸에 퍼져 있다, 09-17 실측) → 해골 자리는 정점 좌표로 잡는다: 맨 위 0.44 m (Unity 머리 상자 0.66/1.5)
-EYE_R = 0.025   # m (Blender, 게임 1.5배에서 3.75 cm)
+EYE_R = 0.020   # m (Blender). 눈구멍은 정면 렌더에서 폭 5.4 cm · 높이 4.4 cm
+# 눈구멍 가운데 = 해골 정면 정사영 렌더(1 px = 0.49 mm)에서 집은 자리 (09-18). 3D-②b 첫 식(머리 상자 가운데-20 %)은 상자에 헬멧이 들어 있어 광대뼈에 칠했다(사용자 "코뼈에 붙어 있다")
+EYE_XZ = [(-0.0474, 2.2473), (0.0479, 2.2459)]
+from mathutils.bvhtree import BVHTree
 allco = {o: np.array([[c.x, c.y, c.z] for c in (o.matrix_world @ v.co for v in o.data.vertices)]) for o in parts}
-top = max(c[:, 2].max() for c in allco.values())
-skull = np.concatenate([c[c[:, 2] > top - 0.44] for c in allco.values()])
-hlo, hhi = skull.min(0), skull.max(0); hc = (hlo + hhi) * 0.5; he = (hhi - hlo) * 0.5
-eye_pts = [Vector((hc[0] + sx * he[0] * 0.4, hlo[1] + he[1] * 0.15, hc[2] - he[2] * 0.2)) for sx in (-1, 1)]   # 앞면(-Y 쪽 15 %)·가운데 아래 20 %·좌우 ±40 %
-# 점이 얼굴 앞 허공에 뜬다(앞면 끝은 헬멧 챙·턱) → 가장 가까운 해골 정점에 붙인다
-snapped = []
-for pt in eye_pts:
-    d = np.linalg.norm(skull - np.array([pt.x, pt.y, pt.z]), axis=1); i = int(d.argmin())
-    snapped.append(Vector(skull[i])); print("eye point %s -> nearest skull vertex %s (%.3f m)" % (tuple(round(c, 3) for c in pt), tuple(skull[i].round(3)), d[i]))
-eye_pts = snapped
-print("skull box lo %s hi %s -> eye points %s" % (hlo.round(3), hhi.round(3), [tuple(round(c, 3) for c in p) for p in eye_pts]))
+dg = bpy.context.evaluated_depsgraph_get()
+eye_pts = []
+for ex, ez in EYE_XZ:
+    best = None
+    for o in parts:
+        inv = o.matrix_world.inverted()
+        hit = BVHTree.FromObject(o, dg).ray_cast(inv @ Vector((ex, -1.0, ez)), (inv.to_3x3() @ Vector((0, 1, 0))).normalized())
+        if hit[0] is not None:
+            w = o.matrix_world @ hit[0]
+            if best is None or w.y < best.y:
+                best = w
+    check(best is not None, "눈구멍 (%.3f, %.3f) 에서 얼굴 면을 찾았다" % (ex, ez))
+    eye_pts.append(best if best is not None else Vector((ex, 0, ez)))
+print("eye socket surface points", [tuple(round(c, 3) for c in p) for p in eye_pts])
 painted = {}
 for o in parts:
     attr = o.data.color_attributes.new("eye", "FLOAT_COLOR", "POINT")
@@ -246,8 +352,8 @@ for o in parts:
     vals = np.zeros(len(co))
     cnt = [0, 0]
     for k, pt in enumerate(eye_pts):
-        d = np.linalg.norm(co - np.array([pt.x, pt.y, pt.z]), axis=1)
-        m = d < EYE_R
+        d = np.hypot(co[:, 0] - pt.x, co[:, 2] - pt.z)                       # 정면에서 본 거리 — 홈 안쪽 면까지 칠한다
+        m = (d < EYE_R) & (co[:, 1] > pt.y - 0.012) & (co[:, 1] < pt.y + 0.04)   # 깊이: 닿은 면 앞 1.2 cm ~ 안쪽 4 cm
         vals = np.maximum(vals, np.where(m, 1.0 - (d / EYE_R) ** 2, 0.0)); cnt[k] = int(m.sum())
     for i, v in enumerate(vals):
         attr.data[i].color = (v, v, v, 1.0)
@@ -370,7 +476,8 @@ check(len(skins) >= 1 and all(n.get("skin") is not None for n in j["nodes"] if n
 for nm in SKIN_MATS:
     tag = "body" if nm == "살" else "head"
     re = bpy.data.images.load(os.path.join(TEX, "skin_%s_albedo.png" % tag))
-    d = float(np.abs(px(re)[..., :3] - src_px[nm][..., :3]).mean())
+    keep = groin_masks[nm] < 0.01                                         # 사타구니를 덮은 자리 밖은 원본 그대로여야 한다
+    d = float(np.abs(px(re)[..., :3] - orig_px[nm][..., :3])[keep].mean())
     check(d <= 1.0 / 255, "%s PNG 색이 원본 webp 와 같다 (평균 차 %.5f ≤ %.5f)" % (nm, d, 1 / 255))
 print("stage12 %s  fails=%d %s" % ("ALL PASS" if not fails else "FAIL", len(fails), fails))
 sys.exit(0 if not fails else 2)
