@@ -15,6 +15,9 @@ public class StalkerAnim : MonoBehaviour
     [System.NonSerialized] public bool tiltClimb = true;                  // 사보타주 uprightclimb 가 끈다 (벽타기 때 안 세움)
     [System.NonSerialized] public bool freezeTime;                        // 검사 연속 사진: 시간을 멈추고 검사가 자리를 정한다
     [System.NonSerialized] public bool oldWalk;                           // 사보타주 oldwalk: 걸음 D 가 옛 walk_crouch 로 (3D-③b M1 전 상태)
+    [System.NonSerialized] public bool straightFingers;                   // 사보타주 straightfingers: 손가락 마디를 쉬는 자세(곧음)로 되돌린다 (3D-③b M1b 전 상태)
+    Transform[] fingers;
+    Quaternion[] fingerRest;
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
@@ -35,6 +38,8 @@ public class StalkerAnim : MonoBehaviour
         basePos = transform.localPosition;
         baseRot = transform.localRotation;
         lastPos = st.transform.position;
+        fingers = System.Array.FindAll(GetComponentsInChildren<Transform>(), b => b.name.StartsWith("mixamorig:") && b.name.Contains("Hand") && "123".IndexOf(b.name[b.name.Length - 1]) >= 0);
+        fingerRest = System.Array.ConvertAll(fingers, b => b.localRotation);   // 동작이 돌기 전 = GLB 쉬는 자세
     }
 
     void Update()
@@ -121,6 +126,8 @@ public class StalkerAnim : MonoBehaviour
 
     void LateUpdate()
     {
+        if (straightFingers)
+            for (int i = 0; i < fingers.Length; i++) fingers[i].localRotation = fingerRest[i];
         if (!clampArms)
             return;
         if (arms == null)

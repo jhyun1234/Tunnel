@@ -310,6 +310,7 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_KNUCKLE = 2.5f / 1.5f;   // walk_knuckle (3D-③b M1): blender/anim/walk_knuckle.py 가 배회 2.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 배회 배수 1.0
     public const int STALKER_CLIP_COUNT = 15;               // GLB 동작 수 (3D-③b M1: 14 + walk_knuckle). BuildM1·검사가 대조한다
     public const int STALKER_GAIT_COUNT = 4;                // 배회 걸음 안 A/B/C/D (U 키)
+    public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)
     public const float STALKER_ANIM_RUN_ABOVE = 3.0f;       // m/s, 제안값. 이보다 빠르면 run (배회·수색 2.5 는 걷기, 철수 4.0 부터 달리기)

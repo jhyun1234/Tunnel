@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -177,6 +177,8 @@ public class M1Check : MonoBehaviour
             sanim.clampArms = false;
         if (sabotage == "oldwalk" && sanim != null)      // 3D-③b M1 전 상태: 걸음 D 가 옛 walk_crouch (×3.63 잔걸음)
             sanim.oldWalk = true;
+        if (sabotage == "straightfingers" && sanim != null)   // 3D-③b M1b 전 상태: 손가락 곧음
+            sanim.straightFingers = true;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
@@ -1256,6 +1258,11 @@ public class M1Check : MonoBehaviour
         int[] handOn = new int[2];
         float shSum = 0f, hipSum = 0f, topMin = 99f;
         var headYs = new List<float>(); var chestYs = new List<float>();
+        // 손가락 굽음: 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합)의 손마다 평균, 한 주기 최댓값 — Blender walk_knuckle.py chord() 와 같은 뼈 점·같은 평균
+        var fingerJoints = new[] { "Left", "Right" }.SelectMany(s => new[] { "Index", "Middle", "Ring", "Pinky" }
+            .Select(f => Enumerable.Range(1, 4).Select(i => Bone($"{s}Hand{f}{i}")).ToArray())).ToArray();
+        float chordMax = 0f;
+        var chordSum = new float[fingerJoints.Length]; var chordTop = new float[fingerJoints.Length];
         Vector3[] prevC = new Vector3[4];
         bool kHave = false;
         t = 0f;
@@ -1289,6 +1296,17 @@ public class M1Check : MonoBehaviour
             hipSum += (thighs[0].position.y + thighs[1].position.y) * 0.5f - floor;
             topMin = Mathf.Min(topMin, headTop.position.y - floor);
             headYs.Add(head.position.y); chestYs.Add(chest.position.y);
+            var handMean = new float[2];
+            for (int k = 0; k < fingerJoints.Length; k++)
+            {
+                var fj = fingerJoints[k];
+                if (fj.Any(b => b == null)) { handMean[k / 4] = 9f; continue; }
+                float segs = 0f;
+                for (int i = 0; i < 3; i++) segs += Vector3.Distance(fj[i].position, fj[i + 1].position);
+                float ch = Vector3.Distance(fj[0].position, fj[3].position) / segs;
+                handMean[k / 4] += ch / 4f; chordSum[k] += ch; chordTop[k] = Mathf.Max(chordTop[k], ch);
+            }
+            chordMax = Mathf.Max(chordMax, handMean[0], handMean[1]);
         }
         sa.gait = gPrev;
         float Sd(List<float> l) { if (l.Count == 0) return 0f; float m = l.Average(); return Mathf.Sqrt(l.Average(v => (v - m) * (v - m))); }
@@ -1301,6 +1319,9 @@ public class M1Check : MonoBehaviour
             $"{kFrames} frames: planted hand/foot moves {kSlipMed:F2} m/s (max {Tuning.STALKER_FOOT_SLIP_MAX}) · claw tips on floor L {hand0:P0} R {hand1:P0} (min {Tuning.STALKER_HAND_PLANT_MIN:P0}) · arm lifts {kLifts} in pure walk frames (want 0), {sa.LiftCount} in total, claw tip before lift lowest {rawMin:F3} m (lift below {Tuning.STALKER_ARM_FLOOR_MARGIN})");
         Check("anim_knuckle_walk_shape", kFrames >= 60 && shAvg > hipAvg && topMin >= Tuning.STALKER_HEAD_TOP_MIN && Sd(headYs) <= 0.5f * Sd(chestYs) + 0.002f,
             $"shoulders {shAvg:F2} m > hips {hipAvg:F2} m · head top lowest {topMin:F2} m (min {Tuning.STALKER_HEAD_TOP_MIN}) · head bob {Sd(headYs):F3} vs chest {Sd(chestYs):F3} m");
+
+        Check("anim_knuckle_walk_fingers", kFrames >= 60 && chordMax <= Tuning.STALKER_FINGER_CHORD_MAX,
+            $"fingers curled: per-hand mean of root-to-tip ÷ joint lengths, largest {chordMax:F3} (max {Tuning.STALKER_FINGER_CHORD_MAX}, straight ≈ 0.88) · per finger L/R Index Middle Ring Pinky avg {string.Join(" ", chordSum.Select(v => (v / Mathf.Max(1, kFrames)).ToString("F3")))} top {string.Join(" ", chordTop.Select(v => v.ToString("F3")))}");
 
         // ② 들킴 → 포효, 1.0 s 뒤 추격 → run, 잡기 → attack_swipe. 플레이어는 서 있다
         lamp.lampOn = true;
