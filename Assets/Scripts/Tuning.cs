@@ -270,7 +270,7 @@ public static class Tuning
     public const float STALKER_RETREAT_MIN_M = 8.0f;    // m, 철수 자리: 플레이어 램프 원뿔 안 8~14 m (교차 검토 승인 2026-09-15)
     public const float STALKER_RETREAT_MAX_M = 14.0f;
     public const float STALKER_REGEN_S = 90.0f;         // s, 제안값. 숨었다가 체력 100 으로 재등장 (층마다 −25 % 는 층이 생길 때)
-    public const float STALKER_SQUASH_S = 0.3f;         // s, Unity 전용: 맞으면 몸이 납작해지는 시간 (캡슐용 휘청 표시)
+    // STALKER_SQUASH_S(맞으면 몸 0.3 s 납작, 캡슐 시절 피격 표시)는 3D-③ 에서 지웠다 — 모델 전체를 고무처럼 찌그러뜨렸다. hit 동작이 대신한다 (사용자 승인 09-18)
     // ---- M6 곡괭이 던지기 (#34, 규칙 개정 4). Godot Tuning.gd 그대로. 설계서 v2 Step 4 "착지 소음은 유인" · Step 6 "던지기도 25 + 스턴" ----
     // m/s. Godot 14 → Unity(중력 9.81)에서 실측 8.9 m 는 "멀다"(사용자 09-15 M6 판정) → 사거리 6 m 가 되는 값. 감쇠 1.0 이라 거리는 속도에 비례하지 않는다 — 검사가 잰다
     public const float THROW_SPEED = 9.8f;
@@ -289,7 +289,7 @@ public static class Tuning
     // Unity 전용 (제안서 3D-①, 09-17): 괴물 모델 Assets/Tunnel/Monster/miner_rigged.glb (TRELLIS.2 몸 + Mixamo 동작 14개, stage12 로 노멀·PNG 구움)
     public const float STALKER_MODEL_SCALE = 1.5f;          // Godot MINER_SCALE (사용자 09-11 "1.0 은 안 무섭다")
     public const float STALKER_MODEL_YAW = 0f;              // 도. 모델 정면이 이동 방향(+Z)이 아니면 180
-    public const string STALKER_MODEL_IDLE = "idle_crouch"; // 3D-① 은 이 동작만 반복. 나머지 13개 연결은 3D-③
+    public const string STALKER_MODEL_IDLE = "idle_crouch"; // 멈춰 있을 때 동작. 행동 끄면(DevHud 0·9) 이것부터
     // 3D-② (09-17 판정 "구체 두 개가 눈구멍에 박혀 이질감"): 눈 = 눈구멍 속 작은 빛점. 지름 0.04(눈구멍 폭 0.08 의 절반), 안쪽으로 0.04 m
     // 3D-②b (09-17 판정 "구체 두 개가 너무 잘 보인다"): 눈 구체 없음. 머리 그림의 발광 그림(눈구멍 자리, stage12 4b)이 빛난다.
     // 아래 셋은 사용자가 실행 파일 DevHud 키로 찾는 값 — 7/8 요철 세기 · ,/. 거칠기 배율 · k/l 눈 발광 (StalkerLook.cs)
@@ -301,6 +301,25 @@ public static class Tuning
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
     // 7 m 보임 = 모델을 그렸을 때와 숨겼을 때 같은 화면 영역의 차이. 모델이 검댕처럼 어두워 밝기 자체(첫 실측 0.036)로는 바탕(0.05)과 못 가른다
     public const float STALKER_MODEL_CONTRAST_MIN_7M = 0.010f;   // 제안값: 밝기 차 ≥ 0.010 또는 구조(이웃 밝기 차×1000) 차 ≥ 3
+    // ---- 3D-③ 동작 연결 (제안서 docs/제안서_3D3_괴물_동작_연결.md, 승인 09-18). StalkerAnim.cs ----
+    // 동작 원래 걸음 빠르기 m/s (모델 크기 1.0). Blender stage5_merge.py 가 제자리로 만들기 전에 잰 값 — Documents/MineTunnel/blender/stage5.log "CLIP natural speed"
+    // 게임 괴물은 STALKER_MODEL_SCALE 배 크니 그만큼 빠르다. 재생 배수 = 실제 빠르기 ÷ (이 값 × 크기) 면 발이 안 미끄러진다
+    public const float STALKER_CLIP_SPEED_WALK = 0.45f;     // walk_crouch
+    public const float STALKER_CLIP_SPEED_RUN = 3.04f;      // run. stage5.log 3.01 → 게임 안 실측(-only anim "ANIM stride": 딛은 발 4.56 m/s ÷ 1.5)으로 고침 — 3.01 이면 발 미끄러짐 0.31 m/s
+    public const float STALKER_CLIP_SPEED_CRAWL = 0.57f;    // crawl (벽타기)
+    public const float STALKER_ANIM_RUN_ABOVE = 3.0f;       // m/s, 제안값. 이보다 빠르면 run (배회·수색 2.5 는 걷기, 철수 4.0 부터 달리기)
+    public const float STALKER_ANIM_STILL = 0.3f;           // m/s, 이보다 느리면 멈춤 동작. 움직임 시작은 2배(0.6)부터 — 경계에서 깜빡이지 않게
+    public const float STALKER_ANIM_FADE_S = 0.2f;          // s, 제안값. 두 동작을 겹쳐 넘기는 시간
+    public const float STALKER_ANIM_FADE_FAST_S = 0.1f;     // s, 포효·스턴·잡기는 빨리 들어간다
+    public const float STALKER_ROAR_START_S = 1.2f;         // s, roar(2.83 s) 중 들킴 1.0 s 동안 틀 구간의 시작 = 두 손이 가장 멀어지는 순간 1.70 s(-only anim 실측 09-18) − 0.5 s
+    // 배회 걸음 (걷기 빠르기 이하일 때): 0 = A 웅크려 걷기, 발 맞춤(약 3.7배) · 1 = B 달리기, 발 맞춤(약 0.56배) · 2 = C 웅크려 걷기 STALKER_WALK_RATE_CAP 배까지만(나머지는 미끄러짐). 사용자가 U 키로 고른다
+    public const int STALKER_WANDER_GAIT = 0;
+    public const float STALKER_WALK_RATE_CAP = 2.0f;
+    public const float STALKER_CLIMB_GAP = 0.05f;           // m, 벽타기 때 손발이 닿는 면과 벽 사이 (crawl 을 90° 세워 손발이 벽에)
+    public const float STALKER_CLIMB_TILT_S = 0.3f;         // s, 서 있다가 벽에 붙는(세워지는) 시간
+    public const float STALKER_ARM_FLOOR_MARGIN = 0.02f;   // m, 손끝이 발바닥 면(벽타기 땐 벽) 위로 이만큼은 떠 있게 — 팔째 들어 올린다 (StalkerAnim.LateUpdate)
+    public const float STALKER_ARM_LIFT_STEP = 3f;          // 도, 손끝이 면 아래면 어깨에서 이만큼씩 (최대 30번 = 90°) 들어 올린다
+    public const float STALKER_FOOT_SLIP_MAX = 0.4f;        // m/s. 걷기·달리기 중 딛은 발(두 발 중 느린 발)이 땅 위에서 움직이는 빠르기 중앙값 상한. 제안값 0.3 → 실측(09-18) 걷기 0.03 · 달리기 0.29~0.32 로 문턱에 걸려 흔들려 0.4. 사보타주 slide 는 1 m/s 넘게
 
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;

@@ -46,11 +46,10 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public float black;      // 잡힘 화면 검은 정도 0~1
 
     CharacterController cc;
-    Transform body;
     Renderer[] renderers;
-    Vector3 target, bodyScale, backDir;
+    Vector3 target, backDir;
     bool hasTarget, lightChase;
-    float pause, dwell, vy, stuck, alertLeft, unseen, catchT, stunLeft, squashLeft, investigateSpeed, retreatSide, noiseTime = -99f;
+    float pause, dwell, vy, stuck, alertLeft, unseen, catchT, stunLeft, investigateSpeed, retreatSide, noiseTime = -99f;
     readonly List<Vector3> spots = new List<Vector3>();
     readonly System.Random rng = new System.Random(Tuning.MAP_SEED + 200);
     static Texture2D blackTex;
@@ -62,8 +61,6 @@ public class Stalker : MonoBehaviour
     void Awake()
     {
         cc = GetComponent<CharacterController>();
-        body = transform.Find("Body");
-        bodyScale = body != null ? body.localScale : Vector3.one;
         renderers = GetComponentsInChildren<Renderer>();
     }
 
@@ -102,7 +99,6 @@ public class Stalker : MonoBehaviour
         hitsTaken++;
         bool retreating = state == State.Retreat;              // 사보타주 softretreat 때만 온다
         hp = Mathf.Max(0f, hp - dmg * dmgMul);
-        squashLeft = Tuning.STALKER_SQUASH_S;
         if (!retreating && hp <= retreatHp)
         {
             StartRetreat();
@@ -120,11 +116,6 @@ public class Stalker : MonoBehaviour
     void Update()
     {
         float dt = Time.deltaTime;
-        if (body != null)
-        {
-            squashLeft = Mathf.Max(0f, squashLeft - dt);
-            body.localScale = new Vector3(bodyScale.x, bodyScale.y * (squashLeft > 0f ? 0.85f : 1f), bodyScale.z);
-        }
         switch (state)
         {
             case State.Catch: UpdateCatch(dt); return;

@@ -11,8 +11,8 @@ using UnityEngine.Rendering.Universal;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|stalker|chase|retreat|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -166,6 +166,15 @@ public class M1Check : MonoBehaviour
         {
             var lk4 = stalker.GetComponentInChildren<StalkerLook>(); lk4.normalScale = 4f; lk4.Apply();
         }
+        var sanim = stalker.GetComponentInChildren<StalkerAnim>();
+        if (sabotage == "noanim" && sanim != null)       // 3D-③ 전 상태: 무엇을 하든 idle_crouch 하나
+            sanim.enabled = false;
+        if (sabotage == "slide" && sanim != null)        // 동작 빠르기를 늘 1배 — 발이 미끄러진다
+            sanim.rateMatch = false;
+        if (sabotage == "uprightclimb" && sanim != null) // 벽타기 때 몸을 안 세운다
+            sanim.tiltClimb = false;
+        if (sabotage == "armsink" && sanim != null)      // 팔 들어 올리기 끔 — run·crawl 손가락이 바닥·벽 속 0.5 m
+            sanim.clampArms = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
         {
             var lk = stalker.GetComponentInChildren<StalkerLook>(); lk.eyeEmission = 0f; lk.Apply();
@@ -192,6 +201,8 @@ public class M1Check : MonoBehaviour
             yield return ChaseStage(cc);
         if (only == "" || only == "retreat")
             yield return RetreatStage(cc);
+        if (only == "" || only == "anim")
+            yield return AnimStage(cc);
         if (only == "" || only == "throw")
             yield return ThrowStage(cc);
         if (only == "" || only == "pick")
@@ -1024,7 +1035,6 @@ public class M1Check : MonoBehaviour
         Vector3 S = new Vector3(0f, 0.1f, 20f);
         Vector3 fwd = Vector3.forward;
         Vector3 P = S - fwd * 1.6f;                                   // 남쪽 1.6 m 에서 북쪽(괴물)을 본다 — 1.0 m 밀린 뒤에도 사거리 3 m 안
-        var bodyT = st.transform.Find("Body");
         float t;
 
         // ① 1대: 체력 75, 1.5 s 멈춤(0.2 s 에 1.0 m 밀림, 나머지 서서 봄), 스턴 중 한 대 더는 안 먹힌다, 끝나면 추격
@@ -1042,9 +1052,8 @@ public class M1Check : MonoBehaviour
         t = 0f;
         while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
         float stunStart = Time.time;
-        yield return null;                                             // 납작해진 몸이 한 프레임 뒤에 보인다
+        yield return null;
         float hp1 = st.hp;
-        float squash = bodyT != null ? bodyT.localScale.y : -1f;
         Vector3 at = st.transform.position;
         yield return new WaitForSeconds(0.1f);                         // 첫 휘두르기(0.1 s)가 끝난 뒤
         yield return Click(mouse);                                     // 스턴 중 한 대 더 — 닿지만 안 먹혀야 한다
@@ -1055,8 +1064,9 @@ public class M1Check : MonoBehaviour
         while (st.state == Stalker.State.Stun && Time.time - stunStart < 3f) yield return null;
         float stunT = Time.time - stunStart;
         float back = Flat(st.transform.position - at);
-        Check("hit_damages_and_stuns", hp0 == Tuning.STALKER_HP && hp1 == hp0 - Tuning.STALKER_HIT_DMG && stunT > Tuning.STALKER_STUN_S - 0.2f && stunT < Tuning.STALKER_STUN_S + 0.3f && back > 0.6f && back < 1.4f && st.state == Stalker.State.Chase && squash < bodyT.localScale.y,
-            $"hp {hp0:0} → {hp1:0}, stun {stunT:F2} s (STALKER_STUN_S {Tuning.STALKER_STUN_S}), knocked {back:F2} m, then {st.state}, squash y {squash:F2}→{bodyT.localScale.y:F2}");
+        // 납작해지기(몸 0.3 s 세로 0.85배)는 3D-③ 에서 지웠다 — hit 동작이 대신한다(-only anim 이 본다)
+        Check("hit_damages_and_stuns", hp0 == Tuning.STALKER_HP && hp1 == hp0 - Tuning.STALKER_HIT_DMG && stunT > Tuning.STALKER_STUN_S - 0.2f && stunT < Tuning.STALKER_STUN_S + 0.3f && back > 0.6f && back < 1.4f && st.state == Stalker.State.Chase,
+            $"hp {hp0:0} → {hp1:0}, stun {stunT:F2} s (STALKER_STUN_S {Tuning.STALKER_STUN_S}), knocked {back:F2} m, then {st.state}");
         Check("hits_during_stun_ignored", st.hp == hp1 && taken == 1 && st.hitsTaken == 1 && st.hitsSeen == 2, $"hp {st.hp:0} after a 2nd swing during stun, swings landed {st.hitsSeen}, taken {st.hitsTaken}");
 
         // ② 2대째·3대째: 체력 50 → 25, 세 번째는 멈춤 없이 그 자리에서 철수
@@ -1134,6 +1144,279 @@ public class M1Check : MonoBehaviour
         Check("reappears_at_far_crack_full_hp", st.state == Stalker.State.Wander && st.hp == Tuning.STALKER_HP && shown && d2 > 15f && Mathf.Abs(d2 - far) < 1.5f,
             $"state {st.state}, hp {st.hp:0}, visible {shown}, {d2:F1} m from player (far crack {far:F1} m)");
         lamp.lampOn = true;
+    }
+
+    // 3D-③: 행동마다 맞는 동작 · 발 미끄러짐 · 벽타기 자세 · 손이 바닥·벽을 안 뚫음 · 포효 구간 · fps. 연속 사진 21_anim_*_sheet (4×3, 한 칸 480×270)
+    IEnumerator AnimStage(CharacterController cc)
+    {
+        var st = stalker;
+        var model = st.transform.Find("Body/Model");
+        var anim = model.GetComponent<Animator>();
+        var sa = model.GetComponent<StalkerAnim>();
+        var mouse = InputSystem.AddDevice<Mouse>("AnimMouse");
+        var bones = model.GetComponentsInChildren<Transform>().Where(b => b.name.StartsWith("mixamorig:")).ToArray();
+        Transform Bone(string n) => bones.FirstOrDefault(b => b.name == "mixamorig:" + n);
+        Transform hips = Bone("Hips"), head = Bone("Head");
+        var hands = new[] { Bone("LeftHand"), Bone("RightHand") };
+        var toes = new[] { Bone("LeftToeBase"), Bone("RightToeBase") };
+        if (hips == null || head == null || hands.Contains(null) || toes.Contains(null))
+        {
+            Check("anim_bones_found", false, $"{bones.Length} mixamorig bones, hips {hips != null} head {head != null} hands {!hands.Contains(null)} toes {!toes.Contains(null)}");
+            yield break;
+        }
+        bool Playing(string n) => anim.IsInTransition(0) ? anim.GetNextAnimatorStateInfo(0).IsName(n) : anim.GetCurrentAnimatorStateInfo(0).IsName(n);
+        var seen = new Dictionary<string, bool>();
+        float t;
+
+        // 걷기·달리기 표본: 프레임마다(그린 뒤라 뿌리와 뼈가 같은 순간) 두 발끝의 땅 위 빠르기 중 느린 쪽 = 딛고 있는 발.
+        // 걸을 땐 늘 한 발은 땅에 서 있다 — 느린 발도 움직이면 미끄러진다. "더 낮은 발"로 고르면 웅크려 걷기는 두 발이 다 낮아 흔드는 발이 섞였다(첫 실행 09-18)
+        // 손: 가장 낮은 높이·가장 바깥 x. 모든 뼈 중 가장 낮은 것(바닥 = 괴물 뿌리 높이, 손가락 끝까지)이 검사 잣대
+        var slip = new Dictionary<string, List<Vector2>>{ ["walk_crouch"] = new List<Vector2>(), ["run"] = new List<Vector2>() };
+        float handLow = 99f, handOut = 0f, boneLow = 99f;
+        string boneLowName = "-";
+        IEnumerator Sample(string clip, float seconds, Func<bool> go)
+        {
+            bool have = false;
+            Vector3 p0 = default, p1 = default;
+            float s = 0f;
+            while (s < seconds && go())
+            {
+                yield return new WaitForEndOfFrame();
+                float dt = Time.deltaTime;
+                s += dt;
+                if (!anim.GetCurrentAnimatorStateInfo(0).IsName(clip) || anim.IsInTransition(0)) { have = false; continue; }
+                float floor = st.transform.position.y;
+                if (have && dt > 0f)
+                {
+                    float v0 = Flat(toes[0].position - p0) / dt, v1 = Flat(toes[1].position - p1) / dt;
+                    int k = v0 <= v1 ? 0 : 1;
+                    slip[clip].Add(new Vector2(toes[k].position.y - floor, Mathf.Min(v0, v1)));
+                }
+                p0 = toes[0].position;
+                p1 = toes[1].position;
+                have = true;
+                foreach (var h in hands)
+                {
+                    handLow = Mathf.Min(handLow, h.position.y - floor);
+                    handOut = Mathf.Max(handOut, Mathf.Abs(h.position.x));
+                }
+                foreach (var b in bones)
+                    if (b.position.y - floor < boneLow) { boneLow = b.position.y - floor; boneLowName = $"{b.name} ({clip})"; }
+            }
+        }
+        // 느린 발이 땅에 닿은 프레임만(가장 낮은 높이 + 5 cm 안) 중앙값 — 달리기는 두 발이 다 뜬 순간이 있다
+        float SlipOf(string clip, out int n)
+        {
+            var l = slip[clip];
+            n = 0;
+            if (l.Count == 0) return 99f;
+            float minY = l.Min(v => v.x);
+            var g = l.Where(v => v.x <= minY + 0.05f).Select(v => v.y).OrderBy(v => v).ToList();
+            n = g.Count;
+            return n > 0 ? g[n / 2] : 99f;
+        }
+
+        // ① 배회: 놓인 자리에서 1.0 s 멈춤 = idle_crouch, 걸어가면 walk_crouch. 램프 끔(눈·빛이 안 끼게)
+        lamp.lampOn = false;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
+        Teleport(cc, new Vector3(0f, 0.1f, 3f), 0f);
+        player.frozen = false;
+        st.enabled = true;
+        st.Teleport(new Vector3(0f, 0.1f, 25f), 180f);
+        yield return new WaitForSeconds(0.6f);
+        seen["idle_crouch (wander pause)"] = Playing("idle_crouch");
+        t = 0f;
+        while (sa.Current != "walk_crouch" && t < 3f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(Tuning.STALKER_ANIM_FADE_S + 0.1f);
+        seen["walk_crouch (wander)"] = Playing("walk_crouch");
+        float walkRate = sa.Rate;
+        yield return Sample("walk_crouch", 5f, () => st.state == Stalker.State.Wander);
+
+        // ② 들킴 → 포효, 1.0 s 뒤 추격 → run, 잡기 → attack_swipe. 플레이어는 서 있다
+        lamp.lampOn = true;
+        Vector3 P = new Vector3(0f, 0.1f, 8f);
+        Teleport(cc, P, 0f);
+        st.Teleport(P + Vector3.forward * 10f, 180f);
+        t = 0f;
+        while (st.state != Stalker.State.Alert && t < 2f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(0.15f);
+        seen["roar (alert)"] = Playing("roar");
+        while (st.state == Stalker.State.Alert) yield return null;
+        yield return new WaitForSeconds(0.15f);
+        seen["run (chase)"] = Playing("run");
+        float chaseRate = sa.Rate;
+        yield return Sample("run", 3f, () => st.state == Stalker.State.Chase);
+        t = 0f;
+        while (st.state != Stalker.State.Catch && t < 3f) { t += Time.deltaTime; yield return null; }
+        yield return null;
+        yield return null;
+        seen["attack_swipe (catch)"] = Playing("attack_swipe");
+        int r0 = st.restarts;
+        t = 0f;
+        while (st.restarts == r0 && t < 5f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(Tuning.CATCH_FADE_OUT_S);
+
+        // ③ 스턴 → hit. 철수(체력 50 에서 한 대 = 25) → run, 벽타기 → crawl + 벽 자세
+        Vector3 S = new Vector3(0f, 0.1f, 20f);
+        Vector3 Pp = S - Vector3.forward * 1.6f;
+        st.Teleport(S, 180f);
+        st.hp = Tuning.STALKER_HP;
+        Teleport(cc, Pp, 0f);
+        player.frozen = false;
+        yield return null;
+        yield return Click(mouse);
+        t = 0f;
+        while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
+        yield return null;
+        yield return null;
+        seen["hit (stun)"] = Playing("hit");
+        while (st.state == Stalker.State.Stun) yield return null;
+        yield return new WaitForSeconds(0.7f);                      // 곡괭이가 다시 휘둘러지게
+        st.Teleport(S, 180f);
+        st.hp = Tuning.STALKER_RETREAT_HP + Tuning.STALKER_HIT_DMG - 5f;   // 한 대면 철수선 밑
+        Teleport(cc, Pp, 0f);
+        player.frozen = false;
+        yield return null;
+        yield return Click(mouse);
+        t = 0f;
+        while (st.state != Stalker.State.Retreat && t < 1f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(0.3f);
+        seen["run (retreat)"] = Playing("run");
+        yield return Sample("run", 5f, () => st.state == Stalker.State.Retreat);
+        t = 0f;
+        while (st.state != Stalker.State.Climb && t < 3f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(Tuning.STALKER_CLIMB_TILT_S + 0.3f);
+        seen["crawl (climb)"] = Playing("crawl");
+        float side = st.transform.position.x >= 0f ? 1f : -1f;
+        string pierceName = "-", pierceWhy = "";
+        float headAbove = 99f, pierce = -99f, nearest = 99f, climbRate = sa.Rate;
+        int climbFrames = 0;
+        bool shot = false;
+        while (st.state == Stalker.State.Climb)
+        {
+            yield return new WaitForEndOfFrame();
+            if (sa.Tilt < 0.99f && sa.tiltClimb) continue;
+            headAbove = Mathf.Min(headAbove, head.position.y - hips.position.y);
+            var ob = bones.OrderByDescending(b => b.position.x * side).First();
+            float outMost = ob.position.x * side;
+            if (outMost - Tuning.TUNNEL_WALL_X > pierce) { pierce = outMost - Tuning.TUNNEL_WALL_X; pierceName = ob.name; pierceWhy = $"root x {st.transform.position.x:F2} y {st.transform.position.y:F2}, model origin x {model.position.x:F2}, model up {model.up}, bone model-y {model.InverseTransformPoint(ob.position).y * Tuning.STALKER_MODEL_SCALE:F3}, tilt {sa.Tilt:F2}, clamp saw {sa.ArmLow[0]:F3}/{sa.ArmLow[1]:F3}"; }
+            nearest = Mathf.Min(nearest, Tuning.TUNNEL_WALL_X - outMost);
+            climbFrames++;
+            if (!shot && climbFrames == 20) { shot = true; StartCoroutine(Capture("21_anim_climb", _ => { })); }   // 플레이어 자리에서 본 벽타기
+        }
+        st.hiddenLeft = 0f;                                          // 숨은 채 두면 뒤 사진에 몸이 안 나온다 — 바로 나오게
+        t = 0f;
+        while (st.state == Stalker.State.Hidden && t < 2f) { t += Time.deltaTime; yield return null; }
+
+        Check("anim_state_to_clip", seen.Values.All(v => v) && seen.Count == 8,
+            string.Join(", ", seen.Select(kv => $"{kv.Key} {(kv.Value ? "ok" : "NO")}")) + $" (rates walk x{walkRate:F2} chase x{chaseRate:F2} climb x{climbRate:F2})");
+        float walkSlip = SlipOf("walk_crouch", out int nWalk), runSlip = SlipOf("run", out int nRun);
+        Check("anim_feet_do_not_slide", walkSlip <= Tuning.STALKER_FOOT_SLIP_MAX && runSlip <= Tuning.STALKER_FOOT_SLIP_MAX && nWalk >= 20 && nRun >= 20,
+            $"planted foot moves walk {walkSlip:F2} m/s ({nWalk} frames) · run {runSlip:F2} m/s ({nRun} frames) (max {Tuning.STALKER_FOOT_SLIP_MAX})");
+        Check("anim_climb_on_wall", climbFrames >= 10 && headAbove > 0.3f && pierce <= 0.02f && nearest <= 0.2f,
+            $"{climbFrames} frames, head above hips ≥ {headAbove:F2} m, deepest bone past wall {pierceName} {pierce:F2} m [{pierceWhy}], closest bone gap {nearest:F2} m");
+        Check("anim_hands_stay_in_tunnel", boneLow >= -0.05f && handOut <= Tuning.TUNNEL_WALL_X,
+            $"walk/run hands lowest {handLow:F2} m above floor, farthest |x| {handOut:F2} m (wall {Tuning.TUNNEL_WALL_X}); lowest bone {boneLowName} {boneLow:F2} m");
+
+        // ④ fps: 램프 켜고 괴물이 빛을 따라 걸어온다(눈만 잠시 0 — 12 m 에서 들켜 멈추지 않게). ⑤ 7 m 쯤을 걸어오는 연속 사진 0.1 s 간격
+        Teleport(cc, new Vector3(0f, 0.1f, 4f), 0f);
+        player.frozen = false;
+        st.eyeM = 0f;
+        st.Teleport(new Vector3(0f, 0.1f, 26f), 180f);
+        float fps = 0f;
+        yield return MeasureFps(2f, v => fps = v);
+        Check("anim_fps", fps >= MinFps, $"{fps:F0} fps while the monster walks toward the lamp");
+        t = 0f;
+        while (st.DistToPlayer > 9f && t < 10f) { t += Time.deltaTime; yield return null; }
+        yield return Sheet("21_anim_walk_in_sheet", 12, i => Wait(0.1f));
+        st.eyeM = Tuning.STALKER_EYE_M;
+
+        // ⑥ 행동 끄고 옆 3 m 에서 동작마다 한 바퀴 12장 (DevHud N 키와 같은 manual 길). 포효는 두 손이 가장 멀어지는 순간을 잰다
+        st.enabled = false;
+        st.Teleport(new Vector3(0.8f, 0.1f, 20f), 0f);
+        Teleport(cc, new Vector3(-2.2f, 0.1f, 20f), 90f);
+        float roarPeak = -1f, best = -1f;
+        foreach (string clip in StalkerAnim.ManualClips)
+        {
+            sa.manual = Array.IndexOf(StalkerAnim.ManualClips, clip);
+            sa.freezeTime = false;
+            yield return new WaitForSeconds(Tuning.STALKER_CLIMB_TILT_S + 0.2f);
+            sa.freezeTime = true;
+            if (clip == "walk_crouch" || clip == "run" || clip == "crawl")
+            {
+                // 진단: 동작 1배일 때 바닥에 닿은 발끝이 모델 뒤쪽으로 가는 빠르기(게임 크기 m/s) = 원래 걸음 빠르기. 가장 낮은 뼈 높이도
+                float len = anim.runtimeAnimatorController.animationClips.First(c => c.name == clip).length;
+                var smp = new List<Vector2>();
+                float lowest = 99f; string lowestName = "-";
+                Vector3 prevL = default; int prevI = -1;
+                for (int k = 0; k <= 120; k++)
+                {
+                    anim.Play(clip, 0, k / 120f);
+                    anim.Update(0f);
+                    Vector3 a = model.InverseTransformPoint(toes[0].position) * Tuning.STALKER_MODEL_SCALE, b = model.InverseTransformPoint(toes[1].position) * Tuning.STALKER_MODEL_SCALE;
+                    foreach (var bn in bones) { float by = model.InverseTransformPoint(bn.position).y * Tuning.STALKER_MODEL_SCALE; if (by < lowest) { lowest = by; lowestName = bn.name; } }
+                    int li = a.y <= b.y ? 0 : 1;
+                    Vector3 l = li == 0 ? a : b;
+                    if (li == prevI) smp.Add(new Vector2(l.y, -(l.z - prevL.z) / (len / 120f)));
+                    prevI = li; prevL = l;
+                }
+                float minY = smp.Min(v => v.x);
+                var pl = smp.Where(v => v.x <= minY + 0.05f).Select(v => v.y).ToList();
+                Debug.Log($"ANIM stride {clip}: planted toe backward {pl.Average():F2} m/s (median {pl.OrderBy(v => v).ElementAt(pl.Count / 2):F2}, {pl.Count} of {smp.Count} samples), toe min y {minY:F2}, lowest bone {lowestName} y {lowest:F2} (model space × {Tuning.STALKER_MODEL_SCALE})");
+            }
+            if (clip == "roar")
+            {
+                float len = anim.runtimeAnimatorController.animationClips.First(c => c.name == "roar").length;
+                for (float s = 0f; s <= len; s += 0.02f)
+                {
+                    anim.Play("roar", 0, s / len);
+                    anim.Update(0f);
+                    float d = Vector3.Distance(hands[0].position, hands[1].position);
+                    if (d > best) { best = d; roarPeak = s; }
+                }
+            }
+            string c0 = clip;
+            yield return Sheet($"21_anim_{clip}_sheet", 12, i => PlayAt(anim, c0, i / 12f));
+        }
+        sa.freezeTime = false;
+        sa.manual = 0;
+        Check("anim_roar_peak_in_alert", roarPeak >= Tuning.STALKER_ROAR_START_S && roarPeak <= Tuning.STALKER_ROAR_START_S + Tuning.STALKER_ALERT_S,
+            $"hands farthest apart ({best:F2} m) at {roarPeak:F2} s of roar; alert plays {Tuning.STALKER_ROAR_START_S:F2}–{Tuning.STALKER_ROAR_START_S + Tuning.STALKER_ALERT_S:F2} s");
+        st.enabled = true;
+        st.Teleport(new Vector3(0f, 0.1f, st.zMax));
+    }
+
+    static IEnumerator Wait(float s) { yield return new WaitForSeconds(s); }
+
+    static IEnumerator PlayAt(Animator a, string clip, float normalized)
+    {
+        a.Play(clip, 0, normalized);
+        yield return null;
+    }
+
+    // 화면을 count 번 찍어 4열 격자 한 장으로 (한 칸 = 화면 1/4 크기). step(i) 가 매 장 앞에서 자리·시간을 정한다
+    IEnumerator Sheet(string name, int count, Func<int, IEnumerator> step)
+    {
+        const int cols = 4;
+        int rows = (count + cols - 1) / cols;
+        int tw = Screen.width / 4, th = Screen.height / 4;
+        var sheet = new Texture2D(tw * cols, th * rows, TextureFormat.RGB24, false);
+        var tile = new Color32[tw * th];
+        for (int i = 0; i < count; i++)
+        {
+            yield return step(i);
+            yield return new WaitForEndOfFrame();
+            var tex = ScreenCapture.CaptureScreenshotAsTexture();
+            var src = tex.GetPixels32();
+            for (int y = 0; y < th; y++)
+                for (int x = 0; x < tw; x++)
+                    tile[y * tw + x] = src[Mathf.Min(y * 4, tex.height - 1) * tex.width + Mathf.Min(x * 4, tex.width - 1)];
+            Destroy(tex);
+            sheet.SetPixels32((i % cols) * tw, (rows - 1 - i / cols) * th, tw, th, tile);
+        }
+        sheet.Apply();
+        File.WriteAllBytes(Path.Combine(outDir, name + ".png"), sheet.EncodeToPNG());
+        Destroy(sheet);
     }
 
     // M4: 눈·빛·추격·잡기. 플레이어는 z 10 에서 +Z 를 본다. 괴물은 앞(+Z)이나 뒤(-Z)에 놓고 플레이어 쪽을 보게 한다

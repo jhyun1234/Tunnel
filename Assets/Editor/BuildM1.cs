@@ -219,18 +219,16 @@ public static class BuildM1
         scc.radius = Tuning.STALKER_R;
         scc.height = Tuning.STALKER_H;
         scc.center = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
-        // Body = 캡슐 크기의 빈 축. Stalker.cs 가 맞을 때 0.3 s 납작하게 하는 것이 이 축의 localScale 이라 남긴다 (M5 판정 통과한 피격 표시).
-        // 캡슐 렌더러(회갈색 자리표시, M3~UI-1 판정용)는 3D-① 에서 뗐다
+        // Body = 캡슐 가운데 높이의 빈 축, 크기 1. 캡슐 크기(비균등)였던 것은 3D-③ 에서 1 로 — 납작해지기를 지웠고(사용자 09-18),
+        // 비균등 부모 밑에서 모델을 벽타기로 90° 세우면 몸이 비스듬히 찌그러진다. 캡슐 렌더러(회갈색 자리표시)는 3D-① 에서 뗐다
         var body = new GameObject("Body");
         body.transform.SetParent(stalkerGo.transform);
         body.transform.localPosition = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
-        body.transform.localScale = new Vector3(Tuning.STALKER_R * 2f, Tuning.STALKER_H * 0.5f, Tuning.STALKER_R * 2f);
-        // 3D-①: 모델을 Body 밑에. Body 의 비균등 크기를 되돌려 모델은 STALKER_MODEL_SCALE 배 균등, 발이 괴물 뿌리(바닥)에 온다
+        // 3D-①: 모델을 Body 밑에, STALKER_MODEL_SCALE 배 균등, 발이 괴물 뿌리(바닥)에 온다. 자리·기울기는 StalkerAnim 이 벽타기 때 바꾼다
         var model = Instance(monster, body.transform);
         model.name = "Model";
-        var bs = body.transform.localScale;
-        model.transform.localScale = new Vector3(Tuning.STALKER_MODEL_SCALE / bs.x, Tuning.STALKER_MODEL_SCALE / bs.y, Tuning.STALKER_MODEL_SCALE / bs.z);
-        model.transform.localPosition = new Vector3(0f, -body.transform.localPosition.y / bs.y, 0f);
+        model.transform.localScale = Vector3.one * Tuning.STALKER_MODEL_SCALE;
+        model.transform.localPosition = new Vector3(0f, -body.transform.localPosition.y, 0f);
         model.transform.localRotation = Quaternion.Euler(0f, Tuning.STALKER_MODEL_YAW, 0f);
         var animator = model.GetComponent<Animator>() ?? model.AddComponent<Animator>();
         animator.runtimeAnimatorController = MakeStalkerAnimator();
@@ -240,6 +238,7 @@ public static class BuildM1
         // 앞 표시 — 눈 두 개 (사용자 09-15 "캡슐이라 플레이어를 보는지 배회인지 판정이 안 선다"). 눈높이 STALKER_EYE_H, 몸 앞면
         // Unlit — 빛과 무관하게 늘 같은 밝기로 보인다 (램프를 꺼도 눈은 보인다). Lit + _EMISSION 은 빌드에서 변형이 빠져 검게 나왔다(09-15)
         // 3D-②b: 눈 구체 없음(사용자 09-17 "구체 두 개가 너무 잘 보인다"). 눈은 머리 그림의 발광(stage12 4b) — StalkerLook 이 세기를 넣는다
+        model.AddComponent<StalkerAnim>();                           // 3D-③: 행동에 맞는 동작을 튼다 (Stalker 는 부모에서 찾는다)
         var look = model.AddComponent<StalkerLook>();
         look.scaleShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/ScaleNormal.shader");   // 요철 세기용 (glTFast 의 normalTexture_scale 이 URP 에서 안 먹는다)
         if (look.scaleShader == null)
