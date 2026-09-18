@@ -54,8 +54,7 @@ public class DevHud : MonoBehaviour
         if ((kb.digit9Key.wasPressedThisFrame || kb.numpad9Key.wasPressedThisFrame) && stalker != null)
         {
             stalker.enabled = false;
-            Vector3 f = player.transform.forward; f.y = 0f; f.Normalize();
-            stalker.Teleport(player.transform.position + f * 2.5f, player.transform.eulerAngles.y + 180f);
+            PlaceAhead(2.5f);
         }
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
         if (kb.digit2Key.wasPressedThisFrame) lamp.darkAdaptAmbient *= 1.25f;
@@ -66,8 +65,25 @@ public class DevHud : MonoBehaviour
         var sa = stalker != null ? stalker.GetComponentInChildren<StalkerAnim>() : null;   // 3D-③: 동작 판정 — 선 괴물의 동작을 차례로, 배회 걸음 안을 바꾼다
         if (sa != null)
         {
-            if (kb.nKey.wasPressedThisFrame && !stalker.enabled) sa.manual = (sa.manual + 1) % StalkerAnim.ManualClips.Length;
-            if (kb.uKey.wasPressedThisFrame) sa.gait = (sa.gait + 1) % 3;
+            if (kb.nKey.wasPressedThisFrame && !stalker.enabled) { sa.manual = (sa.manual + 1) % StalkerAnim.ManualClips.Length; walkPreview = false; }
+            // U = 배회 걸음 A/B/C. 세운 괴물(9)이면 8 m 앞에서 배회 빠르기로 걸어오기를 되풀이한다 — 행동을 켜면 12 m 에서 나를 보고
+            // 바로 포효·추격이라 가까이서 배회 걸음을 볼 틈이 없다 (사용자 09-18 "U 를 눌렀을 때 적용이 안 된다")
+            if (kb.uKey.wasPressedThisFrame)
+            {
+                sa.gait = (sa.gait + 1) % 3;
+                if (!stalker.enabled && !walkPreview && previewOn) { walkPreview = true; PlaceAhead(Tuning.STALKER_PREVIEW_FROM_M); }
+            }
+        }
+        if (walkPreview && (stalker == null || stalker.enabled || kb.digit9Key.wasPressedThisFrame || kb.numpad9Key.wasPressedThisFrame))
+            walkPreview = false;
+        if (walkPreview)
+        {
+            Vector3 to = player.transform.position - stalker.transform.position;
+            to.y = 0f;
+            if (to.magnitude <= Tuning.STALKER_PREVIEW_TO_M)
+                PlaceAhead(Tuning.STALKER_PREVIEW_FROM_M);
+            else
+                stalker.GetComponent<CharacterController>().Move((to.normalized * Tuning.STALKER_SPEED_WANDER + Vector3.down) * Time.deltaTime);
         }
         var look = stalker != null ? stalker.GetComponentInChildren<StalkerLook>() : null;   // 3D-②b: 살 요철·거칠기·눈 발광 — 사용자가 값을 찾는다
         if (look != null)
@@ -84,13 +100,23 @@ public class DevHud : MonoBehaviour
         }
     }
 
+    [System.NonSerialized] public bool walkPreview;        // U: 세운 괴물이 걸어오기를 되풀이 (검사도 본다)
+    [System.NonSerialized] public bool previewOn = true;   // 사보타주 nopreview 가 끈다 (고치기 전: U 가 세운 괴물에 안 먹던 상태)
+
+    // 괴물을 내 앞 m 에 나를 보게 세운다
+    void PlaceAhead(float m)
+    {
+        Vector3 f = player.transform.forward; f.y = 0f; f.Normalize();
+        stalker.Teleport(player.transform.position + f * m, player.transform.eulerAngles.y + 180f);
+    }
+
     void OnGUI()
     {
         if (!show || fog == null)
             return;
         string monster = stalker == null ? "" :
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
-            (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]" : "") +
+            (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]{(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
             (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   [9] freeze monster in front of me · [0] on/off" : "");
         GUI.Label(new Rect(10, 10, 900, 140),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +

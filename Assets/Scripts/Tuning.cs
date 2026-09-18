@@ -293,7 +293,7 @@ public static class Tuning
     // 3D-② (09-17 판정 "구체 두 개가 눈구멍에 박혀 이질감"): 눈 = 눈구멍 속 작은 빛점. 지름 0.04(눈구멍 폭 0.08 의 절반), 안쪽으로 0.04 m
     // 3D-②b (09-17 판정 "구체 두 개가 너무 잘 보인다"): 눈 구체 없음. 머리 그림의 발광 그림(눈구멍 자리, stage12 4b)이 빛난다.
     // 아래 셋은 사용자가 실행 파일 DevHud 키로 찾는 값 — 7/8 요철 세기 · ,/. 거칠기 배율 · k/l 눈 발광 (StalkerLook.cs)
-    public const float STALKER_SKIN_NORMAL_SCALE = 1.95f;   // 사용자가 7/8 키로 찾은 값 (09-18, 1.25^3). 시작값 1.0. glTFast 속성이 아니라 ScaleNormal.shader 로 적용한다
+    public const float STALKER_SKIN_NORMAL_SCALE = 1.56f;   // 사용자 지시(09-18 3D-③ 판정 중, 1.25^2). 전 값 1.95 (09-18, 7/8 키, 1.25^3). 시작값 1.0. glTFast 속성이 아니라 ScaleNormal.shader 로 적용한다
     public const float STALKER_SKIN_ROUGH_MUL = 0.6f;       // 사용자가 ,/. 키로 찾은 값 (09-18). 시작값 1.0
     public const float STALKER_EYE_EMISSION = 0.31f;        // 사용자가 k/l 키로 찾은 값 (09-18 재판정, 눈구멍 자리 고친 뒤). 0.08 은 발광이 광대뼈 넓은 얼룩일 때 값. 시작값 0.6
     public const float STALKER_RELIEF_MIN = 28f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 실측(09-17): 점토 상태 24.6 · flatskin 26.1 · 요철 그림 30.7 → 그 사이
@@ -315,6 +315,8 @@ public static class Tuning
     // 배회 걸음 (걷기 빠르기 이하일 때): 0 = A 웅크려 걷기, 발 맞춤(약 3.7배) · 1 = B 달리기, 발 맞춤(약 0.56배) · 2 = C 웅크려 걷기 STALKER_WALK_RATE_CAP 배까지만(나머지는 미끄러짐). 사용자가 U 키로 고른다
     public const int STALKER_WANDER_GAIT = 0;
     public const float STALKER_WALK_RATE_CAP = 2.0f;
+    public const float STALKER_PREVIEW_FROM_M = 8.0f;       // m, DevHud U 걸어오기 미리보기: 세운 괴물이 이 거리에서 출발해
+    public const float STALKER_PREVIEW_TO_M = 2.5f;         // m, 여기까지 오면 처음 자리로 (배회 빠르기 STALKER_SPEED_WANDER)
     public const float STALKER_CLIMB_GAP = 0.05f;           // m, 벽타기 때 손발이 닿는 면과 벽 사이 (crawl 을 90° 세워 손발이 벽에)
     public const float STALKER_CLIMB_TILT_S = 0.3f;         // s, 서 있다가 벽에 붙는(세워지는) 시간
     public const float STALKER_ARM_FLOOR_MARGIN = 0.02f;   // m, 손끝이 발바닥 면(벽타기 땐 벽) 위로 이만큼은 떠 있게 — 팔째 들어 올린다 (StalkerAnim.LateUpdate)

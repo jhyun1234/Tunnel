@@ -50,7 +50,9 @@ public class StalkerAnim : MonoBehaviour
         string clip;
         float rate = 1f, fade = Tuning.STALKER_ANIM_FADE_S, offset = 0f;
         bool wall = false;
-        if (!st.enabled)
+        if (!st.enabled && Speed > Tuning.STALKER_ANIM_STILL * 2f)
+            clip = Locomotion(out rate);                                  // 행동 꺼짐이어도 움직이면 걷기 (DevHud U 걸어오기 미리보기 — 배회 걸음 A/B/C 가 먹는다)
+        else if (!st.enabled)
         {
             clip = ManualClips[manual];
             wall = clip == "crawl";
@@ -65,19 +67,7 @@ public class StalkerAnim : MonoBehaviour
                 case Stalker.State.Hidden: clip = Current; break;           // 몸이 안 보인다
                 default:
                     moving = Speed > Tuning.STALKER_ANIM_STILL * (moving ? 1f : 2f);
-                    if (!moving)
-                        clip = Tuning.STALKER_MODEL_IDLE;
-                    else if (Speed > Tuning.STALKER_ANIM_RUN_ABOVE || gait == 1)
-                    {
-                        clip = "run";
-                        rate = Speed / (Tuning.STALKER_CLIP_SPEED_RUN * Tuning.STALKER_MODEL_SCALE);
-                    }
-                    else
-                    {
-                        clip = "walk_crouch";
-                        rate = Speed / (Tuning.STALKER_CLIP_SPEED_WALK * Tuning.STALKER_MODEL_SCALE);
-                        if (gait == 2) rate = Mathf.Min(rate, Tuning.STALKER_WALK_RATE_CAP);
-                    }
+                    clip = moving ? Locomotion(out rate) : Tuning.STALKER_MODEL_IDLE;
                     break;
             }
         if (!rateMatch) rate = 1f;
@@ -99,6 +89,19 @@ public class StalkerAnim : MonoBehaviour
             body.localRotation = Quaternion.identity;
         transform.localRotation = Quaternion.Euler(-90f * Tilt, 0f, 0f) * baseRot;
         transform.localPosition = basePos + Vector3.forward * ((Tuning.STALKER_R - Tuning.STALKER_CLIMB_GAP) * Tilt);
+    }
+
+    // 걷기·달리기 고르기: 걷기 빠르기 이하면 배회 걸음 안(gait)대로
+    string Locomotion(out float rate)
+    {
+        if (Speed > Tuning.STALKER_ANIM_RUN_ABOVE || gait == 1)
+        {
+            rate = Speed / (Tuning.STALKER_CLIP_SPEED_RUN * Tuning.STALKER_MODEL_SCALE);
+            return "run";
+        }
+        rate = Speed / (Tuning.STALKER_CLIP_SPEED_WALK * Tuning.STALKER_MODEL_SCALE);
+        if (gait == 2) rate = Mathf.Min(rate, Tuning.STALKER_WALK_RATE_CAP);
+        return "walk_crouch";
     }
 
     // 팔이 바닥(벽타기 땐 벽)을 뚫지 않게: 동작을 입힌 뒤 손끝이 모델 발바닥 면 아래면 어깨를 축으로 팔째 들어 올린다.

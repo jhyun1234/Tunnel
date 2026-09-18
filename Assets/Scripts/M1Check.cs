@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -175,6 +175,8 @@ public class M1Check : MonoBehaviour
             sanim.tiltClimb = false;
         if (sabotage == "armsink" && sanim != null)      // 팔 들어 올리기 끔 — run·crawl 손가락이 바닥·벽 속 0.5 m
             sanim.clampArms = false;
+        if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
+            hud.previewOn = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
         {
             var lk = stalker.GetComponentInChildren<StalkerLook>(); lk.eyeEmission = 0f; lk.Apply();
@@ -1380,6 +1382,29 @@ public class M1Check : MonoBehaviour
         }
         sa.freezeTime = false;
         sa.manual = 0;
+
+        // ⑦ 판정 키 (사람 길 = 가상 키보드): 9 로 세우고 U → 8 m 에서 걸어오기, U 마다 배회 걸음 B → C → A 가 동작에 먹는다 (사용자 09-18 "U 가 적용 안 된다")
+        var hud = GetComponent<DevHud>();
+        var kb = InputSystem.AddDevice<Keyboard>("AnimKeyboard");
+        hud.enabled = true;
+        Teleport(cc, new Vector3(0f, 0.1f, 6f), 0f);
+        yield return null;
+        yield return PressKey(kb, Key.Digit9);
+        int g0 = sa.gait;
+        var gaitSeen = new List<string>();
+        bool gaitOk = true;
+        for (int i = 0; i < 3; i++)
+        {
+            yield return PressKey(kb, Key.U);
+            yield return new WaitForSeconds(0.8f);
+            gaitSeen.Add($"{StalkerAnim.GaitName(sa.gait)} = {sa.Current} x{sa.Rate:F2} at {sa.Speed:F1} m/s");
+            gaitOk &= hud.walkPreview && sa.Speed > 2f && (sa.gait == 1 ? sa.Current == "run" && sa.Rate < 0.8f
+                : sa.gait == 2 ? sa.Current == "walk_crouch" && Mathf.Abs(sa.Rate - Tuning.STALKER_WALK_RATE_CAP) < 0.05f
+                : sa.Current == "walk_crouch" && sa.Rate > 3f);
+        }
+        Check("anim_gait_key_walks_in", gaitOk && sa.gait == g0, string.Join(" · ", gaitSeen) + $", preview {hud.walkPreview}");
+        yield return PressKey(kb, Key.Digit9);
+        hud.enabled = false;
         Check("anim_roar_peak_in_alert", roarPeak >= Tuning.STALKER_ROAR_START_S && roarPeak <= Tuning.STALKER_ROAR_START_S + Tuning.STALKER_ALERT_S,
             $"hands farthest apart ({best:F2} m) at {roarPeak:F2} s of roar; alert plays {Tuning.STALKER_ROAR_START_S:F2}–{Tuning.STALKER_ROAR_START_S + Tuning.STALKER_ALERT_S:F2} s");
         st.enabled = true;
