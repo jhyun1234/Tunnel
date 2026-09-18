@@ -310,6 +310,19 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_KNUCKLE = 2.5f / 1.5f;   // walk_knuckle (3D-③b M1): blender/anim/walk_knuckle.py 가 배회 2.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 배회 배수 1.0
     public const int STALKER_CLIP_COUNT = 15;               // GLB 동작 수 (3D-③b M1: 14 + walk_knuckle). BuildM1·검사가 대조한다
     public const int STALKER_GAIT_COUNT = 4;                // 배회 걸음 안 A/B/C/D (U 키)
+    // 턱 (3D-③b M1c, 제안서 docs/제안서_3D3b_M1c_턱_뼈.md, 승인 09-19). 각도는 제안값 — 판정 때 DevHud H/J 로 WIDE 를 찾는다.
+    // 레퍼런스 공통점: 평소 조금 벌어져 늘어짐 + 숨 / 덮치는 순간 사람보다 크게(사람 최대 32~39°) 확 / 추격 중 벌어짐
+    public const float STALKER_JAW_IDLE_DEG = 8f;           // 걷기·대기·벽타기
+    public const float STALKER_JAW_BREATH_DEG = 3f;         // 평소 ± 오르내림 (숨)
+    public const float STALKER_JAW_BREATH_S = 1.8f;         // 숨 한 번
+    public const float STALKER_JAW_CHASE_DEG = 20f;         // 달리기(추격·철수)
+    public const float STALKER_JAW_HIT_DEG = 25f;           // 곡괭이에 맞음 — 축 늘어짐 (지어낸 값, 출처 없음)
+    public const float STALKER_JAW_WIDE_DEG = 40f;          // 포효(들킴)·잡기
+    public const float STALKER_JAW_OPEN_S = 0.12f;          // 0 → WIDE 벌리는 시간 (확)
+    public const float STALKER_JAW_CLOSE_S = 0.4f;          // WIDE → 0 다무는 시간
+    public const float STALKER_JAW_SLIDE_FROM_DEG = 30f;    // 이 각도를 넘는 만큼 턱이 앞으로 미끄러진다 (사람 턱도 크게 벌리면 앞으로 나온다)
+    public const float STALKER_JAW_SLIDE_PER_DEG = 0.0015f; // m/도, 모델 크기 1 기준 (blender/rig/add_jaw.py 와 같은 값)
+    public const float STALKER_JAW_CHIN_DROP_MIN = 0.03f;   // 검사: 크게 벌렸을 때 턱 끝 ↔ 머리 꼭대기 거리가 평소보다 이만큼(게임 m) 이상 멀어진다 (제안값)
     public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)

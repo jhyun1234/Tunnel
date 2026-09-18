@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -179,6 +179,8 @@ public class M1Check : MonoBehaviour
             sanim.oldWalk = true;
         if (sabotage == "straightfingers" && sanim != null)   // 3D-③b M1b 전 상태: 손가락 곧음
             sanim.straightFingers = true;
+        if (sabotage == "shutjaw" && sanim != null)      // 3D-③b M1c 전 상태: 턱이 안 움직인다
+            sanim.driveJaw = false;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
@@ -1173,6 +1175,20 @@ public class M1Check : MonoBehaviour
         bool Playing(string n) => anim.IsInTransition(0) ? anim.GetNextAnimatorStateInfo(0).IsName(n) : anim.GetCurrentAnimatorStateInfo(0).IsName(n);
         var seen = new Dictionary<string, bool>();
         float t;
+        // 3D-③b M1c 턱: 행동 내내 프레임마다 (상태, 동작, 턱 각도, 턱 끝 ↔ 머리 꼭대기 거리) 적기 — ② 뒤에 검사
+        Transform jawTip = Bone("JawTip"), jawTop = Bone("HeadTop_End");
+        var jawLog = new List<(Stalker.State s, string clip, float deg, float chin, float time)>();
+        bool jawOn = jawTip != null && jawTop != null;
+        IEnumerator JawWatch()
+        {
+            while (jawOn)
+            {
+                yield return new WaitForEndOfFrame();
+                jawLog.Add((st.state, sa.Current, sa.JawDeg, Vector3.Distance(jawTip.position, jawTop.position), Time.time));
+            }
+        }
+        if (jawOn) StartCoroutine(JawWatch());
+        else Check("anim_jaw_bone", false, $"JawTip {jawTip != null} HeadTop_End {jawTop != null} — GLB 에 턱 뼈가 없다");
 
         // 걷기·달리기 표본: 프레임마다(그린 뒤라 뿌리와 뼈가 같은 순간) 두 발끝의 땅 위 빠르기 중 느린 쪽 = 딛고 있는 발.
         // 걸을 땐 늘 한 발은 땅에 서 있다 — 느린 발도 움직이면 미끄러진다. "더 낮은 발"로 고르면 웅크려 걷기는 두 발이 다 낮아 흔드는 발이 섞였다(첫 실행 09-18)
@@ -1409,6 +1425,36 @@ public class M1Check : MonoBehaviour
         Check("anim_hands_stay_in_tunnel", boneLow >= -0.05f && handOut <= Tuning.TUNNEL_WALL_X,
             $"walk/run hands lowest {handLow:F2} m above floor, farthest |x| {handOut:F2} m (wall {Tuning.TUNNEL_WALL_X}); lowest bone {boneLowName} {boneLow:F2} m");
 
+        if (jawOn)
+        {
+            jawOn = false;
+            // 배회 = 걷기·대기 동작이 STALKER_JAW_CLOSE_S + 0.1 s 넘게 이어진 뒤만 (잡기 뒤 다시 배회할 때 40° 에서 다무는 0.4 s 는 뺀다)
+            var wan = new List<(Stalker.State s, string clip, float deg, float chin, float time)>();
+            float calmSince = jawLog.Count > 0 ? jawLog[0].time : 0f;
+            foreach (var j in jawLog)
+            {
+                bool calm = j.s == Stalker.State.Wander && (j.clip == "walk_crouch" || j.clip == "walk_knuckle" || j.clip == "idle_crouch");
+                if (!calm) calmSince = float.MaxValue;
+                else if (calmSince == float.MaxValue) calmSince = j.time;
+                if (calm && j.time > calmSince + Tuning.STALKER_JAW_CLOSE_S + 0.1f && j.time > jawLog[0].time + 1f) wan.Add(j);
+            }
+            var al = jawLog.Where(j => j.s == Stalker.State.Alert).ToList();
+            var ca = jawLog.Where(j => j.s == Stalker.State.Catch).ToList();
+            float chase0 = jawLog.FirstOrDefault(j => j.s == Stalker.State.Chase).time;
+            var ch = jawLog.Where(j => j.s == Stalker.State.Chase && j.clip == "run" && j.time > chase0 + 0.5f).ToList();
+            float wMin = wan.Count > 0 ? wan.Min(j => j.deg) : -1f, wMax = wan.Count > 0 ? wan.Max(j => j.deg) : -1f;
+            float aMax = al.Count > 0 ? al.Max(j => j.deg) : -1f, cMax = ca.Count > 0 ? ca.Max(j => j.deg) : -1f, chAvg = ch.Count > 0 ? ch.Average(j => j.deg) : -1f;
+            var a30 = al.FirstOrDefault(j => j.deg >= 30f);
+            float snap = al.Count > 0 && a30.clip != null ? a30.time - al[0].time : 99f;
+            Check("anim_jaw_follows_behavior", wan.Count >= 30 && wMin >= 5f - 0.01f && wMax <= 12f && aMax >= 35f && cMax >= 35f && chAvg >= 15f && chAvg <= 25f,
+                $"jaw wander {wMin:F1}–{wMax:F1}° ({wan.Count} frames, want 5–12) · alert max {aMax:F1}° · catch max {cMax:F1}° (want ≥ 35) · chase avg {chAvg:F1}° ({ch.Count} frames, want 15–25)");
+            Check("anim_jaw_snaps_open_on_alert", snap <= 0.2f, $"jaw passes 30° {snap:F2} s after alert starts (max 0.2)");
+            float chinIdle = wan.Count > 0 ? wan.OrderBy(j => j.chin).ElementAt(wan.Count / 2).chin : 0f;
+            var wide = al.Concat(ca).OrderByDescending(j => j.deg).FirstOrDefault();
+            Check("anim_jaw_chin_drops", wide.clip != null && wide.chin - chinIdle >= Tuning.STALKER_JAW_CHIN_DROP_MIN,
+                $"chin ↔ head top {chinIdle:F3} m while wandering → {wide.chin:F3} m at {wide.deg:F0}° ({wide.clip}) = +{wide.chin - chinIdle:F3} m (min {Tuning.STALKER_JAW_CHIN_DROP_MIN}) — minus means the jaw turned the wrong way");
+        }
+
         // ④ fps: 램프 켜고 괴물이 빛을 따라 걸어온다(눈만 잠시 0 — 12 m 에서 들켜 멈추지 않게). ⑤ 7 m 쯤을 걸어오는 연속 사진 0.1 s 간격
         Teleport(cc, new Vector3(0f, 0.1f, 4f), 0f);
         player.frozen = false;
@@ -1483,6 +1529,33 @@ public class M1Check : MonoBehaviour
             st.Teleport(new Vector3(0.8f, 0.1f, 20f), 0f);
             Teleport(cc, new Vector3(-1.2f, 0.1f, 20f), 90f);
             yield return Sheet($"22_walk_{tag}_2m_sheet", 12, i => PlayAt(anim, c0, i / 12f));
+        }
+        // ⑥c 3D-③b M1c 턱: 3.5 m 정면 · 3.1 m 옆(갱도 폭 안) — 대기 / 포효(두 손 가장 멀 때) / 잡기 가운데 + 7 m 포효 정면 (사용자가 본다). 2 m 는 머리가 화면 위로 잘렸다(09-19)
+        if (jawTip != null)
+        {
+            lamp.lampOn = true;
+            float roarLen = anim.runtimeAnimatorController.animationClips.First(c => c.name == "roar").length;
+            foreach (var (clip, tag, at) in new[] { ("idle_crouch", "idle", 0.3f), ("roar", "roar", Mathf.Clamp01(roarPeak / roarLen)), ("attack_swipe", "catch", 0.5f) })
+            {
+                sa.manual = Array.IndexOf(StalkerAnim.ManualClips, clip);
+                sa.freezeTime = false;
+                st.Teleport(new Vector3(0f, 0.1f, 20f), 180f);
+                Teleport(cc, new Vector3(0f, 0.1f, 16.5f), 0f);
+                yield return new WaitForSeconds(Tuning.STALKER_ANIM_FADE_S + 0.3f);
+                sa.freezeTime = true;
+                anim.Play(clip, 0, at);
+                yield return null;
+                yield return Capture($"25_jaw_{tag}_front_3.5m", _ => { });
+                st.Teleport(new Vector3(0.8f, 0.1f, 20f), 180f);
+                Teleport(cc, new Vector3(-2.3f, 0.1f, 20f), 90f);
+                yield return Capture($"25_jaw_{tag}_side_3.1m", _ => { });
+                if (tag == "roar")
+                {
+                    Teleport(cc, new Vector3(0f, 0.1f, 13f), 0f);
+                    yield return Capture("25_jaw_roar_7m", _ => { });
+                }
+                Debug.Log($"ANIM jaw capture {tag}: {sa.Current} jaw {sa.JawDeg:F1}°");
+            }
         }
         sa.freezeTime = false;
         sa.manual = 0;

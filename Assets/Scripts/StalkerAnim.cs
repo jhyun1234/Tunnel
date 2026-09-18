@@ -18,6 +18,14 @@ public class StalkerAnim : MonoBehaviour
     [System.NonSerialized] public bool straightFingers;                   // 사보타주 straightfingers: 손가락 마디를 쉬는 자세(곧음)로 되돌린다 (3D-③b M1b 전 상태)
     Transform[] fingers;
     Quaternion[] fingerRest;
+    // 턱 (3D-③b M1c): 동작 이름 → 벌림 각도. 동작 파일엔 턱 키가 없다(walk_knuckle 은 쉬는 자세 키) — LateUpdate 에서 덮는다
+    [System.NonSerialized] public bool driveJaw = true;                   // 사보타주 shutjaw 가 끈다
+    [System.NonSerialized] public float jawWideDeg = Tuning.STALKER_JAW_WIDE_DEG;   // DevHud H/J
+    public float JawDeg { get; private set; }
+    Transform jaw;
+    Quaternion jawRest;
+    Vector3 jawRestPos, jawAxis;                                          // jawAxis = 머리 뼈 공간의 좌우 축 (모델 오른쪽)
+    float jawT;
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
@@ -40,6 +48,13 @@ public class StalkerAnim : MonoBehaviour
         lastPos = st.transform.position;
         fingers = System.Array.FindAll(GetComponentsInChildren<Transform>(), b => b.name.StartsWith("mixamorig:") && b.name.Contains("Hand") && "123".IndexOf(b.name[b.name.Length - 1]) >= 0);
         fingerRest = System.Array.ConvertAll(fingers, b => b.localRotation);   // 동작이 돌기 전 = GLB 쉬는 자세
+        jaw = System.Array.Find(GetComponentsInChildren<Transform>(), b => b.name == "mixamorig:Jaw");
+        if (jaw != null)
+        {
+            jawRest = jaw.localRotation;
+            jawRestPos = jaw.localPosition;
+            jawAxis = Quaternion.Inverse(jaw.parent.rotation) * transform.right;   // + 방향으로 돌리면 턱 끝(앞)이 아래로
+        }
     }
 
     void Update()
@@ -98,6 +113,27 @@ public class StalkerAnim : MonoBehaviour
         transform.localPosition = basePos + Vector3.forward * ((Tuning.STALKER_R - Tuning.STALKER_CLIMB_GAP) * Tilt);
     }
 
+    void Jaw(float dt)
+    {
+        float target;
+        switch (Current)
+        {
+            case "roar": case "attack_swipe": target = jawWideDeg; break;
+            case "run": case "run_stand": target = Tuning.STALKER_JAW_CHASE_DEG; break;
+            case "hit": target = Tuning.STALKER_JAW_HIT_DEG; break;
+            default:
+                jawT += dt;
+                target = Tuning.STALKER_JAW_IDLE_DEG + Tuning.STALKER_JAW_BREATH_DEG * Mathf.Sin(2f * Mathf.PI * jawT / Tuning.STALKER_JAW_BREATH_S);
+                break;
+        }
+        float rate = jawWideDeg / (target > JawDeg ? Tuning.STALKER_JAW_OPEN_S : Tuning.STALKER_JAW_CLOSE_S);
+        JawDeg = Mathf.MoveTowards(JawDeg, target, rate * dt);
+        jaw.localRotation = Quaternion.AngleAxis(JawDeg, jawAxis) * jawRest;
+        jaw.localPosition = jawRestPos;
+        float slide = Tuning.STALKER_JAW_SLIDE_PER_DEG * Mathf.Max(0f, JawDeg - Tuning.STALKER_JAW_SLIDE_FROM_DEG);
+        jaw.position += transform.forward * (slide * transform.lossyScale.y);
+    }
+
     // 걷기·달리기 고르기: 걷기 빠르기 이하면 배회 걸음 안(gait)대로
     string Locomotion(out float rate)
     {
@@ -126,6 +162,8 @@ public class StalkerAnim : MonoBehaviour
 
     void LateUpdate()
     {
+        if (jaw != null && driveJaw)
+            Jaw(Time.deltaTime);
         if (straightFingers)
             for (int i = 0; i < fingers.Length; i++) fingers[i].localRotation = fingerRest[i];
         if (!clampArms)

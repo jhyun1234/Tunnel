@@ -1,6 +1,6 @@
 """walk_knuckle — 괴물 새 걷기: 두 손(발톱 끝)과 두 발로 짚는 네 점 걸음 (제안서 3D-③b M1, 2026-09-18).
   "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup -P blender/anim/walk_knuckle.py
-입력: Documents/MineTunnel/blender/miner_v4_stage12.blend (stage12 산출물: 리그 + 동작 14개 NLA 트랙 + 재질) — 안 고친다
+입력: Documents/MineTunnel/blender/miner_v4_stage13_jaw.blend (stage12 + 턱 뼈, blender/rig/add_jaw.py 산출물) — 안 고친다
 하는 일: ① 두 손·두 발 자리를 한 주기(1.0 s = 30 프레임) 동안 정한다 — 짚는 동안은 뒤로 SPEED 로 밀려 제자리 걸음,
            떼는 동안은 앞으로 호를 그리며 옮긴다. 순서는 원숭이류처럼 왼손 → 오른발 → 오른손 → 왼발(한 박자 0.25 주기)
         ② 엉덩이를 낮추고 몸통을 앞으로 숙인다(어깨가 엉덩이보다 높게), 머리는 세상 기준으로 앞을 본 채 고정(P2)
@@ -16,7 +16,7 @@ from mathutils import Vector, Matrix, Quaternion
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MT = r"C:\Users\anjyo\Documents\MineTunnel"
-SRC = os.environ.get("SRC_BLEND", os.path.join(MT, "blender", "miner_v4_stage12.blend"))
+SRC = os.environ.get("SRC_BLEND", os.path.join(MT, "blender", "miner_v4_stage13_jaw.blend"))
 SABOTAGE = os.environ.get("SABOTAGE", "")
 SFX = "_" + SABOTAGE if SABOTAGE else ""
 OUT_GLB = os.environ.get("OUT_GLB", os.path.join(MT, "mesh", "miner_rigged_unity%s.glb" % SFX) if SABOTAGE
@@ -422,6 +422,8 @@ if NAME in anims:
     check(abs(t0) < 1e-3 and abs(t1 - N / FPS) < 1e-3, "%s 시간 %.3f ~ %.3f s (0 ~ %.3f)" % (NAME, t0, t1, N / FPS))
 new_imgs = image_hashes(OUT_GLB)
 check(new_imgs == old_imgs and len(new_imgs) > 0, "색·요철·거칠기·발광 그림 %d장이 이전 GLB 와 바이트까지 같다 (라이선스 절차 ④)" % len(new_imgs))
+joints = [j["nodes"][i]["name"] for sk in j["skins"] for i in sk["joints"]]
+check(len(set(joints)) == 67 and "mixamorig:Jaw" in joints and "mixamorig:JawTip" in joints, "뼈 %d 개, 턱 뼈(Jaw·JawTip) 있음 (67)" % len(set(joints)))
 multi = [m.get("name") for m in j["meshes"] if len(m["primitives"]) != 1]
 check(not multi, "메시마다 프리미티브 1개 %s" % multi)
 print("walk_knuckle %s  fails=%d %s" % ("ALL PASS" if not fails else "FAIL", len(fails), fails))
