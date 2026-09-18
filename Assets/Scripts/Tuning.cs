@@ -293,9 +293,9 @@ public static class Tuning
     // 3D-② (09-17 판정 "구체 두 개가 눈구멍에 박혀 이질감"): 눈 = 눈구멍 속 작은 빛점. 지름 0.04(눈구멍 폭 0.08 의 절반), 안쪽으로 0.04 m
     // 3D-②b (09-17 판정 "구체 두 개가 너무 잘 보인다"): 눈 구체 없음. 머리 그림의 발광 그림(눈구멍 자리, stage12 4b)이 빛난다.
     // 아래 셋은 사용자가 실행 파일 DevHud 키로 찾는 값 — 7/8 요철 세기 · ,/. 거칠기 배율 · k/l 눈 발광 (StalkerLook.cs)
-    public const float STALKER_SKIN_NORMAL_SCALE = 1.0f;    // glTF normalTexture.scale 배율
+    public const float STALKER_SKIN_NORMAL_SCALE = 1.95f;   // 사용자가 7/8 키로 찾은 값 (09-18, 1.25^3). 시작값 1.0. glTFast 속성이 아니라 ScaleNormal.shader 로 적용한다
     public const float STALKER_SKIN_ROUGH_MUL = 0.6f;       // 사용자가 ,/. 키로 찾은 값 (09-18). 시작값 1.0
-    public const float STALKER_EYE_EMISSION = 0.08f;        // 사용자가 k/l 키로 찾은 값 (09-18): 램프 켜면 12 m, 끄면 4 m 에서 괴물이 인식된다. 시작값 0.6
+    public const float STALKER_EYE_EMISSION = 0.31f;        // 사용자가 k/l 키로 찾은 값 (09-18 재판정, 눈구멍 자리 고친 뒤). 0.08 은 발광이 광대뼈 넓은 얼룩일 때 값. 시작값 0.6
     public const float STALKER_RELIEF_MIN = 28f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 실측(09-17): 점토 상태 24.6 · flatskin 26.1 · 요철 그림 30.7 → 그 사이
     public const int STALKER_EYE_BRIGHT_MIN = 1;            // 램프 끄고 5 m 몸 영역에서 밝기 0.1 넘는 표본 픽셀(3픽셀 간격) 수 하한. 사용자 값 발광 0.08 은 어둡다(0.2 문턱에선 1개) → 문턱 0.1 · 1개. dimeyes 0
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
