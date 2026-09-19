@@ -338,8 +338,9 @@ public static class Tuning
     public const int STALKER_NECK_JOINTS = 7;               // 마디 뼈 NeckExt_0~6 (4개는 한 마디가 82° 꺾여 각져 보였다, 7개 56° — 09-19 시험)
     public const float STALKER_NECK_LEN_M = 0.80f;          // 목 전체
     public const float STALKER_NECK_TOP_IN_M = 0.03f;       // 관 꼭대기는 머리 뼈 뿌리에서 머리 속으로 이만큼
-    public const float STALKER_NECK_OUT_MAX_M = 0.60f;      // 가장 많이 뺐을 때 (제안값, DevHud Z/X)
-    public const float STALKER_NECK_OUT_S = 0.3f;           // 0 → MAX 빼는 시간 (제안값, DevHud C/B)
+    public const float STALKER_NECK_OUT_M = 0.15f;          // 빼는 길이 — 사용자 판정 09-19 "15 cm 가 적당하다, 무섭다" (숫자판 model 15 = 게임 22.5 cm). 행동 연결(M2)이 쓴다
+    public const float STALKER_NECK_OUT_MAX_M = 0.60f;      // 판정 키(DevHud Z/X)로 뺄 수 있는 끝
+    public const float STALKER_NECK_OUT_S = 0.3f;           // 0 → MAX 빼는 시간 (사용자 판정 09-19 "0.3 초로 간다", DevHud C/B)
     public const float STALKER_NECK_UP = 0.4f;              // 빼는 방향 = 얼굴이 보는 쪽 + 몸 위 × 이 값. 위로만 빼면 40 cm 부터 머리가 갱도 천장을 뚫었다 (09-19 게임 그림)
     public const float STALKER_NECK_TILT_OUT_M = 0.25f;     // 갸웃하면 저절로 이만큼 — 갸웃 110° 에서 머리가 어깨에 파고든 점이 다섯 자세 모두 0 이 되는 길이 (얼굴 쪽 방향으로 20 cm 는 옆 90° 에서 12점 남음, 09-19 Blender 실측)
     public const float STALKER_NECK_TILT_FROM_DEG = 45f;    // 갸웃이 이 각도부터 나오기 시작해

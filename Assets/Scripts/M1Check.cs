@@ -1655,6 +1655,32 @@ public class M1Check : MonoBehaviour
                 yield return Capture("34_neck_tilt_auto", _ => { });
                 sa.headTest = 0;
                 yield return new WaitForSeconds(0.6f);
+                // 사용자 판정 자리(09-19 "뚝 생겨난다 · 호스 같다 · 머리 밑이 뚫려 보인다"): 2 m 앞에서 올려다보며 0 → 15 cm, 1.2 m 밑에서 머리 밑
+                {
+                    float px1 = 1f / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg);
+                    sa.headTest = 1;
+                    Teleport(cc, M0 + Vector3.back * 2f, 0f);
+                    player.Look(new Vector2(0f, 35f * px1));
+                    yield return new WaitForSeconds(0.6f);
+                    float keepS = sa.neckOutS;
+                    sa.neckOutS = 0.3f * Tuning.STALKER_NECK_OUT_MAX_M / Tuning.STALKER_NECK_OUT_M;   // 15 cm 가 0.3 s 에 걸쳐 나오게 (연속 사진용)
+                    sa.neckWant = Tuning.STALKER_NECK_OUT_M;
+                    yield return Sheet("35_neck_pop_2m_sheet", 8, i => Wait(0.05f));
+                    sa.neckOutS = keepS;
+                    yield return Capture("35_neck_15cm_2m_up", _ => { });
+                    player.Look(new Vector2(0f, -35f * px1));
+                    Teleport(cc, M0 + Vector3.back * 1.2f, 0f);
+                    player.Look(new Vector2(0f, 60f * px1));
+                    yield return new WaitForSeconds(0.5f);
+                    yield return Capture("35_neck_15cm_under_1.2m", _ => { });
+                    Teleport(cc, M0 + Vector3.back * 1.0f + Vector3.right * 0.9f, -40f);
+                    yield return new WaitForSeconds(0.5f);
+                    yield return Capture("35_neck_15cm_under_side", _ => { });
+                    player.Look(new Vector2(0f, -60f * px1));
+                    sa.neckWant = 0f; sa.headTest = 0;
+                    Teleport(cc, M0 + Vector3.back * 3.5f, 0f);
+                    yield return new WaitForSeconds(0.6f);
+                }
             }
             // 갱목·못·가죽끈 사진 (09-19): 등 뒤 2 m · 왼팔 2 m · 등 뒤 7 m — 머리 시험 끔, 대기 자세
             st.Teleport(M0, 0f);
