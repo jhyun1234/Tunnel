@@ -13,19 +13,20 @@ U1 판정(09-19): 방향은 맞다 / 두 다리 걸음이 안 무섭다 · 무�
   · 휘두르기 없음: 굳음에서 바로 질주해 턱을 벌린 채 화면으로 들어온다 → 검은 화면
 입력(안 고친다): Documents/MineTunnel/blender/miner_v4_stage16_neck.blend · blender/mixamo/*.fbx (원본 FBX 는 저장소에 안 올린다)
 출력: build/check_3d4/UP_<이름>.mp4. GLB·게임은 안 건드린다. 고르기용 영상이다 — 통과 판정은 배포 실행 파일에서."""
-import bpy, os, sys, math, random, shutil, subprocess
+import bpy, os, sys, math, shutil, subprocess
 from mathutils import Vector, Quaternion, Matrix
 
 E = os.environ.get
 HERE = os.path.dirname(os.path.abspath(__file__))
 MT = r"C:\Users\anjyo\Documents\MineTunnel"
 MIX = os.path.join(MT, "blender", "mixamo")
-NAME = E("UP_NAME", "U2")
+NAME = E("UP_NAME", "U3")
+STEP = int(E("UP_STEP", "1"))             # 빠른 확인: N 프레임마다 한 장만 굽고 영상은 안 만든다
 WALK, RUN = E("UP_WALK", "Mutant Walking"), E("UP_RUN", "Mutant Run")
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(HERE)), "build", "check_3d4"); os.makedirs(OUT_DIR, exist_ok=True)
 FR_DIR = os.path.join(MT, "blender", "anim_render", "up_" + NAME); shutil.rmtree(FR_DIR, ignore_errors=True); os.makedirs(FR_DIR)
 FPS, S = 30, 1.5
-START, EYE, WALL_X, CEIL = float(E("UP_START_M", "11")) / S, 1.7 / S, 3.16 / S, 5.6 / S
+START, EYE, WALL_X, CEIL = float(E("UP_START_M", "9")) / S, 1.7 / S, 3.16 / S, 5.6 / S
 HUNCH, CROUCH, ARM_STILL = float(E("UP_HUNCH", "42")), float(E("UP_CROUCH", "0.16")), float(E("UP_ARM_STILL", "0.85"))
 WALK_RATE, RUN_GAME = float(E("UP_WALK_RATE", "0.72")), float(E("UP_RUN_MS", "6.5"))
 DIP = float(E("UP_DIP", "0.05"))           # 발 디딜 때 엉덩이가 내려앉는 깊이 (모델 m)
@@ -115,7 +116,7 @@ WATTS = float(E("PV_WATTS", "600"))        # U1 은 너무 밝아 "살 벗겨진
 lamp.data.spot_size = math.radians(120); lamp.data.spot_blend = 0.35; lamp.data.shadow_soft_size = 0.02
 lamp.parent = cam; lamp.location = (0, 0.06, 0)
 scene.render.engine = "BLENDER_EEVEE"
-scene.render.resolution_x, scene.render.resolution_y, scene.render.resolution_percentage = 854, 480, 100
+scene.render.resolution_x, scene.render.resolution_y, scene.render.resolution_percentage = 1280, 720, 100
 scene.render.image_settings.file_format = "PNG"
 world = scene.world or bpy.data.worlds.new("w"); scene.world = world; world.use_nodes = True
 next(n for n in world.node_tree.nodes if n.type == "BACKGROUND").inputs["Color"].default_value = (0.002, 0.002, 0.002, 1)
@@ -147,7 +148,23 @@ while START - dist > 0.85:
     plan.append(dict(act=run, f=lf(run, i, rate), d=dist, look=0.0, mean=mean_run, jaw=JAW_RUN, run=True))
 print("UPRIGHT %s: %d frames (%.2f s), walk x%.2f = %.2f m/s game, run x%.2f" % (NAME, len(plan), len(plan) / FPS, WALK_RATE, v_walk * WALK_RATE * S, rate))
 
-random.seed(7); shake = dip = 0.0; look = 0.0; was_up = [True, True]
+# U2 의 버그(09-19 사용자 판정 "걸음이 U1 과 똑같다 · 머리 돌리기가 없다"로 드러남): 렌더가 동작(action)을 다시 계산해
+# 모션캡처에 키가 있는 뼈(엉덩이·팔·척추·목·머리)에 손으로 얹은 값을 전부 지웠다 — 키가 없는 턱만 살아남았다.
+# 그래서 얹은 뒤의 자세를 통째로 떠서(freeze) 동작을 떼고 뼈에 직접 박은 다음 굽는다.
+order = [b for b in pbs if b.parent is None]
+for b in order: order.extend(b.children)
+def freeze():
+    mats = {b.name: b.matrix.copy() for b in order}           # IK 까지 계산된 결과
+    ad.action = None; legs(False)
+    for b in order:
+        if b.parent:
+            rest = mats[b.parent.name] @ b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local
+            b.matrix_basis = rest.inverted() @ mats[b.name]
+        else:
+            b.matrix_basis = b.bone.matrix_local.inverted() @ mats[b.name]
+    upd()
+    return mats
+shake = dip = dip_to = 0.0; look = 0.0; was_up = [True, True]; checked = False
 jaw_axis = Vector((1, 0, 0))
 for n, st in enumerate(plan):
     for o in roots:                         # 뼈 계산은 늘 처음 자리에서 (M 이 그 자리 기준) — 끝에서 과녁과 같이 옮긴다
@@ -163,7 +180,8 @@ for n, st in enumerate(plan):
         was_up[k] = up
     if hit:
         near = min(1.0, (3.5 / S) / max(START - st["d"], 0.6)) ** 0.8
-        shake = max(shake, (0.05 if st.get("run") else 0.022) * near + 0.003); dip = DIP * (1.6 if st.get("run") else 1.0)
+        shake = max(shake, (0.05 if st.get("run") else 0.022) * near + 0.003); dip_to = DIP * (1.6 if st.get("run") else 1.0)
+    dip += (dip_to - dip) * 0.5; dip_to *= 0.55               # 한 프레임에 뚝 떨어지면 끊겨 보인다 — 두세 프레임에 걸쳐 내려앉는다
     legs(True)
     pb("Hips").location = pb("Hips").location + hips_axes @ Vector((0, 0, -(CROUCH + dip)))
     for nm in ARMS:                         # 팔 흔들기를 죽인다
@@ -188,14 +206,26 @@ for n, st in enumerate(plan):
     upd()
     t = n / FPS                             # 화면은 늘 살아 있다: 숨결 같은 느린 흔들림 + 발 디딜 때의 떨림
     sway = Vector((0.006 * math.sin(2 * math.pi * 0.23 * t), 0, 0.005 * math.sin(2 * math.pi * 0.31 * t + 1.0)))
-    cam.location = CAM0 + sway + Vector((random.uniform(-1, 1) * shake * 0.4, 0, -shake))
-    cam.rotation_euler = (math.radians(90) + 0.004 * math.sin(2 * math.pi * 0.27 * t) + random.uniform(-1, 1) * shake * 0.5,
-                          0.003 * math.sin(2 * math.pi * 0.19 * t) + random.uniform(-1, 1) * shake * 0.7, 0)
-    shake *= 0.6; dip *= 0.55
+    # U2 판정 "영상이 끊긴다": 발 디딜 때 화면을 프레임마다 무작위로 튀게 한 것이 빠진 프레임처럼 보였다 → 무작위 없이 아래로 눌렸다 돌아오기만
+    cam.location = CAM0 + sway + Vector((0, 0, -shake))
+    cam.rotation_euler = (math.radians(90) + 0.004 * math.sin(2 * math.pi * 0.27 * t) - shake * 0.3,
+                          0.003 * math.sin(2 * math.pi * 0.19 * t), 0)
+    shake *= 0.7
     near = max(START - st["d"] - 0.4, 0.2)
     lamp.data.energy = WATTS * max(0.3, min(1.0, (near / (4.0 / S)) ** 1.4)) * (1.0 + 0.03 * math.sin(2 * math.pi * 1.7 * t))
+    if n % STEP: continue
+    mats = freeze()
+    if not checked and abs(look) > 30:      # 자기 검사: 프레임을 다시 계산해도(렌더가 하는 일) 돌린 머리가 그대로인가. SABOTAGE=nofreeze 로 U2 버그를 되살리면 여기서 죽는다
+        if E("SABOTAGE") == "nofreeze": use(st["act"], st["f"])
+        scene.frame_set(scene.frame_current); upd()
+        d = math.degrees((pb("Head").matrix.to_quaternion().rotation_difference(mats[P + "Head"].to_quaternion())).angle)
+        print("CHECK head survives re-evaluation: off by %.1f deg (look %.0f)" % (d, look))
+        assert d < 1.0, "FAIL: 얹은 자세가 렌더 때 지워진다"
+        checked = True
     scene.render.filepath = os.path.join(FR_DIR, "f%04d.png" % n)
     bpy.ops.render.render(write_still=True)
+assert checked, "FAIL: 머리 돌리기 검사가 한 번도 안 돌았다"
+if STEP > 1: sys.exit(0)
 
 out = os.path.join(OUT_DIR, "UP_%s.mp4" % NAME)
 r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(FR_DIR, "f%04d.png"),
