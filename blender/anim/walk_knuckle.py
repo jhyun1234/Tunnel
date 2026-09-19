@@ -44,6 +44,8 @@ GAITS = {
                         BOB=float(os.environ.get("RUN_BOB", "0.08")), SWAY=0.02, ROLL=3.0, BOBN=1, PH=0.95, FLEX=float(os.environ.get("RUN_FLEX", "24")),
                         LIFT={"Hand": 0.30, "Foot": 0.22}, MINC=3, AIR=2),
 }
+if os.environ.get("GAIT_JSON"):          # 시험용: 걸음표에 줄을 더하거나 덮는다 (QUICK 과 같이). 예: GAIT_JSON='{"glide": {"N": 17, ...}}' ONLY=glide
+    GAITS.update(json.loads(os.environ["GAIT_JSON"]))
 ONLY = os.environ.get("ONLY", "")       # QUICK 일 때 걸음 하나만 (값 고를 때). 내보내기는 늘 둘 다
 if ONLY:
     GAITS = {ONLY: GAITS[ONLY]}
