@@ -202,7 +202,7 @@ for c, r, z, downward, bone in (() if SABOTAGE == "nocap" else ((hc, hr * CAP_K,
 # "뚝 생겨난다 · 머리 밑이 뚫려 보인다" — 목이 소매·옷깃 속에서 미끄러져 나오게, 턱 밑 빈 곳을 막게. 끝은 찢긴 살처럼 들쭉날쭉
 def axis_xy(z):
     p = line[int(np.argmin(np.abs(line[:, 2] - z)))]; return Vector((p[0], p[1]))
-def funnel(c, r_from, z_from, dz, r_to, n_rings, bone, seed):
+def funnel(c, r_from, z_from, dz, r_to, n_rings, bone, seed, v0):
     i0 = len(verts)
     for j in range(n_rings):
         t = j / (n_rings - 1.0); z = z_from + dz * t; cen = Vector((c.x, c.y)).lerp(axis_xy(z), t)
@@ -210,7 +210,7 @@ def funnel(c, r_from, z_from, dz, r_to, n_rings, bone, seed):
             a = 2 * math.pi * k / 24
             r = (r_from + (r_to - r_from) * t ** 0.7) * (1 + 0.04 * math.sin(3 * a + j + seed))
             zz = z + (0.008 * math.sin(5 * a + seed) * (1 if dz < 0 else -1) if j == n_rings - 1 else 0.0)
-            verts.append(Vector((cen.x + r * math.cos(a), cen.y + r * math.sin(a), zz))); arc.append(0.3 + 0.025 * j); ang_k.append(k)
+            verts.append(Vector((cen.x + r * math.cos(a), cen.y + r * math.sin(a), zz))); arc.append(v0 + 0.02 * j); ang_k.append(k)
     for j in range(n_rings - 1):
         for k in range(24):
             f = (i0 + j * 24 + k, i0 + j * 24 + (k + 1) % 24, i0 + (j + 1) * 24 + (k + 1) % 24, i0 + (j + 1) * 24 + k)
@@ -222,8 +222,8 @@ def funnel(c, r_from, z_from, dz, r_to, n_rings, bone, seed):
     caps.append((i0, n_rings * 24, bone))
 if SABOTAGE not in ("nocap", "nosleeve"):
     # 2차 판정 09-19 "노이즈가 있는 것처럼 보인다 · 약간 어색하다": 소매 윗고리가 머리 살 겉면과 같은 자리라 두 면이 번갈아 비쳤다 → 속(구멍의 0.9배, 3 cm 안)에서 시작
-    funnel(hc, hr * 0.90, hc.z + 0.03, -0.10, R_HEAD + 0.006, 5, "Head", 0.0)
-    funnel(bc, br * 0.90, bc.z - 0.03, 0.07, R_BASE + 0.004, 4, "Spine2", 1.7)
+    funnel(hc, hr * 0.90, hc.z + 0.03, -0.10, R_HEAD + 0.006, 5, "Head", 0.0, 0.01)
+    funnel(bc, br * 0.90, bc.z - 0.03, 0.07, R_BASE + 0.004, 4, "Spine2", 1.7, 0.45)
 print("마개: 머리 밑 가운데 %s 반지름 %.3f · 목구멍 가운데 %s 반지름 %.3f" % (tuple(round(x, 3) for x in hc), hr, tuple(round(x, 3) for x in bc), br))
 
 me = bpy.data.meshes.new("Miner_Neck"); me.from_pydata(verts, [], faces); me.update()
@@ -237,61 +237,81 @@ me.transform(neck.matrix_world.inverted()); me.update()            # 점은 세�
 # 사용자 "호스 같아 보인다"). 목 전용 근육 그림 2장(색·요철)을 셈으로 만든다 — 받은 그림 없음(출처 문제 없음). 이름이 "살" 로 시작하면
 # Unity StalkerLook 이 눈 발광 색을 입혀 목 전체가 빛난다 → "목_근육"
 TEX = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "blender", "stage16_tex"); os.makedirs(TEX, exist_ok=True)
+class SkinSampler:
+    """물체의 살 그림에서 3D 자리의 색·요철 기울기를 뽑는다 (UV 가 조각나 있어도 점마다 따로 찾으니 상관없다)"""
+    def __init__(self, ob):
+        bs = next(n for n in ob.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        img = bs.inputs["Base Color"].links[0].from_node.image
+        self.W, self.H = img.size; px = np.empty(self.W * self.H * 4, np.float32); img.pixels.foreach_get(px); self.px = px.reshape(self.H, self.W, 4)
+        nl = bs.inputs["Normal"].links
+        nimg = nl[0].from_node.inputs["Color"].links[0].from_node.image if nl and nl[0].from_node.type == "NORMAL_MAP" else None
+        self.npx = None
+        if nimg:
+            self.Wn, self.Hn = nimg.size; q = np.empty(self.Wn * self.Hn * 4, np.float32); nimg.pixels.foreach_get(q); self.npx = q.reshape(self.Hn, self.Wn, 4)
+        self.me = ob.data; self.me.calc_loop_triangles()
+        self.co = [ob.matrix_world @ v.co for v in self.me.vertices]
+        self.bvh = BVHTree.FromPolygons(self.co, [tuple(t.vertices) for t in self.me.loop_triangles])
+        self.uv = self.me.uv_layers.active.data
+    def at(self, origin, direction):
+        loc, nor, ti, dist = self.bvh.ray_cast(origin, direction)
+        if loc is None:
+            return None
+        t = self.me.loop_triangles[ti]; pa, pb_, pc = (self.co[i] for i in t.vertices)
+        n = (pb_ - pa).cross(pc - pa); den = n.dot(n)
+        if den < 1e-18:
+            return None
+        wa = (pb_ - loc).cross(pc - loc).dot(n) / den; wb = (pc - loc).cross(pa - loc).dot(n) / den
+        uv = Vector(self.uv[t.loops[0]].uv) * wa + Vector(self.uv[t.loops[1]].uv) * wb + Vector(self.uv[t.loops[2]].uv) * (1 - wa - wb)
+        c = self.px[int(uv.y % 1.0 * (self.H - 1)), int(uv.x % 1.0 * (self.W - 1)), :3]
+        bmp = 0.0
+        if self.npx is not None:
+            q = self.npx[int(uv.y % 1.0 * (self.Hn - 1)), int(uv.x % 1.0 * (self.Wn - 1)), :3] * 2 - 1; bmp = float(math.hypot(q[0], q[1]))
+        return c, bmp
+
+HEAD_PART, HEAD_BLEND = 0.12, 0.10       # 관 꼭대기에서 12 cm 까지는 머리 살, 그 뒤 10 cm 에 걸쳐 몸통 살로 넘어간다
 def make_textures():
-    """3차 판정 09-19 "목과 쇄골 부분의 차이가 심하다 · 노이즈": 셈으로 만든 줄무늬는 몸 살(울퉁불퉁한 허연 살 + 갈색 근육)과 결이 다르다.
-    → 몸통 살을 목에 입힌다: 목 그림의 점마다 (둘레 각도, 길이) → 몸통 가운데 축에서 그 각도로 바깥을 본 자리의 몸 살 색을 그대로 가져온다.
-    몸 살 UV 가 잘게 조각나 있어도 점 하나하나를 따로 찾으니 상관없다. 둘레는 몸통 한 바퀴라 이음매가 없고, 길이는 가슴 1.45 ~ 1.85 m 를
-    올라갔다 내려오며(거울) 되풀이한다. 같은 출처(우리 괴물 살 그림)에서 다시 뽑은 그림이라 받은 그림은 없다.
-    요철은 가져온 색의 밝기를 높이로 보고 만든다 (몸 살 요철 그림은 조각마다 방향이 달라 그대로 못 가져온다)"""
-    Wt, half = 512, 512
-    bsdf_b = next(n for n in body.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bimg = bsdf_b.inputs["Base Color"].links[0].from_node.image
-    Wb, Hb = bimg.size; bp = np.empty(Wb * Hb * 4, np.float32); bimg.pixels.foreach_get(bp); bp = bp.reshape(Hb, Wb, 4)
-    bme_ = body.data; bme_.calc_loop_triangles()
-    bco_ = [body.matrix_world @ v.co for v in bme_.vertices]
-    tb = BVHTree.FromPolygons(bco_, [tuple(t.vertices) for t in bme_.loop_triangles])
-    uvd = bme_.uv_layers.active.data
-    # 몸 살의 울퉁불퉁함은 색이 아니라 요철 그림에 있다 → 같은 자리의 요철 그림에서 "얼마나 기울었나"(1 − z)만 가져와 높이로 쓴다
-    nlink = bsdf_b.inputs["Normal"].links
-    nimg = nlink[0].from_node.inputs["Color"].links[0].from_node.image if nlink and nlink[0].from_node.type == "NORMAL_MAP" else None
-    if nimg:
-        Wn, Hn = nimg.size; npx = np.empty(Wn * Hn * 4, np.float32); nimg.pixels.foreach_get(npx); npx = npx.reshape(Hn, Wn, 4)
-    bump = np.zeros((half, Wt), np.float32); lastb = 0.0
-    rows = np.zeros((half, Wt, 3), np.float32); last = np.array([0.3, 0.25, 0.22], np.float32); missed = 0
-    for r_ in range(half):
-        z = 1.45 + 0.40 * r_ / (half - 1.0)
+    """3차 판정 09-19 "목과 쇄골 부분의 차이가 심하다": 셈으로 만든 줄무늬를 버리고 몸통 살을 점마다 다시 뽑아 목에 입혔다(둘레 = 몸통 한 바퀴,
+    길이 = 가슴 1.45 ~ 1.85 m 를 오르내림). 4차 판정 09-19 "쇄골 위쪽과 머리가 다른 모델링이라 차이가 크다": 머리와 몸은 살 그림이 따로다(살_머리 · 살) →
+    목 위쪽(머리에 붙어 다니는 끝)과 살 소매는 **머리 그물의 턱·볼 겉살**(높이 2.20 → 2.08 m, 밖에서 안으로)에서 뽑고,
+    아래로 가며 몸통 살로 섞는다. 그림 세로 = 관 길이 80 cm 그대로(거울 되풀이 없음). 받은 그림 없음 — 우리 괴물 살 그림 둘에서 다시 뽑은 것.
+    요철은 가져온 자리의 요철 그림 기울기 크기를 높이로 보고 만든다 (조각마다 방향이 달라 그대로는 못 가져온다)"""
+    Wt, Ht = 512, 1024
+    torso, skull = SkinSampler(body), SkinSampler(head)
+    col = np.zeros((Ht, Wt, 3), np.float32); bump = np.zeros((Ht, Wt), np.float32); miss_t = miss_h = 0
+    lt, lh = (np.array([0.3, 0.25, 0.22], np.float32), 0.0), (np.array([0.3, 0.25, 0.22], np.float32), 0.0)
+    for r_ in range(Ht):
+        arc_ = 0.8 * r_ / Ht
+        w_head = 1.0 - min(max((arc_ - HEAD_PART) / HEAD_BLEND, 0.0), 1.0); w_head = w_head * w_head * (3 - 2 * w_head)
+        zt = 1.45 + 0.40 * abs(((arc_ / 0.40) % 2.0) - 1.0)                                   # 몸통: 오르내림
+        zh = 2.20 - 0.12 * min(arc_ / (HEAD_PART + HEAD_BLEND), 1.0)                          # 머리 그물 아래쪽(턱·볼 2.20 → 2.08 m): 머리 그물엔 목 살이 거의 없다(목 축에서 밖으로 쏘면 69 % 가 빈 곳, 09-19) → 턱·볼 겉살을 밖에서 안으로
         for c_ in range(Wt):
             th = 2 * math.pi * c_ / Wt; d = Vector((math.cos(th), math.sin(th), 0))
-            loc, nor, ti, dist = tb.ray_cast(Vector((0, 0.05, z)) + d * 1.0, -d)
-            if loc is None:
-                missed += 1; rows[r_, c_] = last; bump[r_, c_] = lastb; continue
-            t = bme_.loop_triangles[ti]; pa, pb_, pc = (bco_[i] for i in t.vertices)
-            n = (pb_ - pa).cross(pc - pa); den = n.dot(n)
-            if den < 1e-18:
-                rows[r_, c_] = last; continue
-            wa = (pb_ - loc).cross(pc - loc).dot(n) / den; wb = (pc - loc).cross(pa - loc).dot(n) / den
-            uv = Vector(uvd[t.loops[0]].uv) * wa + Vector(uvd[t.loops[1]].uv) * wb + Vector(uvd[t.loops[2]].uv) * (1 - wa - wb)
-            last = bp[int(uv.y % 1.0 * (Hb - 1)), int(uv.x % 1.0 * (Wb - 1)), :3]; rows[r_, c_] = last
-            if nimg:
-                q = npx[int(uv.y % 1.0 * (Hn - 1)), int(uv.x % 1.0 * (Wn - 1)), :3] * 2 - 1
-                lastb = float(math.hypot(q[0], q[1])); bump[r_, c_] = lastb
-    col = np.concatenate([rows, rows[::-1]], 0)                                              # 올라갔다 내려온다 → 위아래로도 이어진다
-    Ht = col.shape[0]
-    lum = 0.3 * col.mean(2) + np.concatenate([bump, bump[::-1]], 0)
-    print("몸 살 요철에서 가져온 기울기 평균 %.3f · 최대 %.3f" % (float(bump.mean()), float(bump.max())))
+            if w_head < 1.0:
+                g = torso.at(Vector((0, 0.05, zt)) + d, -d)
+                if g is None: miss_t += 1
+                else: lt = g
+            if w_head > 0.0:
+                # 앞쪽(−y)은 벌린 입이 찍힌다(09-19 그림 40) → 뒤(+y)에서 ±110° 안만, 좌우 거울로 (어디서도 안 끊긴다)
+                phi = abs(math.atan2(d.x, d.y)) * (110.0 / 180.0); dh = Vector((math.sin(phi), math.cos(phi), 0))
+                g = skull.at(Vector((0, 0.03, zh)) + dh, -dh)
+                if g is None: miss_h += 1
+                else: lh = g
+            col[r_, c_] = lt[0] * (1 - w_head) + lh[0] * w_head; bump[r_, c_] = lt[1] * (1 - w_head) + lh[1] * w_head
+    lum = 0.3 * col.mean(2) + bump
+    print("목 살 그림: 기울기 평균 %.3f · 못 찾은 점 몸통 %d · 머리 %d" % (float(bump.mean()), miss_t, miss_h))
     for _ in range(2):                                                                       # 높이를 조금 뭉갠다 (점 하나짜리 튐 = 노이즈)
         lum = (lum + np.roll(lum, 1, 0) + np.roll(lum, -1, 0) + np.roll(lum, 1, 1) + np.roll(lum, -1, 1)) / 5
     gx = np.roll(lum, -1, 1) - np.roll(lum, 1, 1); gy = np.roll(lum, -1, 0) - np.roll(lum, 1, 0)
-    nrm = np.dstack([-gx * float(os.environ.get("NECK_BUMP", "6")), -gy * float(os.environ.get("NECK_BUMP", "6")), np.ones_like(lum)]); nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
-    print("목 살 그림: 몸통에서 가져온 점 %d, 못 찾은 점 %d" % (half * Wt - missed, missed))
+    k = float(os.environ.get("NECK_BUMP", "6"))
+    nrm = np.dstack([-gx * k, -gy * k, np.ones_like(lum)]); nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
     out = {}
     for name, arr, cs in (("neck_muscle_color", np.clip(col, 0, 1), "sRGB"), ("neck_muscle_normal", nrm * 0.5 + 0.5, "Non-Color")):
         im = bpy.data.images.new(name, Wt, Ht, alpha=False); im.colorspace_settings.name = cs
         im.pixels.foreach_set(np.dstack([arr, np.ones((Ht, Wt))]).astype(np.float32).ravel())
         im.filepath_raw = os.path.join(TEX, name + ".png"); im.file_format = "PNG"; im.save(); im.pack()
         out[name] = im
-    return out, float(np.clip(col, 0, 1).mean())
-tex, tex_mean = make_textures()
+    return out, float(np.clip(col, 0, 1).mean()), miss_h / float(Wt * int(Ht * (HEAD_PART + HEAD_BLEND) / 0.8))
+tex, tex_mean, head_miss = make_textures()
 nm = bpy.data.materials.new("목_근육"); nm.use_nodes = True
 nt = nm.node_tree; bs_n = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
 tc = nt.nodes.new("ShaderNodeTexImage"); tc.image = tex["neck_muscle_color"]; nt.links.new(tc.outputs["Color"], bs_n.inputs["Base Color"])
@@ -360,6 +380,7 @@ rv = np.array([[ (rg[i][k] - Vector(line[i])).length for k in range(SIDES)] for 
 lump = float(np.median((rv.max(1) - rv.min(1)) / rv.mean(1)))
 check(lump >= 0.15, "목 관이 둥근 호스가 아니다: 고리의 (가장 굵은 곳 − 가장 가는 곳) ÷ 평균 = %.2f (≥ 0.15, 둥근 관 0)" % lump)
 check(torn <= 0.02 * len(ratios), "목 관 UV: 찢어진 면 %d / %d (≤ 2 %%)" % (torn, len(ratios)))
+check(head_miss <= 0.10, "목 위쪽 그림: 머리 그물의 목 살을 못 찾은 점 %.1f %% (≤ 10)" % (head_miss * 100))
 check(0.08 <= tex_mean <= 0.40, "목 근육 색 그림 평균 밝기 %.3f (0.08 ~ 0.40 — 몸 살 색에서 만든다)" % tex_mean)
 
 DIRS = [Vector(d).normalized() for d in ((1, .013, .007), (-1, .013, .007), (.013, 1, .007), (.013, -1, .007), (.013, .007, 1), (.013, .007, -1))]
