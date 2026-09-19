@@ -41,6 +41,7 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public int spotsVisited;  // 이번 수색에서 들여다본 곳 수
     [System.NonSerialized] public int catches, restarts;
     [System.NonSerialized] public Vector3 noisePos, lastSeen;
+    public bool LightChase => lightChase;          // 조사가 빛(플레이어 자리)을 따라가는 중 — 머리가 플레이어를 본다 (StalkerAnim)
     [System.NonSerialized] public Vector3 retreatSpot, retreatFrom, retreatFwd;   // 철수 자리, 그때 플레이어 자리·방향 (검사용)
     [System.NonSerialized] public bool retreatInCone;
     [System.NonSerialized] public float black;      // 잡힘 화면 검은 정도 0~1

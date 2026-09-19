@@ -323,6 +323,16 @@ public static class Tuning
     public const float STALKER_JAW_SLIDE_FROM_DEG = 30f;    // 이 각도를 넘는 만큼 턱이 앞으로 미끄러진다 (사람 턱도 크게 벌리면 앞으로 나온다)
     public const float STALKER_JAW_SLIDE_PER_DEG = 0.0015f; // m/도, 모델 크기 1 기준 (blender/rig/add_jaw.py 와 같은 값)
     public const float STALKER_JAW_CHIN_DROP_MIN = 0.03f;   // 검사: 크게 벌렸을 때 턱 끝 ↔ 머리 꼭대기 거리가 평소보다 이만큼(게임 m) 이상 멀어진다 (제안값)
+    // 머리 돌리기 (3D-③b M1d, 제안서 docs/제안서_3D3b_M1d_머리_돌리기.md, 승인 09-19 — 목 뼈는 안 더함, 있는 Neck·Head 로).
+    // 사용자 09-19: "이질적인 모습을 보여도 된다" — 좌우 180°, 갸웃 110°. 사람은 좌우 한쪽 약 80°, 옆 기울이기 45° (PMC8075604)
+    public const float STALKER_HEAD_YAW_MAX = 180f;         // 몸 앞에서 좌우로 (DevHud T/Y)
+    public const float STALKER_HEAD_PITCH_MAX = 40f;        // 위아래
+    public const float STALKER_HEAD_TILT_DEG = 110f;        // 소리 조사 때 갸웃 (DevHud O/P)
+    public const float STALKER_HEAD_SNAP_S = 0.12f;         // 목표가 바뀌면 이 시간 안에 딱 (180° 도)
+    public const float STALKER_HEAD_FADE_S = 0.3f;          // 돌리기를 켜고 끄는 시간 (배회·맞음·철수·벽타기·숨음은 동작 그대로)
+    public const float STALKER_HEAD_SEARCH_STEP_S = 0.4f;   // 수색: 이 시간마다 머리만 새 방향으로 끊어 돌림
+    public const float STALKER_HEAD_SEARCH_TILT_K = 0.3f;   // 수색 때 갸웃은 ± TILT × 이 값 안에서 무작위
+    public const float STALKER_HEAD_NECK_SHARE = 0.4f;      // 돌림 중 목 뼈 몫 (나머지 머리 뼈)
     public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)

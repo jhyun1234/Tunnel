@@ -26,6 +26,20 @@ public class StalkerAnim : MonoBehaviour
     Quaternion jawRest;
     Vector3 jawRestPos, jawAxis;                                          // jawAxis = 머리 뼈 공간의 좌우 축 (모델 오른쪽)
     float jawT;
+    // 머리 (3D-③b M1d): 괴물이 아는 것 쪽으로 머리부터. 들킴·추격·잡기·빛 조사 = 플레이어에 고정 (사용자 09-19 "확신이 드는 상황에서는 고정"),
+    // 소리 조사 = 소리 자리 + 갸웃, 수색 = 0.4 s 마다 무작위 방향으로 끊어 돌림(플레이어를 스쳐도 된다 — 사용자 09-19), 배회 = 동작 그대로
+    [System.NonSerialized] public bool driveHead = true;                  // 사보타주 stiffneck 이 끈다
+    [System.NonSerialized] public float headYawMax = Tuning.STALKER_HEAD_YAW_MAX;    // DevHud T/Y
+    [System.NonSerialized] public float headTilt = Tuning.STALKER_HEAD_TILT_DEG;     // DevHud O/P
+    [System.NonSerialized] public int headTest;                            // 행동 꺼짐(9)일 때 DevHud G: 0 끔 · 1 나 따라보기 · 2 수색 · 3 갸웃하며 나 보기
+    public static string HeadTestName(int m) => m == 1 ? "follow me" : m == 2 ? "search" : m == 3 ? "listen tilt" : "off";
+    public float HeadYaw { get; private set; }                             // 몸 앞 기준 지금 얼굴 좌우 (도) — 진단·검사
+    public float HeadTiltNow { get; private set; }
+    public int HeadMode { get; private set; }                              // 0 동작 그대로 · 1 플레이어 · 2 수색 · 3 갸웃 플레이어 · 4 소리 자리
+    Transform neckB, headB;
+    Vector3 faceLocal, upLocal;                                            // 머리 뼈 공간의 얼굴 방향·정수리 방향 (쉬는 자세에서 모델 앞·위)
+    float lookYaw, lookPitch, tiltNow, headW, searchT, searchYaw, searchTilt;
+    readonly System.Random headRng = new System.Random(7);
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
@@ -48,7 +62,11 @@ public class StalkerAnim : MonoBehaviour
         lastPos = st.transform.position;
         fingers = System.Array.FindAll(GetComponentsInChildren<Transform>(), b => b.name.StartsWith("mixamorig:") && b.name.Contains("Hand") && "123".IndexOf(b.name[b.name.Length - 1]) >= 0);
         fingerRest = System.Array.ConvertAll(fingers, b => b.localRotation);   // 동작이 돌기 전 = GLB 쉬는 자세
-        jaw = System.Array.Find(GetComponentsInChildren<Transform>(), b => b.name == "mixamorig:Jaw");
+        var allT = GetComponentsInChildren<Transform>();
+        neckB = System.Array.Find(allT, b => b.name == "mixamorig:Neck");
+        headB = System.Array.Find(allT, b => b.name == "mixamorig:Head");
+        if (headB != null) { faceLocal = Quaternion.Inverse(headB.rotation) * transform.forward; upLocal = Quaternion.Inverse(headB.rotation) * transform.up; }
+        jaw = System.Array.Find(allT, b => b.name == "mixamorig:Jaw");
         if (jaw != null)
         {
             jawRest = jaw.localRotation;
@@ -113,6 +131,72 @@ public class StalkerAnim : MonoBehaviour
         transform.localPosition = basePos + Vector3.forward * ((Tuning.STALKER_R - Tuning.STALKER_CLIMB_GAP) * Tilt);
     }
 
+    // 세상 방향 → 몸(모델) 기준 좌우·위아래 (도). 좌우 + = 모델 오른쪽, 위아래 + = 아래
+    void YawPitch(Vector3 worldDir, out float yaw, out float pitch)
+    {
+        Vector3 l = transform.InverseTransformDirection(worldDir);
+        yaw = Mathf.Atan2(l.x, l.z) * Mathf.Rad2Deg;
+        pitch = -Mathf.Atan2(l.y, new Vector2(l.x, l.z).magnitude) * Mathf.Rad2Deg;
+    }
+
+    public Vector3 FaceDir => headB != null ? headB.rotation * faceLocal : transform.forward;
+    public Vector3 HeadUpDir => headB != null ? headB.rotation * upLocal : transform.up;
+
+    void Head(float dt)
+    {
+        Vector3 eye = headB.position;
+        Vector3 me = st.player != null ? st.player.position + Vector3.up * Tuning.EYE_HEIGHT : eye + transform.forward;
+        var s = st.state;
+        int mode = !st.enabled ? headTest
+            : s == Stalker.State.Alert || s == Stalker.State.Chase || s == Stalker.State.Catch || (s == Stalker.State.Investigate && st.LightChase) ? 1
+            : s == Stalker.State.Investigate ? 4 : s == Stalker.State.Search ? 2 : 0;
+        HeadMode = mode;
+        float wantYaw = 0f, wantPitch = 0f, wantTilt = 0f;
+        if (mode == 1 || mode == 3) YawPitch(me - eye, out wantYaw, out wantPitch);
+        else if (mode == 4) YawPitch(st.noisePos + Vector3.up * Tuning.EYE_HEIGHT - eye, out wantYaw, out wantPitch);
+        if (mode == 3 || mode == 4) wantTilt = headTilt;
+        if (mode == 2)
+        {
+            searchT -= dt;
+            if (searchT <= 0f)
+            {
+                searchT = Tuning.STALKER_HEAD_SEARCH_STEP_S;
+                searchYaw = ((float)headRng.NextDouble() * 2f - 1f) * headYawMax;
+                searchTilt = ((float)headRng.NextDouble() * 2f - 1f) * headTilt * Tuning.STALKER_HEAD_SEARCH_TILT_K;
+            }
+            wantYaw = searchYaw; wantTilt = searchTilt;
+        }
+        else searchT = 0f;
+        wantYaw = Mathf.Clamp(wantYaw, -headYawMax, headYawMax);
+        wantPitch = Mathf.Clamp(wantPitch, -Tuning.STALKER_HEAD_PITCH_MAX, Tuning.STALKER_HEAD_PITCH_MAX);
+        YawPitch(FaceDir, out float animYaw, out float animPitch);         // 동작이 입힌 얼굴 방향
+        headW = Mathf.MoveTowards(headW, mode != 0 ? 1f : 0f, dt / Tuning.STALKER_HEAD_FADE_S);
+        if (headW <= 0f)
+        {
+            lookYaw = animYaw; lookPitch = animPitch; tiltNow = 0f;          // 켜질 때 지금 얼굴에서 출발
+            HeadYaw = animYaw; HeadTiltNow = 0f;
+            return;
+        }
+        if (mode == 0) { wantYaw = animYaw; wantPitch = animPitch; wantTilt = 0f; }
+        // 목표가 바뀌면 STALKER_HEAD_SNAP_S 안에 딱 — 좌우는 ±180 안에서만 움직여 몸 뒤를 가로질러 돌지 않는다
+        float rate = 180f / Tuning.STALKER_HEAD_SNAP_S;
+        lookYaw = Mathf.MoveTowards(lookYaw, wantYaw, rate * dt);
+        lookPitch = Mathf.MoveTowards(lookPitch, wantPitch, rate * dt);
+        tiltNow = Mathf.MoveTowards(tiltNow, wantTilt, rate * dt);
+        float dy = (lookYaw - animYaw) * headW, dp = (lookPitch - animPitch) * headW, dr = tiltNow * headW;
+        // 모델 공간: 좌우(모델 위 축) → 위아래(돌린 뒤 옆 축) → 갸웃(돌린 뒤 얼굴 축). 세상으로 바꿔 목 몫·머리 몫으로 나눠 앞에 곱한다
+        Quaternion yawQ = Quaternion.AngleAxis(dy, Vector3.up);
+        Quaternion qm = Quaternion.AngleAxis(dr, Quaternion.AngleAxis(animYaw + dy, Vector3.up) * Vector3.forward)
+                        * Quaternion.AngleAxis(dp, Quaternion.AngleAxis(animYaw + dy, Vector3.up) * Vector3.right) * yawQ;
+        Quaternion qw = transform.rotation * qm * Quaternion.Inverse(transform.rotation);
+        float k = Tuning.STALKER_HEAD_NECK_SHARE;
+        neckB.rotation = Quaternion.Slerp(Quaternion.identity, qw, k) * neckB.rotation;
+        headB.rotation = Quaternion.Slerp(Quaternion.identity, qw, 1f - k) * headB.rotation;
+        YawPitch(FaceDir, out float nowYaw, out _);
+        HeadYaw = nowYaw;
+        HeadTiltNow = dr;
+    }
+
     void Jaw(float dt)
     {
         float target;
@@ -162,6 +246,8 @@ public class StalkerAnim : MonoBehaviour
 
     void LateUpdate()
     {
+        if (neckB != null && headB != null && driveHead)
+            Head(Time.deltaTime);
         if (jaw != null && driveJaw)
             Jaw(Time.deltaTime);
         if (straightFingers)

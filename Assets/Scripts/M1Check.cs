@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw|stiffneck 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -181,6 +181,8 @@ public class M1Check : MonoBehaviour
             sanim.straightFingers = true;
         if (sabotage == "shutjaw" && sanim != null)      // 3D-③b M1c 전 상태: 턱이 안 움직인다
             sanim.driveJaw = false;
+        if (sabotage == "stiffneck" && sanim != null)    // 3D-③b M1d 전 상태: 머리가 동작 그대로 (몸과 같이 돈다)
+            sanim.driveHead = false;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
@@ -1557,6 +1559,57 @@ public class M1Check : MonoBehaviour
                 Debug.Log($"ANIM jaw capture {tag}: {sa.Current} jaw {sa.JawDeg:F1}°");
             }
         }
+        // ⑥d 3D-③b M1d 머리 (DevHud G 와 같은 길 — 세운 괴물의 머리 시험): 몸 뒤 160° 의 나를 본다 · 갸웃 · 수색 끊어 돌림 + 사진
+        {
+            sa.manual = Array.IndexOf(StalkerAnim.ManualClips, "idle_crouch");
+            sa.freezeTime = false;
+            lamp.lampOn = true;
+            Vector3 M0 = new Vector3(0f, 0.1f, 20f);
+            float Flat3(Vector3 a, Vector3 b) { a.y = 0f; b.y = 0f; return Vector3.Angle(a, b); }
+            // 몸은 +z(북)를 본다. 나는 몸 오른쪽 뒤 160°, 3.5 m — 갱도 폭 안
+            st.Teleport(M0, 0f);
+            Vector3 behind = M0 + Quaternion.Euler(0f, 160f, 0f) * Vector3.forward * 3.5f;
+            behind.x = Mathf.Clamp(behind.x, -2.4f, 2.4f);
+            Teleport(cc, behind, Quaternion.LookRotation(M0 - behind).eulerAngles.y);
+            sa.headTest = 1;
+            yield return new WaitForSeconds(0.6f);
+            Vector3 toMe = cc.transform.position - M0;
+            float faceBody = Flat3(sa.FaceDir, model.forward), faceErr = Flat3(sa.FaceDir, toMe), meBody = Flat3(toMe, model.forward);
+            yield return Capture("26_head_follow_me_behind", _ => { });
+            Check("anim_head_turns_past_human", faceBody >= meBody - 15f && faceBody >= 140f && faceErr <= 15f,
+                $"body faces north, I stand {meBody:F0}° behind-right: face turned {faceBody:F0}° from body (want ≥ 140, human ≈ 80), {faceErr:F0}° off me (max 15), yaw max {sa.headYawMax:F0}°");
+            // 갸웃: 앞 3.5 m 에서 나를 보며
+            st.Teleport(M0, 180f);
+            Teleport(cc, M0 + Vector3.back * 3.5f, 0f);
+            sa.headTest = 3;
+            yield return new WaitForSeconds(0.6f);
+            float tilt = Vector3.Angle(sa.HeadUpDir, model.up);
+            yield return Capture("26_head_listen_tilt", _ => { });
+            Check("anim_head_tilts", tilt >= sa.headTilt - 30f, $"head top leans {tilt:F0}° from body up (listen tilt {sa.headTilt:F0}°, want ≥ {sa.headTilt - 30f:F0} — pitch toward me eats some)");
+            // 수색: 3 s 동안 얼굴 좌우를 프레임마다 — 움직임(프레임당 > 3°)이 시작하는 횟수 = 끊어 돌린 횟수
+            sa.headTest = 2;
+            yield return new WaitForSeconds(0.3f);
+            int steps = 0, frames = 0, movingFrames = 0;
+            bool wasMoving = false;
+            float prevYaw = sa.HeadYaw;
+            t = 0f;
+            while (t < 3f)
+            {
+                yield return null;
+                t += Time.deltaTime;
+                float dYaw = Mathf.Abs(Mathf.DeltaAngle(prevYaw, sa.HeadYaw));
+                prevYaw = sa.HeadYaw;
+                bool moving = dYaw > 3f;
+                if (moving && !wasMoving) steps++;
+                if (moving) movingFrames++;
+                wasMoving = moving;
+                frames++;
+            }
+            Check("anim_head_search_steps", steps >= 5 && movingFrames <= frames / 2,
+                $"search: head jumped {steps} times in 3 s (want ≥ 5), moving {movingFrames} of {frames} frames (want ≤ half — holds between jumps)");
+            yield return Sheet("26_head_search_sheet", 12, i => Wait(0.1f));
+            sa.headTest = 0;
+        }
         sa.freezeTime = false;
         sa.manual = 0;
 
@@ -1585,6 +1638,56 @@ public class M1Check : MonoBehaviour
         hud.enabled = false;
         Check("anim_roar_peak_in_alert", roarPeak >= Tuning.STALKER_ROAR_START_S && roarPeak <= Tuning.STALKER_ROAR_START_S + Tuning.STALKER_ALERT_S,
             $"hands farthest apart ({best:F2} m) at {roarPeak:F2} s of roar; alert plays {Tuning.STALKER_ROAR_START_S:F2}–{Tuning.STALKER_ROAR_START_S + Tuning.STALKER_ALERT_S:F2} s");
+        // ⑧ 3D-③b M1d: 배회하다 소리를 들으면 머리가 먼저 확 꺾인다 (몸보다 먼저) + 갸웃, 그 뒤 수색에선 끊어 돌린다. 램프 끔, 나는 몸 뒤(눈 원뿔 밖)
+        {
+            lamp.lampOn = false;
+            st.enabled = true;
+            Vector3 W0 = new Vector3(0f, 0.1f, 22f);
+            st.Teleport(W0, 0f);
+            Teleport(cc, W0 + Vector3.back * 7f, 0f);
+            player.frozen = true;
+            yield return new WaitForSeconds(0.15f);                   // 배회가 몸을 돌리기 전에 — 소리는 몸 오른쪽 뒤
+            Vector3 noise = W0 + Quaternion.Euler(0f, 120f, 0f) * Vector3.forward * 6f;
+            noise.x = Mathf.Clamp(noise.x, -2.4f, 2.4f);
+            NoiseBus.Make(noise, 20f, "check_head", null);
+            float headFirst = 99f, bodyThen = 0f, tiltMax = 0f, snapT = 99f;
+            t = 0f;
+            while (t < 0.6f)
+            {
+                yield return new WaitForEndOfFrame();
+                t += Time.deltaTime;
+                Vector3 toN = noise - model.position; toN.y = 0f;
+                Vector3 f = sa.FaceDir; f.y = 0f;
+                Vector3 b = model.forward; b.y = 0f;
+                float he = Vector3.Angle(f, toN), be = Vector3.Angle(b, toN);
+                if (he <= 20f && be >= he + 30f && t < snapT) { snapT = t; headFirst = he; bodyThen = be; }
+                tiltMax = Mathf.Max(tiltMax, Vector3.Angle(sa.HeadUpDir, model.up));
+            }
+            string heard = $"{st.state} heard '{st.lastHeard}'";
+            Check("anim_head_snaps_to_noise", snapT <= 0.3f && tiltMax >= sa.headTilt - 30f,
+                $"{heard}: head within {headFirst:F0}° of the noise {snapT:F2} s after it (max 0.3) while the body was still {bodyThen:F0}° off · head top leaned up to {tiltMax:F0}° (listen tilt {sa.headTilt:F0})");
+            t = 0f;
+            while (st.state != Stalker.State.Search && t < 15f) { t += Time.deltaTime; yield return null; }
+            int steps = 0, frames = 0;
+            bool wasMoving = false;
+            float prevYaw = sa.HeadYaw;
+            t = 0f;
+            while (t < 3f && st.state == Stalker.State.Search)
+            {
+                yield return null;
+                t += Time.deltaTime;
+                float dYaw = Mathf.Abs(Mathf.DeltaAngle(prevYaw, sa.HeadYaw) - 0f);
+                prevYaw = sa.HeadYaw;
+                bool moving = dYaw > 3f;
+                if (moving && !wasMoving) steps++;
+                wasMoving = moving;
+                frames++;
+            }
+            Check("anim_head_search_in_behavior", steps >= 4 && t >= 2f,
+                $"real search ({st.state}, {t:F1} s sampled): head jumped {steps} times (want ≥ 4 in ≥ 2 s)");
+            player.frozen = false;
+            lamp.lampOn = true;
+        }
         st.enabled = true;
         st.Teleport(new Vector3(0f, 0.1f, st.zMax));
     }

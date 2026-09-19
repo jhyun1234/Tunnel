@@ -65,6 +65,11 @@ public class DevHud : MonoBehaviour
         var sa = stalker != null ? stalker.GetComponentInChildren<StalkerAnim>() : null;   // 3D-③: 동작 판정 — 선 괴물의 동작을 차례로, 배회 걸음 안을 바꾼다
         if (sa != null)
         {
+            if (kb.gKey.wasPressedThisFrame) sa.headTest = (sa.headTest + 1) % 4;                   // 3D-③b M1d: 세운 괴물(9)의 머리 시험
+            if (kb.tKey.wasPressedThisFrame) sa.headYawMax = Mathf.Max(15f, sa.headYawMax - 15f);
+            if (kb.yKey.wasPressedThisFrame) sa.headYawMax = Mathf.Min(180f, sa.headYawMax + 15f);
+            if (kb.oKey.wasPressedThisFrame) sa.headTilt = Mathf.Max(0f, sa.headTilt - 10f);
+            if (kb.pKey.wasPressedThisFrame) sa.headTilt = Mathf.Min(180f, sa.headTilt + 10f);
             if (kb.hKey.wasPressedThisFrame) sa.jawWideDeg = Mathf.Max(5f, sa.jawWideDeg - 5f);    // 3D-③b M1c: 포효·잡기 턱 벌림 — 사용자가 값을 찾는다
             if (kb.jKey.wasPressedThisFrame) sa.jawWideDeg = Mathf.Min(90f, sa.jawWideDeg + 5f);
             if (kb.nKey.wasPressedThisFrame && !stalker.enabled) { sa.manual = (sa.manual + 1) % StalkerAnim.ManualClips.Length; walkPreview = false; }
@@ -118,7 +123,7 @@ public class DevHud : MonoBehaviour
             return;
         string monster = stalker == null ? "" :
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
-            (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J]){(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
+            (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J])\nhead test {StalkerAnim.HeadTestName(an.headTest)} [G]  face {an.HeadYaw:0}° (max {an.headYawMax:0}° [T Y])  tilt {an.HeadTiltNow:0}° (listen {an.headTilt:0}° [O P]){(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
             (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   [9] freeze monster in front of me · [0] on/off" : "");
         GUI.Label(new Rect(10, 10, 900, 140),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
