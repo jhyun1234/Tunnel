@@ -46,6 +46,7 @@
     "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.12",
     "com.unity.ugui": "2.0.0",
-    "com.unity.visualscripting": "1.9.11"
+    "com.unity.visualscripting": "1.9.11",
+    "com.unity.pipeline": "0.7.0-exp.1"
   }
 }
