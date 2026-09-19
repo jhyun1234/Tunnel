@@ -19,8 +19,11 @@ U1 판정(09-19): 방향은 맞다 / 두 다리 걸음이 안 무섭다 · 무�
   · 팔 = 수식·IK 없음. 받아 둔 모션캡처 "zombie attack"(사람이 연기한 한 팔 뻗어 휘젓기)을 0.3배쯤으로, 빠르기를 고르지 않게 다시 재생해 선 몸에 온몸째 섞는다(0.5 s 에 걸쳐). 손이 면에 붙지는 않는다 — 허공·벽 높이를 휘젓는다
   · 손가락 = 두드리기 없음. 벌려 세운 갈고리 손이 아주 느리게만 움직인다
   · "들었나?" = 멈추기 직전 화면이 덜컥(내가 소리를 냄) → 몸은 그대로 굳고 머리만 나를 향해 딱 + 갸웃 → 긴 정지
-  자기 검사: 얹은 머리·손이 렌더 재계산에 살아남나 · 손끝이 몸 앞으로 나가나 · 손이 바닥·벽을 안 뚫나 · 머리가 0.2 s 에 40° 넘게 도나 · 긴 정지 동안 뼈 움직임 0.
-  사보타주: SABOTAGE=nofreeze(U2 버그) · nogrope(모션캡처 안 섞음) · nohold(정지 중에도 시간이 흐름) → 저마다 FAIL 로 죽는다.
+  B2 판정(09-20): "들었나?" 통과 / 팔이 "더듬는다"로 안 읽힌다(앞으로 쭉 뻗은 모양일 뿐) · 바닥을 짚을 때는 손가락이 전부 펴졌으면. 그래서 B3:
+  · 더듬기 = **바닥을 여기저기 짚어 본다**: 깊이 웅크려 두 손이 번갈아 — 들어서 옮기고(0.45~0.9 s) → 손가락을 쫙 펴 벌린 손바닥으로 짚고 → 짚은 채 조금 문지르고(0.5~1.4 s) → 다른 자리로. 자리·길이는 고르지 않게(씨앗 고정 난수)
+  · 짚으려면 손이 바닥에 닿아야 해서 손목 과녁 IK 가 돌아왔다(B1 에서 버린 것 — 이번엔 고른 빠르기의 호가 아니라 짚는 자리 놓기용). 허리·어깨의 흔들림은 B2 의 모션캡처 그대로, 팔이 곧게 뻗어 뻣뻣해지지 않게 과녁을 팔 길이 94 % 안으로 당긴다
+  자기 검사: 얹은 머리·손이 렌더 재계산에 살아남나 · 짚는 동안 네 손가락 끝이 다 바닥에 닿나 · 손가락이 곧게 펴졌나 · 손끝이 몸 앞으로 나가나 · 손이 바닥·벽을 안 뚫나 · 머리가 0.2 s 에 40° 넘게 도나 · 긴 정지 동안 뼈 움직임 0.
+  사보타주: SABOTAGE=nofreeze(U2 버그) · nogrope(모션캡처 안 섞음) · nohold(정지 중에도 시간이 흐름) · curled(짚을 때 손가락을 안 편다) → 저마다 FAIL 로 죽는다.
 출력: build/check_3d4/UP_<이름>.mp4. GLB·게임은 안 건드린다. 고르기용 영상이다 — 통과 판정은 배포 실행 파일에서."""
 import bpy, os, sys, math, shutil, subprocess
 from mathutils import Vector, Quaternion, Matrix
@@ -45,7 +48,6 @@ SEARCH_MS, STOP_M = 2.5, 4.0               # 수색 걸음(게임 m/s) · 플레
 CX = float(E("UP_CX", "0.5")) if SEARCH else 0.0       # 수색: 괴물이 갱도 가운데서 조금 왼쪽(화면 오른쪽)으로 온다
 YAW, TILT = float(E("UP_YAW", "50")), 18.0             # 수색: 몸을 벽 쪽으로 트는 각 (나를 돌아보는 머리가 크게 돌아야 읽힌다) · 들었을 때 갸웃
 HUNCH_CUT = float(E("UP_HUNCH_CUT", "0.35"))           # 더듬는 모션캡처는 제 스스로 숙이고 있다 — 우리 숙임을 이만큼 덜어야 손이 바닥을 안 뚫는다
-GROPE_END = float(E("UP_GROPE_END", "0.7"))
 GROPE, GROPE_RATE, HEAR_AT = E("UP_GROPE", "Creeping Zombie Walk"), float(E("UP_GROPE_RATE", "0.40")), float(E("UP_HEAR_AT", "0.3"))
 NECK_OUT, NECK_S = float(E("UP_NECK", "0.25")), 1.0    # 목 내밀기 (모델 m) · 나오는 데 걸리는 초
 DIP = float(E("UP_DIP", "0.05"))           # 발 디딜 때 엉덩이가 내려앉는 깊이 (모델 m)
@@ -114,6 +116,13 @@ def legs(on):
     for s in ("Left", "Right"):
         pb(s + "Leg").constraints["up_ik"].influence = 1.0 if on else 0.0
         pb(s + "Foot").constraints["up_rot"].influence = 1.0 if on else 0.0
+# ---- 팔 IK (수색: 바닥 짚기): 손목 과녁 + 손 방향. 영향(influence) g 로 모션캡처 팔과 섞는다
+for s in ("Left", "Right"):
+    e = bpy.data.objects.new("tg_hand_" + s, None); e.rotation_mode = "QUATERNION"; col.objects.link(e); tg["hand_" + s] = e
+    c = pb(s + "ForeArm").constraints.new("IK"); c.target = e; c.chain_count = 2; c.use_tail = True; c.name = "up_ik"; c.influence = 0
+    c = pb(s + "Hand").constraints.new("COPY_ROTATION"); c.target = e; c.target_space = "WORLD"; c.owner_space = "WORLD"; c.name = "up_rot"; c.influence = 0
+def arm_ik(s, g):
+    pb(s + "ForeArm").constraints["up_ik"].influence = g; pb(s + "Hand").constraints["up_rot"].influence = g
 # ---- 손가락: walk_knuckle.py 와 같은 법 — 손 뼈의 X 축 하나로 굽힌다(뼈마다 축이 제각각이라). 굽는 쪽은 쉬는 자세에서 재어 정한다
 FINGERS = ("Index", "Middle", "Ring", "Pinky", "Thumb")
 def fb(side, f, i): return "%sHand%s%d" % (side, f, i)
@@ -127,7 +136,14 @@ for s_ in ("Left", "Right"):
         rotate_world(fb(s_, "Middle", i), Matrix.Rotation(math.radians(20), 4, (M @ pb(s_ + "Hand").matrix).to_3x3().col[0]))
     curl_sign[s_] = 1 if (M @ pb(fb(s_, "Middle", 4)).matrix).translation.z < z0 else -1
     reset_pose()
-print("curl sign", curl_sign)
+spread_sign = {}                            # 손가락 벌리기: 손바닥 법선(손 뼈 Z) 둘레로 새끼 쪽을 + 로 돌렸을 때 검지와 멀어지는 쪽
+for s_ in ("Left", "Right"):
+    d0 = ((M @ pb(fb(s_, "Pinky", 4)).matrix).translation - (M @ pb(fb(s_, "Index", 4)).matrix).translation).length
+    rotate_world(fb(s_, "Pinky", 1), Matrix.Rotation(math.radians(15), 4, (M @ pb(s_ + "Hand").matrix).to_3x3().col[2]))
+    d1 = ((M @ pb(fb(s_, "Pinky", 4)).matrix).translation - (M @ pb(fb(s_, "Index", 4)).matrix).translation).length
+    spread_sign[s_] = 1 if d1 > d0 else -1; reset_pose()
+SPREAD = {"Thumb": -22, "Index": -9, "Middle": -2, "Ring": 6, "Pinky": 15}
+print("curl sign", curl_sign, "spread sign", spread_sign)
 # ---- 긴 목 (M1e): Unity StalkerAnim.NeckOut·BuildPath·PathAt 과 같은 셈 — 머리를 보는 쪽(+ 위 0.4)으로 밀고, 마디 7개를 "머리 → 나오는 곳 → 등뼈" 길 위에 놓는다
 NECK_N, NECK_LEN, TOP_IN, OUT_UP = 7, 0.80, 0.03, 0.4
 def wpos(n): return (M @ pb(n).matrix).translation.copy()
@@ -237,28 +253,52 @@ def do_grope(sec, **kw):
     """서 있는 시간 (수색). 자세 열쇠(lean 숙임° · crouch 웅크림 m · neck 목 m · pitch 고개 숙임° · mix 모션캡처 섞기)는 목표값 — 프레임 루프가 천천히 따라간다"""
     for _ in range(int(sec * FPS)):
         plan.append(dict(act=walk, f=lf(walk, wi, WALK_RATE), d=dist, mean=mean_walk, stand=True, look=0.0, **kw))
+def smooth(u): u = max(0.0, min(1.0, u)); return u * u * (3 - 2 * u)
+import random
+def pat_schedule(side, n, rnd):
+    """한 손의 바닥 짚기 시간표: 프레임마다 (손목 과녁의 바닥 자리 — 괴물 제자리 좌표, 짚음 0~1). 들어서 옮기기 ↔ 짚고 문지르기, 자리·길이는 고르지 않게"""
+    sx = 1 if side == "Left" else -1
+    cur, out = Vector((sx * 0.35, -0.80, 0)), []
+    if side == "Left": out += [(cur.copy(), 1.0)] * int(rnd.uniform(0.5, 0.8) * FPS)       # 두 손이 엇갈리게: 왼손은 짚은 채로 시작
+    while len(out) < n:
+        nxt = Vector((sx * rnd.uniform(0.0, 0.7), -rnd.uniform(float(E("UP_PAT_Y0", "0.55")), float(E("UP_PAT_Y1", "1.10"))), 0))
+        mv, ct = int(rnd.uniform(0.45, 0.9) * FPS), int(rnd.uniform(0.5, 1.4) * FPS)
+        rub = Vector((rnd.uniform(-0.12, 0.12), rnd.uniform(-0.14, 0.06), 0))
+        for i in range(mv):
+            u = smooth((i + 1) / mv); q_ = cur.lerp(nxt, u); q_.z = 0.17 * math.sin(math.pi * u)
+            out.append((q_, smooth((u - 0.7) / 0.3)))                                        # 내려놓기 전에 손가락을 편다
+        for i in range(ct):
+            out.append((nxt + rub * smooth((i + 1) / ct), 1.0))
+        cur = nxt + rub
+    return out[:n]
 gf = 0.0
-def do_sweep(to, **kw):
-    """더듬기 = 모션캡처를 GROPE_RATE 배로, 빠르기를 고르지 않게(0.2~1.8배 사이를 오가며) 다시 재생. to = 클립의 어디까지(0~1)"""
+def do_pat(n0, n1, **kw):
+    """바닥 짚기 구간. 허리 위 흔들림은 모션캡처(GROPE_RATE 배, 빠르기 고르지 않게), 손은 PAT 시간표"""
     global gf
     g0, g1 = grope_act.frame_range
-    while gf < to * (g1 - g0):
+    for gi in range(n0, n1):
         tt = len(plan) / FPS
         gf += GROPE_RATE * (1.0 + 0.55 * math.sin(2 * math.pi * 0.37 * tt) + 0.25 * math.sin(2 * math.pi * 0.83 * tt + 1.3))
-        plan.append(dict(act=walk, f=lf(walk, wi, WALK_RATE), d=dist, mean=mean_walk, stand=True, look=0.0, act2=grope_act, f2=g0 + min(gf, g1 - g0), mix=1.0, **kw))
+        plan.append(dict(act=walk, f=lf(walk, wi, WALK_RATE), d=dist, mean=mean_walk, stand=True, look=0.0, follow=True, lr=2.5,
+                         act2=grope_act, f2=g0 + gf % (g1 - g0), mix=1.0, g=1.0, gi=gi, **kw))
 if SEARCH:
     WALK_RATE = (SEARCH_MS / S) / v_walk    # 수색 걸음은 게임 그대로 2.5 m/s (up_walk ×1.36 — MA 판정에서 그대로 두기로 함)
     PLAYER = -(YAW + math.degrees(math.atan2(CX, STOP_M / S)))       # 몸에서 본 나의 방향
     do_walk((START - STOP_M / S) / (SEARCH_MS / S) - 1.0); do_walk(1.0, yaw=YAW)        # 마지막 1 s 는 벽 쪽으로 휘어 걷는다
     do_stand([(-55, 0.6), (30, 0.9)])       # 서서 딱 — 딱
     do_grope(NECK_S, neck=NECK_OUT, lean=10, pitch=12)                                  # 앞을 딱 — 목을 천천히 내밀어 들여다본다
-    G = dict(neck=NECK_OUT, lean=float(E("UP_LEAN", "0")), crouch=float(E("UP_SQUAT", "0.18")), pitch=6)
-    do_sweep(HEAR_AT, **G)
+    G = dict(neck=NECK_OUT, lean=float(E("UP_LEAN", "30")), crouch=float(E("UP_SQUAT", "0.55")), pitch=10)
+    PAT_N = int(float(E("UP_PAT_S", "7.5")) * FPS); rnd = random.Random(int(E("UP_SEED", "7")))
+    PAT = {s_: pat_schedule(s_, PAT_N, rnd) for s_ in ("Right", "Left")}
+    hear = next(i for i in range(int(PAT_N * HEAR_AT), PAT_N - 8) if all(PAT[s_][j][1] == 1.0 for s_ in PAT for j in range(i, i + 8)))     # 두 손 다 짚고 있는 때
+    do_grope(0.9, mix=1.0, act2=grope_act, f2=grope_act.frame_range[0], g=1.0, gi=0, **G)     # 몸을 접으며 두 손이 첫 자리로 내려간다
+    do_pat(0, hear, **G)
     plan[-5]["jolt"] = True                 # 내가 소리를 냈다 — 화면이 덜컥
-    heard = {**plan[-1], "hold": True, "look": PLAYER, "tilt": TILT}
+    heard = {**plan[-1], "hold": True, "look": PLAYER, "tilt": TILT, "follow": False, "lr": 12.0}
     plan += [{**heard, "snap": True} for _ in range(int(0.2 * FPS))]                    # 몸은 굳고 머리만 나를 딱 + 갸웃
     plan += [dict(heard) for _ in range(int(float(E("UP_HOLD_S", "2.0")) * FPS))]       # 통째로 멈춤 — "들었나?"
-    do_sweep(GROPE_END, lr=2.0, **G)              # 머리가 천천히 돌아가고 마저 쓴다
+    do_pat(hear, PAT_N, **G)                # 머리가 천천히 손으로 돌아가고 마저 짚는다
+    do_grope(1.0, g=1.0, mix=1.0, gi=PAT_N - 1)                                 # 손을 짚은 채 몸부터 일으키고
     do_grope(0.8)                           # 거두고 일어선다
     do_stand([(PLAYER, 1.0)])               # 나를 딱 본다 — 끝
 else:
@@ -280,7 +320,7 @@ order = [b for b in pbs if b.parent is None]
 for b in order: order.extend(b.children)
 def freeze():
     mats = {b.name: b.matrix.copy() for b in order}           # IK 까지 계산된 결과
-    ad.action = None; legs(False)
+    ad.action = None; legs(False); arm_ik("Left", 0.0); arm_ik("Right", 0.0)
     for b in order:
         if b.parent:
             rest = mats[b.parent.name] @ b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local
@@ -292,6 +332,8 @@ def freeze():
 upper = set(pb("Spine").children_recursive) | {pb("Spine")}      # 더듬기는 허리 위만 모션캡처 — 다리는 선 자세 그대로 (zombie attack 온몸 섞기는 몸이 150° 돌아가 버렸다)
 shake = dip = dip_to = 0.0; look = body_look = life = ft = 0.0; was_up = [True, True]; checked = set()
 held = lean = squat = pitch = neck = yaw = yaw_to = tilt = mixw = f2 = 0.0; a2 = None       # 수색: 멈춘 시간 · 자세 열쇠를 따라가는 값 · 모션캡처 섞는 몫
+gw, gi_now, focus = {"Left": 0.0, "Right": 0.0}, 0, Vector((0, -1, 0))      # 팔 IK 영향 · 짚기 시간표의 지금 칸 · 머리가 따라가는 손 자리
+pat_n = pat_ok = clipped = 0; straight_min, pat_low, pat_reach = 9.0, 9.0, 0.0
 reach_max, low_min, wall_max, hold_move, hold_prev, neck_max, look_pre, snap_deg = 0.0, 9.0, 0.0, 0.0, None, 0.0, 0.0, 0.0
 jaw_axis = Vector((1, 0, 0))
 for n, st in enumerate(plan):
@@ -329,6 +371,8 @@ for n, st in enumerate(plan):
         if not st.get("still"): ft += 1.0 / FPS               # 손가락 시계 — 굳으면 같이 멈춘다
         lean += (st.get("lean", 0.0) - lean) * 0.07; squat += (st.get("crouch", 0.0) - squat) * 0.07; pitch += (st.get("pitch", 0.0) - pitch) * 0.07
         neck += max(-NECK_OUT / NECK_S / FPS, min(NECK_OUT / NECK_S / FPS, st.get("neck", 0.0) - neck))     # 목은 고른 빠르기로 천천히 (Unity MoveTowards 와 같다)
+        for s_ in gw: gw[s_] += ((st.get("g", 0.0) if SAB != "nogrope" else 0.0) - gw[s_]) * 0.22      # 몸이 접히는 것(0.07)보다 팔이 먼저 자리를 잡아야 손이 바닥 밑으로 안 들어간다
+        gi_now = st.get("gi", gi_now)
         if "yaw" in st: yaw_to = st["yaw"]
         yaw += (yaw_to - yaw) * 0.08
     pb("Hips").location = pb("Hips").location + hips_axes @ Vector((0.015 * life * math.sin(2 * math.pi * 0.21 * t), 0.35 * squat,
@@ -342,6 +386,7 @@ for n, st in enumerate(plan):
     rotate_world("Head", Matrix.Rotation(math.radians(-(HUNCH * (1 - HUNCH_CUT * mixw) + lean) * 0.45 + pitch * 0.6), 4, "X"))
     rotate_world("Spine1", Matrix.Rotation(math.radians(1.8 * life * math.sin(2 * math.pi * 0.30 * t + 0.6)), 4, "X"))
     want, lr = st["look"], st.get("lr", 12.0)
+    if st.get("follow"): want = max(-60.0, min(60.0, math.degrees(math.atan2(focus.x, -focus.y)) * 0.8))       # 머리가 옮기는 손을 느리게 따라간다
     if not hold or st.get("snap"):                            # 머리: 한 프레임에 12° = 0.15 s 에 55° — 딱 돌리고 멈춘다. "들었나?"(snap)는 몸이 굳은 채 머리만
         look += max(-lr, min(lr, want - look)); tilt += max(-3.0, min(3.0, st.get("tilt", 0.0) - tilt))
     lag = want * 0.45 - body_look
@@ -360,10 +405,27 @@ for n, st in enumerate(plan):
             sw = life * (1 - mixw) * (7.0 * math.sin(2 * math.pi * 0.33 * t + k * 2.1) + lag * 0.5)
             rotate_world(s_ + "Arm", Matrix.Rotation(math.radians(sw), 4, "X"))
             rotate_world(s_ + "ForeArm", Matrix.Rotation(math.radians(life * (1 - mixw) * 5.0 * math.sin(2 * math.pi * 0.33 * t + k * 2.1 - 0.9)), 4, "X"))
-        ax = (M @ pb(s_ + "Hand").matrix).to_3x3().col[0]
+        g = gw[s_]; arm_ik(s_, g); c_ = 0.0
+        if g > 0.001:                                         # 짚는 팔: 손목 과녁(팔 길이 94 % 안으로 당김) + 손 방향(손가락은 어깨에서 뻗는 쪽, 손바닥은 바닥 쪽, 떠 있을 땐 끝을 조금 든다)
+            p_, c_ = PAT[s_][gi_now]
+            if c_ < 1.0: focus = p_
+            sh, p_ = wpos(s_ + "Arm"), p_ + Vector((0, 0, 0.035 + 0.05 * (1 - c_) + 0.5 * max(0.0, 1 - squat / 0.5)))      # 몸이 덜 접힌 동안은 손도 그만큼 떠 있다 (접고 펼 때 손이 몸과 같이 내려가고 올라온다)
+            dxy = Vector((p_.x - sh.x, p_.y - sh.y, 0)); hmax = math.sqrt(max(0.01, 0.80 ** 2 - (sh.z - p_.z) ** 2))
+            if dxy.length > hmax: p_ = Vector((sh.x, sh.y, p_.z)) + dxy.normalized() * hmax; clipped += 1
+            yv = (dxy.normalized() + Vector((0, 0, 0.30 * (1 - c_)))).normalized(); dn = Vector((0, 0, -1))
+            zv = (dn - yv * dn.dot(yv)).normalized() * curl_sign[s_]
+            tg["hand_" + s_].location = p_; tg["hand_" + s_].rotation_quaternion = Matrix((yv.cross(zv), yv, zv)).transposed().to_quaternion()
+            upd()
+        cf = 0.55 + 0.45 * c_ if g > 0.001 else 0.0          # 옮기는 동안에도 반쯤은 펴 둔다 — 다 오므리면 낮게 옮길 때 끝이 바닥 밑으로 들어간다
+        if SAB == "curled": cf = 0.0
+        hm = (M @ pb(s_ + "Hand").matrix).to_3x3(); ax = hm.col[0]
         curls = finger_curls(s_, ft, st.get("run")); gc = grope_curls(ft, k)
         for f_, angs in curls.items():
             angs = tuple(a + (b_ - a) * mixw for a, b_ in zip(angs, gc[f_]))
+            angs = tuple(a * (1 - g * cf) for a in angs)      # B2 판정: 바닥을 짚을 때는 손가락을 전부 편다 …
+            if g * cf > 0.001:                                # … 쉬는 자세에도 굽힘이 들어 있어(곧은 정도 0.88) 각도를 0 으로 해선 안 펴진다 → 마디마다 손이 뻗은 쪽(벌린 만큼 돌린)으로 겨눈다
+                to = Matrix.Rotation(spread_sign[s_] * math.radians(SPREAD[f_]), 3, hm.col[2]) @ hm.col[1]
+                for i in (1, 2, 3): aim(fb(s_, f_, i), to, cf * smooth(g))
             for i, a in enumerate(angs):
                 rotate_world(fb(s_, f_, i + 1), Matrix.Rotation(curl_sign[s_] * math.radians(a), 4, ax))
     if P + "Jaw" in pbs:
@@ -371,7 +433,18 @@ for n, st in enumerate(plan):
     upd()
     if SEARCH:
         neck_place(neck); neck_max = max(neck_max, (wpos("Head") - wpos("Neck")).length)
-        if mixw > 0.9:                      # 자기 검사용 기록
+        for s_ in ("Left", "Right"):        # 짚은 손: 가장 낮은 손끝(과 손목 밑)이 바닥에 딱 닿게 과녁을 위아래로 한 번 바로잡는다 + 자기 검사 기록
+            if gw[s_] < 0.97 or "gi" not in st or PAT[s_][gi_now][1] < 1.0: continue
+            tips = [wpos(fb(s_, f_, 4)) for f_ in FINGERS[:4]]
+            e = min(min(q_.z for q_ in tips), wpos(s_ + "Hand").z - 0.03)
+            tg["hand_" + s_].location = tg["hand_" + s_].location + Vector((0, 0, 0.004 - e)); upd()
+            tips = [wpos(fb(s_, f_, 4)) for f_ in FINGERS[:4]]
+            pat_n += 1; pat_ok += max(q_.z for q_ in tips) <= 0.06      # 뼈는 손가락 가운데 줄이다 — 눕힌 손가락의 뼈 높이는 0.04~0.05
+            pat_low = min(pat_low, min(q_.z for q_ in tips), wpos(s_ + "Hand").z - 0.03); pat_reach = max(pat_reach, max(-q_.y for q_ in tips))
+            for f_ in FINGERS[:4]:
+                js = [wpos(fb(s_, f_, i)) for i in (1, 2, 3, 4)]
+                straight_min = min(straight_min, (js[3] - js[0]).length / sum((b_ - a).length for a, b_ in zip(js, js[1:])))
+        if True:                            # 자기 검사용 기록 (모든 프레임 — 몸을 접고 펴는 사이에 손이 바닥 밑으로 들어간 적이 있다)
             tips = [wpos(fb(s_, f_, 4)) for s_ in ("Left", "Right") for f_ in FINGERS[:4]]
             Rz = Matrix.Rotation(math.radians(yaw), 3, "Z")
             reach_max = max(reach_max, max(-q_.y for q_ in tips)); low_min = min(low_min, min(q_.z for q_ in tips))
@@ -382,6 +455,9 @@ for n, st in enumerate(plan):
         still_ = st.get("hold") and not st.get("snap")
         if still_ and hold_prev:
             hold_move = max(hold_move, max(abs(x) for a, b_ in zip(snap, hold_prev) for row in (a - b_) for x in row))
+        if still_ and hold_prev and E("UP_DEBUG"):
+            w_ = max(zip(order, snap, hold_prev), key=lambda z: max(abs(x) for row in (z[1] - z[2]) for x in row))
+            print("HOLDDBG", n, w_[0].name, max(abs(x) for row in (w_[1] - w_[2]) for x in row))
         hold_prev = snap if still_ else None
     X = Matrix.Translation((CX, -st["d"], 0)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
     for o in roots:
@@ -395,21 +471,21 @@ for n, st in enumerate(plan):
     sway = Vector((0.006 * math.sin(2 * math.pi * 0.23 * tc), 0, 0.005 * math.sin(2 * math.pi * 0.31 * tc + 1.0)))
     # U2 판정 "영상이 끊긴다": 발 디딜 때 화면을 프레임마다 무작위로 튀게 한 것이 빠진 프레임처럼 보였다 → 무작위 없이 아래로 눌렸다 돌아오기만
     cam.location = CAM0 + sway + Vector((0, 0, -shake))
-    cam.rotation_euler = (math.radians(90) + 0.004 * math.sin(2 * math.pi * 0.27 * tc) - shake * 0.3 - (0.10 if SEARCH else 0.0),
+    cam.rotation_euler = (math.radians(90) + 0.004 * math.sin(2 * math.pi * 0.27 * tc) - shake * 0.3 - (0.16 if SEARCH else 0.0),
                           0.003 * math.sin(2 * math.pi * 0.19 * tc), -0.06 if SEARCH else 0.0)       # 수색: 바닥을 쓰는 손이 보이게 살짝 아래·괴물 쪽을 본다
     shake *= 0.7
     if CLOSE:
         cam.location = Vector((0.6, -st["d"] - 2.6, 1.3))
         cam.rotation_euler = (Vector((0, -st["d"], 1.15)) - cam.location).to_track_quat("-Z", "Y").to_euler()
     if CLOSE and SEARCH:                    # 팔·손가락이 보이게: 괴물 오른쪽 앞 낮은 곳에서 (게임 시점 아님)
-        cam.location = Vector((CX - 1.0, -st["d"] - 2.4, 1.0)) + sway          # 몸을 따라 돌리면 카메라가 벽 밖으로 나간다(시험 프레임이 새까맸다) — 갱도 기준 자리
-        cam.rotation_euler = (X @ Vector((0.0, -0.5, 1.0)) - cam.location).to_track_quat("-Z", "Y").to_euler()
+        cam.location = Vector((CX - 1.0, -st["d"] - 2.5, 0.85)) + sway          # 몸을 따라 돌리면 카메라가 벽 밖으로 나간다(시험 프레임이 새까맸다) — 갱도 기준 자리
+        cam.rotation_euler = (X @ Vector((0.0, -0.7, 0.6)) - cam.location).to_track_quat("-Z", "Y").to_euler()
         cam.data.angle_y = math.radians(55)
     near = max(START - st["d"] - 0.4, 0.2)
     if CLOSE: near = 2.6
     lamp.data.energy = WATTS * max(0.3, min(1.0, (near / (4.0 / S)) ** 1.4)) * (1.0 + 0.03 * math.sin(2 * math.pi * 1.7 * tc))
+    mats = freeze()                         # 안 굽는 프레임도 뜬다 — 뜨고 난 다음 프레임은 팔 IK 가 조금 다르게 풀려서, 빠른 확인(UP_STEP)의 검사 숫자가 본 렌더와 달랐다
     if n % STEP: continue
-    mats = freeze()
     # 자기 검사: 프레임을 다시 계산해도(렌더가 하는 일) 돌린 머리·뻗은 손이 그대로인가. SABOTAGE=nofreeze 로 U2 버그를 되살리면 여기서 죽는다
     for key, bone in ((("head", "Head"),) if abs(look) > 30 else ()) + ((("hand", "LeftHand"),) if mixw > 0.9 else ()):
         if key in checked: continue
@@ -424,11 +500,13 @@ for n, st in enumerate(plan):
     bpy.ops.render.render(write_still=True)
 assert "head" in checked, "FAIL: 머리 돌리기 검사가 한 번도 안 돌았다"
 if SEARCH:
-    print("CHECK grope: fingertips reach %.2f m game in front · lowest %.3f m above floor · farthest %.2f m from centre (wall %.2f) · head snap %.0f deg in 0.2 s · neck head-to-base %.3f m · hold motion %.6f"
-          % (reach_max * S, low_min, wall_max, WALL_X, snap_deg, neck_max, hold_move))
+    print("CHECK grope: %d hand-frames planted, all four fingertips on floor in %.0f %% · fingers straight min %.3f · lowest %.3f m (any time %.3f) · planted fingertips reach %.2f m game in front · target pulled in on %d arm-frames · farthest %.2f m from centre (wall %.2f) · head snap %.0f deg in 0.2 s · neck %.3f m · hold motion %.6f"
+          % (pat_n, 100.0 * pat_ok / max(pat_n, 1), straight_min, pat_low, low_min, pat_reach * S, clipped, wall_max, WALL_X, snap_deg, neck_max, hold_move))
     assert "hand" in checked, "FAIL: 손 검사가 한 번도 안 돌았다 (모션캡처가 안 섞였다)"
-    assert reach_max * S >= 1.2, "FAIL: 손끝이 몸 앞 1.2 m 도 안 나간다"
-    assert low_min > -0.03 and wall_max < WALL_X, "FAIL: 손이 바닥·벽을 뚫는다"
+    assert pat_n > 3 * FPS and pat_ok / pat_n >= 0.9, "FAIL: 짚는 동안 네 손가락 끝이 바닥에 안 닿는다"
+    assert straight_min >= 0.95, "FAIL: 짚을 때 손가락이 안 펴졌다"
+    assert pat_low > -0.02 and low_min > -0.03 and wall_max < WALL_X, "FAIL: 손이 바닥·벽을 뚫는다"
+    assert 1.2 <= pat_reach * S <= 2.2, "FAIL: 짚는 손끝이 몸 앞 1.2~2.2 m 밖"
     assert snap_deg >= 40, "FAIL: 들었을 때 머리가 0.2 s 에 40° 를 못 돈다"
     assert any(st.get("hold") for st in plan) and hold_move < 1e-4, "FAIL: 긴 정지 동안 뼈가 움직인다"
 if STEP > 1: sys.exit(0)
