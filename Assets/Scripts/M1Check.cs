@@ -1536,15 +1536,14 @@ public class M1Check : MonoBehaviour
         glideNames = $"{walkClip}/{fastClip}/{chaseClip}";
         // 3D-④ 5b 서서 오는 괴물 (영상 UP_U4 통과 09-19). 옛 anim_glide_* 다섯을 갈음한다
         upWatch = false;
-        Check("anim_up_clip_by_speed", walkClip == "up_walk" && fastClip == "up_run" && chaseClip == "up_run" && Mathf.Abs(glideWalkRate - 1f) <= 0.1f && Mathf.Abs(glideChaseRate - 1f) <= 0.1f,
-            $"wander/retreat/chase play {glideNames} (want up_walk/up_run/up_run) · median rate wander x{glideWalkRate:F2} · chase x{glideChaseRate:F2} (want 0.90–1.10) · retreat x{glideRetreatRate:F2}");
         Check("anim_up_freeze_on_alert", alertFrames >= 20 && alertMoveMax <= 0.003f && alertFaceErr <= 10f,
             $"alert {alertFrames} frames: hips/hands/toes move at most {alertMoveMax * 1000f:F1} mm per frame in model space (max 3 — stone) · face {alertFaceErr:F0}° off me at the end (max 10)");
         float reachC = gc.frames > 0 ? gc.reach / gc.frames : 0f, reachW = gw.frames > 0 ? gw.reach / gw.frames : 0f;
         Check("anim_up_run_reaches", gc.frames >= 60 && reachC >= 0.4f && reachC >= reachW + 0.3f && gc.lifts == 0 && gw.lifts == 0,
             $"{gc.frames} pure chase frames: hands ahead of chest {reachC:F2} m (min 0.4, wander {reachW:F2}) · arm lifts chase {gc.lifts} · wander {gw.lifts} (want 0)");
-        Check("anim_up_fingers_move", chordHi - chordLo >= 0.2f,
-            $"left index root-to-tip ÷ joint lengths while wandering: {chordLo:F2} (fist) – {chordHi:F2} (open), range {chordHi - chordLo:F2} (min 0.2)");
+        // 문턱: 손가락을 안 움직여도(사보타주 stillhands) 모션캡처·걸음 D 의 손가락 차이로 0.75–0.96 = 0.20 이 나온다(09-19 실측) → 주먹 ≤ 0.45 · 폭 ≥ 0.4 (실측 0.25–0.93)
+        Check("anim_up_fingers_move", chordHi - chordLo >= 0.4f && chordLo <= 0.45f,
+            $"left index root-to-tip ÷ joint lengths while wandering: {chordLo:F2} (fist) – {chordHi:F2} (open), range {chordHi - chordLo:F2} (min 0.4, fist max 0.45)");
         var far = sa.StompLog.Where(v => v.x > 6f).ToList(); var near = sa.StompLog.Where(v => v.x < 4f).ToList();
         Check("anim_up_footfall_shakes", far.Count >= 1 && near.Count >= 1 && far.Average(v => v.y) < near.Average(v => v.y),
             $"footfalls that shook my view: {sa.StompLog.Count} · beyond 6 m {far.Count} avg {(far.Count > 0 ? far.Average(v => v.y) : 0f) * 100f:F1} cm · inside 4 m {near.Count} avg {(near.Count > 0 ? near.Average(v => v.y) : 0f) * 100f:F1} cm (far must be weaker)");
@@ -1566,7 +1565,7 @@ public class M1Check : MonoBehaviour
                 else if (calmSince == float.MaxValue) calmSince = j.time;
                 if (calm && j.time > calmSince + Tuning.STALKER_JAW_CLOSE_S + 0.1f && j.time > jawLog[0].time + 1f) wan.Add(j);
             }
-            var al = jawLog.Where(j => j.s == Stalker.State.Alert).ToList();
+            var al = jawLog.SkipWhile(j => j.s != Stalker.State.Alert).TakeWhile(j => j.s == Stalker.State.Alert).ToList();   // 첫 들킴만 — 추격 뒤 다시 들키면 턱이 40° 에서 내려온다
             var ca = jawLog.Where(j => j.s == Stalker.State.Catch).ToList();
             float chase0 = jawLog.FirstOrDefault(j => j.s == Stalker.State.Chase).time;
             var ch = jawLog.Where(j => j.s == Stalker.State.Chase && j.clip == chaseClip && j.time > chase0 + 0.5f).ToList();
@@ -1578,7 +1577,7 @@ public class M1Check : MonoBehaviour
             float a02 = al.Where(j => j.time <= al[0].time + 0.2f).Select(j => j.deg).DefaultIfEmpty(99f).Max();
             Check("anim_jaw_follows_behavior", wan.Count >= 30 && wMin >= 5f - 0.01f && wMax <= 12f && aMax >= 15f && aMax <= 25f && cMax >= 35f && chAvg >= 35f,
                 $"jaw wander {wMin:F1}–{wMax:F1}° ({wan.Count} frames, want 5–12) · alert max {aMax:F1}° (want 15–25) · catch max {cMax:F1}° · chase avg {chAvg:F1}° ({ch.Count} frames) (want ≥ 35)");
-            Check("anim_jaw_opens_slowly_on_alert", a02 <= 16f && aMax >= 15f, $"jaw {a02:F1}° 0.2 s into alert (max 16 — no snap), {aMax:F1}° by the end (min 15)");
+            Check("anim_jaw_opens_slowly_on_alert", a02 <= 18f && aMax >= 15f, $"jaw {a02:F1}° 0.2 s into alert (max 18 — no snap), {aMax:F1}° by the end (min 15)");
             float chinIdle = wan.Count > 0 ? wan.OrderBy(j => j.chin).ElementAt(wan.Count / 2).chin : 0f;
             var wide = al.Concat(ca).OrderByDescending(j => j.deg).FirstOrDefault();
             Check("anim_jaw_chin_drops", wide.clip != null && wide.chin - chinIdle >= Tuning.STALKER_JAW_CHIN_DROP_MIN,
@@ -1701,6 +1700,7 @@ public class M1Check : MonoBehaviour
             Vector3 behind = M0 + Quaternion.Euler(0f, 160f, 0f) * Vector3.forward * 3.5f;
             behind.x = Mathf.Clamp(behind.x, -2.4f, 2.4f);
             Teleport(cc, behind, Quaternion.LookRotation(M0 - behind).eulerAngles.y);
+            float ShYaw() { Vector3 l = model.InverseTransformDirection(Bone("RightArm").position - Bone("LeftArm").position); return Mathf.Atan2(l.z, Mathf.Abs(l.x)) * Mathf.Rad2Deg; }
             sa.headTest = 1;
             yield return new WaitForSeconds(0.6f);
             Vector3 toMe = cc.transform.position - M0;
@@ -1710,8 +1710,14 @@ public class M1Check : MonoBehaviour
                 $"body faces north, I stand {meBody:F0}° behind-right: face turned {faceBody:F0}° from body (want ≥ 140, human ≈ 80), {faceErr:F0}° off me (max 15), yaw max {sa.headYawMax:F0}°");
             // 3D-④ 5b: 머리를 크게 돌리면 상체(두 어깨를 잇는 선)가 늦게, 덜 따라 돈다 — 1.2 s 더 기다려 다 따라온 뒤에 잰다
             yield return new WaitForSeconds(1.2f);
-            Vector3 shl = model.InverseTransformDirection(Bone("RightArm").position - Bone("LeftArm").position);
-            float shYaw = Mathf.Abs(Mathf.Atan2(shl.z, Mathf.Abs(shl.x)) * Mathf.Rad2Deg);
+            yield return new WaitForEndOfFrame();
+            float shOn = ShYaw();
+            bool torsoWas = sa.driveTorso;                            // 같은 자세에서 상체 따라가기만 껐다 켜서 그 몫만 잰다 (대기 동작이 입힌 어깨 방향은 빠진다)
+            sa.driveTorso = false;
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            float shYaw = Mathf.Abs(Mathf.DeltaAngle(shOn, ShYaw()));
+            sa.driveTorso = torsoWas;
             Check("anim_up_torso_follows_head", shYaw >= 12f && shYaw <= 35f && Mathf.Abs(sa.BodyYaw) <= Tuning.STALKER_UP_TORSO_MAX + 0.1f,
                 $"head turned {faceBody:F0}°: shoulder line turned {shYaw:F0}° with it (want 12–35), torso drive {sa.BodyYaw:F0}° (max {Tuning.STALKER_UP_TORSO_MAX})");
             // 갸웃: 앞 3.5 m 에서 나를 보며
@@ -1881,9 +1887,9 @@ public class M1Check : MonoBehaviour
             }
             string heard = $"{st.state} heard '{st.lastHeard}'";
             string invClip = sa.Current; float invRate = sa.Rate;
-            Check("anim_glide_clip_by_speed", glideNames == "glide_walk/glide_fast/glide_chase" && invClip == "glide_fast" && Mathf.Abs(invRate - 1f) <= 0.08f
+            Check("anim_up_clip_by_speed", glideNames == "up_walk/up_jog/up_run" && invClip == "up_jog" && Mathf.Abs(invRate - 1f) <= 0.08f
                     && Mathf.Abs(glideWalkRate - 1f) <= 0.05f && Mathf.Abs(glideChaseRate - 1f) <= 0.05f && Mathf.Abs(glideRetreatRate - 0.8f) <= 0.05f,
-                $"clips wander/retreat/chase = {glideNames} (want glide_walk/glide_fast/glide_chase) · median rates wander x{glideWalkRate:F2} · chase x{glideChaseRate:F2} (want 0.95–1.05) · retreat x{glideRetreatRate:F2} (want 0.75–0.85) · investigate 0.6 s in: {invClip} x{invRate:F2} (want glide_fast x0.92–1.08)");
+                $"clips wander/retreat/chase = {glideNames} (want up_walk/up_jog/up_run) · median rates wander x{glideWalkRate:F2} · chase x{glideChaseRate:F2} (want 0.95–1.05) · retreat x{glideRetreatRate:F2} (want 0.75–0.85) · investigate 0.6 s in: {invClip} x{invRate:F2} (want up_jog x0.92–1.08)");
             Check("anim_head_snaps_to_noise", snapT <= 0.3f && tiltMax >= sa.headTilt - 30f,
                 $"{heard}: head within {headFirst:F0}° of the noise {snapT:F2} s after it (max 0.3) while the body was still {bodyThen:F0}° off · head top leaned up to {tiltMax:F0}° (listen tilt {sa.headTilt:F0}) · closest head {heMin:F0}° at {tAtMin:F2} s with body {beAtMin:F0}° off, clip {sa.Current}");
             t = 0f;

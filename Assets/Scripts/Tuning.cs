@@ -314,7 +314,7 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_GLIDE_FAST = 5.0f / 1.5f;    // glide_fast: 조사 5.0 · 철수 4.0(배수 0.8)
     public const float STALKER_CLIP_SPEED_GLIDE_CHASE = 6.5f / 1.5f;   // glide_chase: 추격 6.5
     public const float STALKER_ANIM_CHASE_ABOVE = 5.75f;    // m/s, 이보다 빠르면 glide_chase (조사 5.0 과 추격 6.5 의 가운데)
-    public const int STALKER_CLIP_COUNT = 22;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋 + up 셋). BuildM1·검사가 대조한다
+    public const int STALKER_CLIP_COUNT = 23;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋 + up 넷). BuildM1·검사가 대조한다
     public const int STALKER_GAIT_COUNT = 6;                // 걸음 안 A/B/C/D/E/F (U 키)
     // 턱 (3D-③b M1c, 제안서 docs/제안서_3D3b_M1c_턱_뼈.md, 승인 09-19). 각도는 제안값 — 판정 때 DevHud H/J 로 WIDE 를 찾는다.
     // 레퍼런스 공통점: 평소 조금 벌어져 늘어짐 + 숨 / 덮치는 순간 사람보다 크게(사람 최대 32~39°) 확 / 추격 중 벌어짐
@@ -368,7 +368,8 @@ public static class Tuning
     // · 3 = D 새 걷기 walk_knuckle 네 점 걸음(배수 1.0, 3D-③b M1). 사용자가 U 키로 고른다 — 기본값은 판정 뒤에 바꾼다
     // 서서 오는 괴물 (3D-④ 5b, Unity 전용). 클립은 blender/anim/bake_upright.py — 원래 빠르기는 그 스크립트가 찍는 "UPRIGHT clip speeds" ÷ 1.5
     public const float STALKER_CLIP_SPEED_UP_WALK = 1.84f / 1.5f;      // up_walk: 배회 1.85 → 배수 1.0 · 수색 2.5 → 1.36
-    public const float STALKER_CLIP_SPEED_UP_RUN = 6.39f / 1.5f;       // up_run: 추격 6.5 → 1.02 · 조사 5.0 → 0.78 · 철수 4.0 → 0.63
+    public const float STALKER_CLIP_SPEED_UP_RUN = 6.39f / 1.5f;       // up_run(두 팔 뻗은 질주): 추격 6.5 → 1.02. STALKER_ANIM_CHASE_ABOVE 보다 빠를 때와 잡기에만
+    public const float STALKER_CLIP_SPEED_UP_JOG = 5.06f / 1.5f;       // up_jog(팔 안 뻗는 달리기): 조사 5.0 → 0.99 · 철수 4.0 → 0.79
     public const float STALKER_JAW_FREEZE_DEG = 22f;        // 들킴(굳음) 동안 STALKER_ALERT_S 에 걸쳐 여기까지 벌어진다 (영상 JAW_FREEZE)
     public const float STALKER_UP_LOOK_YAW = 55f;           // 도, 서서 둘러볼 때 머리 좌우 (영상: 왼 55 · 오른 35)
     public const float STALKER_UP_LOOK_HOLD_MIN_S = 0.6f;   // s, 한 곳을 보고 머무는 시간 — 고르지 않게 (영상 0.7 · 1.1)

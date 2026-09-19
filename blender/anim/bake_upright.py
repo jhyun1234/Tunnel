@@ -19,6 +19,7 @@ def up_use(act, f):
 def up_load(stem):
     """FBX 의 동작만, 제자리 걸음으로(엉덩이의 곧은 흐름을 뺀다). 돌려주는 것: 동작 · 원래 빠르기(모델 m/s) · 팔 뼈의 평균 자세"""
     before_o, before_a = set(bpy.data.objects), set(bpy.data.actions)
+    bpy.context.view_layer.objects.active = arm             # 걸음 그림을 찍고 나면 활성 물체가 비어 있다
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.ops.import_scene.fbx(filepath=os.path.join(UP_MIX, stem + ".fbx"))
     act = next(a for a in bpy.data.actions if a not in before_a)
@@ -126,8 +127,8 @@ def up_measure(act, N):
 up_walk_src, up_v_walk, up_mean_walk = up_load("Mutant Walking")
 up_run_src, up_v_run, up_mean_run = up_load("Mutant Run")
 wl = up_walk_src.frame_range[1] - up_walk_src.frame_range[0]; rl = up_run_src.frame_range[1] - up_run_src.frame_range[0]
-UP_WALK_N, UP_RUN_N = 60, 19                # 걸음 0.72배 느리게(43 → 60 프레임) · 질주 1.39배 빠르게(26 → 19)
-print("UPRIGHT clip speeds (game m/s): walk %.2f  run %.2f" % (up_v_walk * wl / UP_WALK_N * 1.5, up_v_run * rl / UP_RUN_N * 1.5))
+UP_WALK_N, UP_RUN_N, UP_JOG_N = 60, 19, 24  # 걸음 0.72배 느리게(43 → 60 프레임) · 질주 1.39배 빠르게(26 → 19) · 달음질(조사 5.0 m/s)은 거의 그대로(26 → 24)
+print("UPRIGHT clip speeds (game m/s): walk %.2f  run %.2f  jog %.2f" % (up_v_walk * wl / UP_WALK_N * 1.5, up_v_run * rl / UP_RUN_N * 1.5, up_v_run * rl / UP_JOG_N * 1.5))
 
 # 발 디딤(발끝이 0.13 m 밑으로 내려오는 순간)마다 엉덩이가 두세 프레임에 걸쳐 내려앉는다 — 되풀이가 이어지게 두 바퀴 돌려 둘째 바퀴 값을 쓴다
 dips, d, d_to, was = [0.0] * UP_WALK_N, 0.0, 0.0, [True, True]
@@ -156,6 +157,11 @@ up_bake(NAME, up_run_src, up_mean_run, UP_RUN_N, lambda k: up_run_src.frame_rang
 got = up_measure(acts[NAME][0], UP_RUN_N)
 check(got[2] >= 0.27, "질주: 두 손이 가슴보다 앞 %.3f m (≥ 0.27 = 게임 0.4)" % got[2])
 check(got[3] < 2.0, "되풀이 이음매 %.2f° (< 2)" % got[3])
+NAME = "up_jog"                             # 팔을 안 뻗는 달리기: 소리 조사·철수 — 잡으러 오는 게 아닐 때 (철수 때 뻗은 팔이 벽을 뚫었다, 09-19 게임 검사)
+up_bake(NAME, up_run_src, up_mean_run, UP_JOG_N, lambda k: up_run_src.frame_range[0] + k * rl / UP_JOG_N)
+jog = up_measure(acts[NAME][0], UP_JOG_N)
+check(jog[2] <= got[2] - 0.3, "달음질: 두 손이 가슴보다 앞 %.3f m — 질주 %.3f 보다 0.3 넘게 뒤" % (jog[2], got[2]))
+check(jog[3] < 2.0, "되풀이 이음매 %.2f° (< 2)" % jog[3])
 NAME = ""
 
 for s_ in ("Left", "Right"):
@@ -164,3 +170,4 @@ for o in list(up_col.objects): bpy.data.objects.remove(o, do_unlink=True)
 bpy.data.collections.remove(up_col)
 bpy.data.actions.remove(up_walk_src); bpy.data.actions.remove(up_run_src)
 ad.action = None; reset_pose()
+bpy.ops.object.mode_set(mode="OBJECT")        # 내보내기(object.select_all)는 물체 모드에서 돈다

@@ -8,7 +8,7 @@ using UnityEngine;
 [DefaultExecutionOrder(100)]
 public class StalkerAnim : MonoBehaviour
 {
-    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "glide_walk", "run", "run_knuckle", "glide_fast", "glide_chase", "up_stand", "up_walk", "up_run", "roar", "hit", "crawl", "attack_swipe" };
+    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "glide_walk", "run", "run_knuckle", "glide_fast", "glide_chase", "up_stand", "up_walk", "up_jog", "up_run", "roar", "hit", "crawl", "attack_swipe" };
     [System.NonSerialized] public int gait = Tuning.STALKER_WANDER_GAIT;   // 배회 걸음 A/B/C (U 키)
     [System.NonSerialized] public int manual;                             // 행동 꺼짐일 때 트는 동작 (N 키)
     [System.NonSerialized] public bool rateMatch = true;                  // 사보타주 slide 가 끈다 (늘 1배)
@@ -318,7 +318,7 @@ public class StalkerAnim : MonoBehaviour
     // 무게: 발끝이 내려와 닿는 순간 플레이어 화면을 흔든다 — 가까울수록 세게 (영상 U4 와 같은 식)
     void Stomp()
     {
-        bool run = Current == "up_run";
+        bool run = Current == "up_run" || Current == "up_jog";
         for (int i = 0; i < 2; i++)
         {
             if (toeB[i] == null) return;
@@ -435,7 +435,7 @@ public class StalkerAnim : MonoBehaviour
         switch (Current)
         {
             case "roar": case "attack_swipe": case "up_run": target = jawWideDeg; break;
-            case "run": case "run_knuckle": case "run_stand": case "glide_fast": case "glide_chase": target = Tuning.STALKER_JAW_CHASE_DEG; break;
+            case "run": case "run_knuckle": case "run_stand": case "glide_fast": case "glide_chase": case "up_jog": target = Tuning.STALKER_JAW_CHASE_DEG; break;
             case "hit": target = Tuning.STALKER_JAW_HIT_DEG; break;
             default:
                 jawT += dt;
@@ -465,8 +465,9 @@ public class StalkerAnim : MonoBehaviour
         bool fast = v > Tuning.STALKER_ANIM_RUN_ABOVE;
         if (gait == 5)
         {
-            clipSpeed = fast ? Tuning.STALKER_CLIP_SPEED_UP_RUN : Tuning.STALKER_CLIP_SPEED_UP_WALK;
-            return fast ? "up_run" : "up_walk";
+            bool chase = v > Tuning.STALKER_ANIM_CHASE_ABOVE;               // 두 팔을 뻗는 건 잡으러 올 때만 — 소리 조사·철수는 up_jog
+            clipSpeed = chase ? Tuning.STALKER_CLIP_SPEED_UP_RUN : fast ? Tuning.STALKER_CLIP_SPEED_UP_JOG : Tuning.STALKER_CLIP_SPEED_UP_WALK;
+            return chase ? "up_run" : fast ? "up_jog" : "up_walk";
         }
         if (gait == 4 && fast && !oldRun && !bouncy)
         {
