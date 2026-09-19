@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw|stiffneck 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw|stiffneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -181,6 +181,7 @@ public class M1Check : MonoBehaviour
             sanim.straightFingers = true;
         if (sabotage == "shutjaw" && sanim != null)      // 3D-③b M1c 전 상태: 턱이 안 움직인다
             sanim.driveJaw = false;
+        flatProps = sabotage == "flatprops";
         if (sabotage == "stiffneck" && sanim != null)    // 3D-③b M1d 전 상태: 머리가 동작 그대로 (몸과 같이 돈다)
             sanim.driveHead = false;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
@@ -227,6 +228,8 @@ public class M1Check : MonoBehaviour
     }
 
     // UI-1a: 곡괭이 내구도. 닿은 타격 −1 · 던지기 −5 · PICK_SHAKY_BELOW 이하 떨림 · 0 이면 손에서 조각나 떨어졌다 사라지고 빈손
+    bool flatProps;                                      // 사보타주 flatprops (갱목·못·가죽끈 반들거림 그림 뺌)
+
     IEnumerator PickStage(CharacterController cc)
     {
         var st = stalker;
@@ -1609,6 +1612,14 @@ public class M1Check : MonoBehaviour
                 $"search: head jumped {steps} times in 3 s (want ≥ 5), moving {movingFrames} of {frames} frames (want ≤ half — holds between jumps)");
             yield return Sheet("26_head_search_sheet", 12, i => Wait(0.1f));
             sa.headTest = 0;
+            // 갱목·못·가죽끈 사진 (09-19): 등 뒤 2 m · 왼팔 2 m · 등 뒤 7 m — 머리 시험 끔, 대기 자세
+            st.Teleport(M0, 0f);
+            Teleport(cc, M0 + Vector3.back * 2f + Vector3.right * 0.3f, 0f);
+            yield return Capture("30_timber_back_2m", _ => { });
+            Teleport(cc, M0 + Vector3.left * 2f + Vector3.forward * 0.3f, 90f);
+            yield return Capture("30_timber_forearm_2m", _ => { });
+            Teleport(cc, M0 + Vector3.back * 7f, 0f);
+            yield return Capture("30_timber_back_7m", _ => { });
         }
         sa.freezeTime = false;
         sa.manual = 0;
@@ -1869,6 +1880,17 @@ public class M1Check : MonoBehaviour
         int clipCount = anim != null && anim.runtimeAnimatorController != null ? anim.runtimeAnimatorController.animationClips.Length : 0;
         bool idle = anim != null && anim.GetCurrentAnimatorStateInfo(0).IsName(Tuning.STALKER_MODEL_IDLE);
         bool normals = skinMats.Count > 0 && skinMats.TrueForAll(m => m.GetTexture("normalTexture") != null);
+        // 갱목·못·가죽끈 (09-19 timber_detail.py): 재질마다 색·요철·반들거림 그림 — 상자에 사진만 입힌 옛 모습(반들거림 없음)으로 돌아가면 FAIL
+        var propMats = new List<Material>();
+        if (modelOn)
+            foreach (var r in model.GetComponentsInChildren<Renderer>())
+                foreach (var m in r.sharedMaterials)
+                    if (m != null && (m.name.StartsWith("뒤틀린_갱목") || m.name.StartsWith("녹슨_주철") || m.name.StartsWith("가죽끈")) && !propMats.Contains(m)) propMats.Add(m);
+        if (flatProps)                                   // 사보타주 flatprops: 반들거림 그림을 뺀다
+            foreach (var m in propMats) m.SetTexture("metallicRoughnessTexture", null);
+        int propFull = propMats.Count(m => m.GetTexture("baseColorTexture") != null && m.GetTexture("normalTexture") != null && m.GetTexture("metallicRoughnessTexture") != null);
+        Check("monster_props_pbr", propMats.Count >= 5 && propFull == propMats.Count,
+            $"timber/nail/strap materials {propMats.Count} (want ≥ 5), with colour + normal + roughness maps {propFull}: {string.Join(", ", propMats.Select(m => m.name))}");
         Check("monster_model_animated_with_normals", modelOn && clipCount == Tuning.STALKER_CLIP_COUNT && idle && normals,
             $"model {(model == null ? "none" : modelOn ? "on" : "off")}, clips {clipCount} (want {Tuning.STALKER_CLIP_COUNT}), playing {Tuning.STALKER_MODEL_IDLE} {idle}, skin materials {skinMats.Count} with normal map {normals}");
 

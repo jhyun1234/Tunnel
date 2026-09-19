@@ -1,6 +1,6 @@
 """walk_knuckle — 괴물 새 걷기: 두 손(발톱 끝)과 두 발로 짚는 네 점 걸음 (제안서 3D-③b M1, 2026-09-18).
   "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup -P blender/anim/walk_knuckle.py
-입력: Documents/MineTunnel/blender/miner_v4_stage14_plank.blend (stage12 → add_jaw.py 턱 뼈 → trim_back_plank.py 등 판자 자름·못 옮김) — 안 고친다
+입력: Documents/MineTunnel/blender/miner_v4_stage15_timber.blend (stage12 → add_jaw.py 턱 뼈 → trim_back_plank.py 등 판자 자름·못 옮김 → timber_detail.py 갱목·못·가죽끈 사실감) — 안 고친다
 하는 일: ① 두 손·두 발 자리를 한 주기(1.0 s = 30 프레임) 동안 정한다 — 짚는 동안은 뒤로 SPEED 로 밀려 제자리 걸음,
            떼는 동안은 앞으로 호를 그리며 옮긴다. 순서는 원숭이류처럼 왼손 → 오른발 → 오른손 → 왼발(한 박자 0.25 주기)
         ② 엉덩이를 낮추고 몸통을 앞으로 숙인다(어깨가 엉덩이보다 높게), 머리는 세상 기준으로 앞을 본 채 고정(P2)
@@ -16,7 +16,7 @@ from mathutils import Vector, Matrix, Quaternion
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MT = r"C:\Users\anjyo\Documents\MineTunnel"
-SRC = os.environ.get("SRC_BLEND", os.path.join(MT, "blender", "miner_v4_stage14_plank.blend"))
+SRC = os.environ.get("SRC_BLEND", os.path.join(MT, "blender", "miner_v4_stage15_timber.blend"))
 SABOTAGE = os.environ.get("SABOTAGE", "")
 SFX = "_" + SABOTAGE if SABOTAGE else ""
 OUT_GLB = os.environ.get("OUT_GLB", os.path.join(MT, "mesh", "miner_rigged_unity%s.glb" % SFX) if SABOTAGE
@@ -421,7 +421,13 @@ if NAME in anims:
     t0, t1 = min(a["min"][0] for a in ins), max(a["max"][0] for a in ins)
     check(abs(t0) < 1e-3 and abs(t1 - N / FPS) < 1e-3, "%s 시간 %.3f ~ %.3f s (0 ~ %.3f)" % (NAME, t0, t1, N / FPS))
 new_imgs = image_hashes(OUT_GLB)
-check(new_imgs == old_imgs and len(new_imgs) > 0, "색·요철·거칠기·발광 그림 %d장이 이전 GLB 와 바이트까지 같다 (라이선스 절차 ④)" % len(new_imgs))
+# 라이선스 절차 ④ 는 TRELLIS 살·머리 그림(skin_*)만 — 갱목·못·가죽끈 그림은 09-19 timber_detail.py 가 CC0 에서 새로 굽는다
+skin_new = {k: v for k, v in new_imgs.items() if k and k.startswith("skin_")}
+skin_old = {k: v for k, v in old_imgs.items() if k and k.startswith("skin_")}
+check(skin_new == skin_old and len(skin_new) == 7, "살·머리 그림 %d장이 이전 GLB 와 바이트까지 같다 (라이선스 절차 ④)" % len(skin_new))
+props = {m["name"]: m for m in j.get("materials", []) if m["name"].startswith(("뒤틀린_갱목", "녹슨_주철", "가죽끈"))}
+full = [n for n, m in props.items() if "normalTexture" in m and m.get("pbrMetallicRoughness", {}).get("baseColorTexture") and m["pbrMetallicRoughness"].get("metallicRoughnessTexture")]
+check(len(props) >= 5 and len(full) == len(props), "갱목·못·가죽끈 재질 %d 개 중 색·요철·반들거림 그림이 다 있는 것 %d" % (len(props), len(full)))
 joints = [j["nodes"][i]["name"] for sk in j["skins"] for i in sk["joints"]]
 check(len(set(joints)) == 67 and "mixamorig:Jaw" in joints and "mixamorig:JawTip" in joints, "뼈 %d 개, 턱 뼈(Jaw·JawTip) 있음 (67)" % len(set(joints)))
 multi = [m.get("name") for m in j["meshes"] if len(m["primitives"]) != 1]
