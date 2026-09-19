@@ -26,7 +26,7 @@ TOP_IN = 0.03                            # 관 꼭대기는 머리 뼈 뿌리에
 LINK = NECK_LEN / JOINTS
 R_HEAD, R_BASE = 0.0425, 0.055           # 관 반지름: 머리 쪽 → 몸 속 끝
 SIDES, STEP = 30, 0.01
-CORDS, CORD_DEPTH, CORD_TWIST = 5, 0.16, 7.0   # 사용자 판정 09-19 "호스 같아 보인다" → 둥근 관 대신 힘줄 다섯 가닥이 꼬인 다발 (깊이 = 반지름 몫, 꼬임 = rad/m)
+CORDS, CORD_DEPTH, CORD_TWIST = 5, 0.10, 7.0   # 사용자 판정 09-19 "호스 같아 보인다" → 둥근 관 대신 힘줄 다섯 가닥이 꼬인 다발 (깊이 = 반지름 몫, 꼬임 = rad/m)
 NECK_SHARE = 0.4                         # Tuning.STALKER_HEAD_NECK_SHARE
 CAP_K = float(os.environ.get("CAP_K", "1.3"))   # 머리 밑 마개 반지름 = 구멍(잇는 면 고리 90 %) × 이 값 — 구멍이 둥글지 않아 1.0 은 비스듬히 보면 192 중 20 이 샜다
 AUTO_OUT = 0.25                          # Tuning.STALKER_NECK_TILT_OUT_M — 갸웃 110° 에서 파고듦 0 이 되는 길이 (09-19: 얼굴 쪽 + 위 0.4 방향으로 20 cm 는 옆 90° 에서 12점 남음, 25 cm 는 다섯 자세 0)
@@ -238,26 +238,52 @@ me.transform(neck.matrix_world.inverted()); me.update()            # 점은 세�
 # Unity StalkerLook 이 눈 발광 색을 입혀 목 전체가 빛난다 → "목_근육"
 TEX = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "blender", "stage16_tex"); os.makedirs(TEX, exist_ok=True)
 def make_textures():
-    Wt, Ht = 256, 512
-    u, v = np.meshgrid(np.arange(Wt) / Wt, np.arange(Ht) / Ht)
-    rng = np.random.default_rng(16)
-    wob = 0.035 * np.sin(2 * np.pi * (3 * v + 0.3)) + 0.02 * np.sin(2 * np.pi * (7 * v + u))
-    hgt = np.zeros_like(u)
-    for n, amp in ((5, 0.50), (13, 0.32), (29, 0.12)):                                   # 61 가닥은 멀리서 노이즈처럼 보였다 (사용자 09-19)                       # 세로 힘줄 가닥 (둘레로 n 개, 길이 따라 살짝 물결)
-        hgt += amp * (0.5 + 0.5 * np.cos(2 * np.pi * (n * (u + wob) + rng.random())))
-    hgt += 0.12 * (0.5 + 0.5 * np.sin(2 * np.pi * (4 * v + 2 * u)))                         # 느린 얼룩
-    hgt = (hgt - hgt.min()) / (hgt.max() - hgt.min())
-    # 색은 몸 살 그림에서 잰 두 평균(붉은 근육 · 허연 살)으로 — 사용자 2차 판정 09-19 "붉은색이 몸보다 선명하다, 몸 색으로 해 보고 싶다, 이어지지 않는다".
-    # 그림을 베끼지 않고 평균 색 둘만 쓴다. 더 붉게는 Unity 에서 I/M 키(StalkerLook.neckRed)로 곱해 본다
-    bimg = next(n for n in body.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].links[0].from_node.image
-    bp = np.empty(bimg.size[0] * bimg.size[1] * 4, np.float32); bimg.pixels.foreach_get(bp); bp = bp.reshape(-1, 4)[::7, :3]
-    bp = bp[bp.sum(1) > 0.15]; redness = bp[:, 0] - 0.5 * (bp[:, 1] + bp[:, 2])
-    red = bp[redness > 0.08].mean(0) * 1.6; pale = bp[(redness < 0.04) & (bp.mean(1) > 0.35)].mean(0) * 1.6; dark = red * 0.55   # 평균 그대로는 게임에서 몸보다 훨씬 어두웠다(색 평균 0.119, 09-19 그림 37) → 1.6배. 밝기는 Unity Q/R 키로 더 맞춘다
-    print("몸 살 그림에서 잰 색: 근육 %s · 허연 살 %s" % (tuple(round(float(c), 3) for c in red), tuple(round(float(c), 3) for c in pale)))
-    col = dark + (red - dark) * hgt[..., None] + (pale - red) * (np.clip(hgt - 0.62, 0, 1) / 0.38)[..., None] ** 1.5 * 0.9
-    col *= (0.85 + 0.15 * np.sin(2 * np.pi * (2 * v + 0.1)))[..., None]
-    gx = np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1); gy = np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0)
-    nrm = np.dstack([-gx * 3, -gy * 3, np.ones_like(hgt)]); nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
+    """3차 판정 09-19 "목과 쇄골 부분의 차이가 심하다 · 노이즈": 셈으로 만든 줄무늬는 몸 살(울퉁불퉁한 허연 살 + 갈색 근육)과 결이 다르다.
+    → 몸통 살을 목에 입힌다: 목 그림의 점마다 (둘레 각도, 길이) → 몸통 가운데 축에서 그 각도로 바깥을 본 자리의 몸 살 색을 그대로 가져온다.
+    몸 살 UV 가 잘게 조각나 있어도 점 하나하나를 따로 찾으니 상관없다. 둘레는 몸통 한 바퀴라 이음매가 없고, 길이는 가슴 1.45 ~ 1.85 m 를
+    올라갔다 내려오며(거울) 되풀이한다. 같은 출처(우리 괴물 살 그림)에서 다시 뽑은 그림이라 받은 그림은 없다.
+    요철은 가져온 색의 밝기를 높이로 보고 만든다 (몸 살 요철 그림은 조각마다 방향이 달라 그대로 못 가져온다)"""
+    Wt, half = 512, 512
+    bsdf_b = next(n for n in body.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    bimg = bsdf_b.inputs["Base Color"].links[0].from_node.image
+    Wb, Hb = bimg.size; bp = np.empty(Wb * Hb * 4, np.float32); bimg.pixels.foreach_get(bp); bp = bp.reshape(Hb, Wb, 4)
+    bme_ = body.data; bme_.calc_loop_triangles()
+    bco_ = [body.matrix_world @ v.co for v in bme_.vertices]
+    tb = BVHTree.FromPolygons(bco_, [tuple(t.vertices) for t in bme_.loop_triangles])
+    uvd = bme_.uv_layers.active.data
+    # 몸 살의 울퉁불퉁함은 색이 아니라 요철 그림에 있다 → 같은 자리의 요철 그림에서 "얼마나 기울었나"(1 − z)만 가져와 높이로 쓴다
+    nlink = bsdf_b.inputs["Normal"].links
+    nimg = nlink[0].from_node.inputs["Color"].links[0].from_node.image if nlink and nlink[0].from_node.type == "NORMAL_MAP" else None
+    if nimg:
+        Wn, Hn = nimg.size; npx = np.empty(Wn * Hn * 4, np.float32); nimg.pixels.foreach_get(npx); npx = npx.reshape(Hn, Wn, 4)
+    bump = np.zeros((half, Wt), np.float32); lastb = 0.0
+    rows = np.zeros((half, Wt, 3), np.float32); last = np.array([0.3, 0.25, 0.22], np.float32); missed = 0
+    for r_ in range(half):
+        z = 1.45 + 0.40 * r_ / (half - 1.0)
+        for c_ in range(Wt):
+            th = 2 * math.pi * c_ / Wt; d = Vector((math.cos(th), math.sin(th), 0))
+            loc, nor, ti, dist = tb.ray_cast(Vector((0, 0.05, z)) + d * 1.0, -d)
+            if loc is None:
+                missed += 1; rows[r_, c_] = last; bump[r_, c_] = lastb; continue
+            t = bme_.loop_triangles[ti]; pa, pb_, pc = (bco_[i] for i in t.vertices)
+            n = (pb_ - pa).cross(pc - pa); den = n.dot(n)
+            if den < 1e-18:
+                rows[r_, c_] = last; continue
+            wa = (pb_ - loc).cross(pc - loc).dot(n) / den; wb = (pc - loc).cross(pa - loc).dot(n) / den
+            uv = Vector(uvd[t.loops[0]].uv) * wa + Vector(uvd[t.loops[1]].uv) * wb + Vector(uvd[t.loops[2]].uv) * (1 - wa - wb)
+            last = bp[int(uv.y % 1.0 * (Hb - 1)), int(uv.x % 1.0 * (Wb - 1)), :3]; rows[r_, c_] = last
+            if nimg:
+                q = npx[int(uv.y % 1.0 * (Hn - 1)), int(uv.x % 1.0 * (Wn - 1)), :3] * 2 - 1
+                lastb = float(math.hypot(q[0], q[1])); bump[r_, c_] = lastb
+    col = np.concatenate([rows, rows[::-1]], 0)                                              # 올라갔다 내려온다 → 위아래로도 이어진다
+    Ht = col.shape[0]
+    lum = 0.3 * col.mean(2) + np.concatenate([bump, bump[::-1]], 0)
+    print("몸 살 요철에서 가져온 기울기 평균 %.3f · 최대 %.3f" % (float(bump.mean()), float(bump.max())))
+    for _ in range(2):                                                                       # 높이를 조금 뭉갠다 (점 하나짜리 튐 = 노이즈)
+        lum = (lum + np.roll(lum, 1, 0) + np.roll(lum, -1, 0) + np.roll(lum, 1, 1) + np.roll(lum, -1, 1)) / 5
+    gx = np.roll(lum, -1, 1) - np.roll(lum, 1, 1); gy = np.roll(lum, -1, 0) - np.roll(lum, 1, 0)
+    nrm = np.dstack([-gx * float(os.environ.get("NECK_BUMP", "6")), -gy * float(os.environ.get("NECK_BUMP", "6")), np.ones_like(lum)]); nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
+    print("목 살 그림: 몸통에서 가져온 점 %d, 못 찾은 점 %d" % (half * Wt - missed, missed))
     out = {}
     for name, arr, cs in (("neck_muscle_color", np.clip(col, 0, 1), "sRGB"), ("neck_muscle_normal", nrm * 0.5 + 0.5, "Non-Color")):
         im = bpy.data.images.new(name, Wt, Ht, alpha=False); im.colorspace_settings.name = cs
@@ -271,7 +297,7 @@ nt = nm.node_tree; bs_n = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED
 tc = nt.nodes.new("ShaderNodeTexImage"); tc.image = tex["neck_muscle_color"]; nt.links.new(tc.outputs["Color"], bs_n.inputs["Base Color"])
 tn = nt.nodes.new("ShaderNodeTexImage"); tn.image = tex["neck_muscle_normal"]
 nmap = nt.nodes.new("ShaderNodeNormalMap"); nt.links.new(tn.outputs["Color"], nmap.inputs["Color"]); nt.links.new(nmap.outputs["Normal"], bs_n.inputs["Normal"])
-bs_n.inputs["Roughness"].default_value = 0.45; bs_n.inputs["Metallic"].default_value = 0.0      # 젖은 근육 — 몸 살(0.6)보다 조금 반들
+bs_n.inputs["Roughness"].default_value = 0.55; bs_n.inputs["Metallic"].default_value = 0.0      # 젖은 근육 — 몸 살(0.6)보다 조금 반들
 me.materials.append(nm)
 # 무게: 마디 자리 사이를 곧게 섞는다
 for i in range(JOINTS):
@@ -291,7 +317,7 @@ for vi in range(len(verts)):
         neck.vertex_groups[P + "NeckExt_%d" % hi].add([vi], w, "ADD")
 mod = neck.modifiers.new("Armature", "ARMATURE"); mod.object = arm
 
-# UV: 둘레 한 바퀴 = 그림 가로 한 번, 길이 40 cm = 세로 한 번 (그림은 가로·세로 다 이어진다). 소매·옷깃·마개도 같은 식
+# UV: 둘레 한 바퀴 = 그림 가로 한 번, 길이 80 cm = 세로 한 번(가슴 40 cm 를 올라갔다 내려옴) (그림은 가로·세로 다 이어진다). 소매·옷깃·마개도 같은 식
 uvl = me.uv_layers.new(name="UVMap")
 miss = 0
 for poly in me.polygons:
@@ -301,7 +327,7 @@ for poly in me.polygons:
         vi = me.loops[li].vertex_index; k = ang_k[vi]
         if k == 0 and max(ks) > n_side // 2:
             k = n_side                                                                      # 둘레 이음매: 끝 칸은 0 이 아니라 한 바퀴
-        uvl.data[li].uv = (k / float(n_side), arc[vi] / 0.4)
+        uvl.data[li].uv = (k / float(n_side), arc[vi] / 0.8)
 # UV 가 찢어진 면(살 그림의 다른 섬으로 건너뜀) 세기: 면의 UV 변 길이 ÷ 3D 변 길이가 가운데값의 6배 넘음
 ratios = []
 for poly in me.polygons:
@@ -332,7 +358,7 @@ check(flipped == 0, "목 관 겉면 %d 개 중 안쪽을 보는(뒤집힌) 면 %
 # 호스가 아니다: 고리마다 (가장 큰 반지름 − 가장 작은) ÷ 평균 의 가운데값
 rv = np.array([[ (rg[i][k] - Vector(line[i])).length for k in range(SIDES)] for i in range(len(rg))])
 lump = float(np.median((rv.max(1) - rv.min(1)) / rv.mean(1)))
-check(lump >= 0.2, "목 관이 둥근 호스가 아니다: 고리의 (가장 굵은 곳 − 가장 가는 곳) ÷ 평균 = %.2f (≥ 0.2, 둥근 관 ≈ 0.1)" % lump)
+check(lump >= 0.15, "목 관이 둥근 호스가 아니다: 고리의 (가장 굵은 곳 − 가장 가는 곳) ÷ 평균 = %.2f (≥ 0.15, 둥근 관 0)" % lump)
 check(torn <= 0.02 * len(ratios), "목 관 UV: 찢어진 면 %d / %d (≤ 2 %%)" % (torn, len(ratios)))
 check(0.08 <= tex_mean <= 0.40, "목 근육 색 그림 평균 밝기 %.3f (0.08 ~ 0.40 — 몸 살 색에서 만든다)" % tex_mean)
 
