@@ -88,6 +88,29 @@
 
 ## 2. 다음에 할 일 (우선순위 순)
 
+**09-19 39차 끝 — 다음 세션 시작 프롬프트(복사):**
+
+`C:/Users/anjyo/Tunnel/unity/docs/HANDOFF.md 를 읽고 이어서 해라. 먼저 상태만 보고해라(git 상태, Unity 에디터 열림 여부 — 열려 있으면 build.sh 가 실패한다). 그다음 서서 오는 괴물 영상 UP_U2 의 판정을 받아라: 아래 "UP_U2 판정 목록" 다섯 줄을 보여 주고 답을 받는다. build/check_3d4/UP_U2.mp4 가 없으면 아래 명령으로 다시 만든다(약 4분, 게임·GLB 는 안 건드린다). 판정을 받은 뒤에는 그 답대로 blender/anim/preview_upright.py 의 값·시간표를 고쳐 영상 UP_U3 를 만들어 보내라(UP_NAME=U3). 영상에서 통과가 나오기 전에는 GLB·Unity 코드·씬을 고치지 마라. 영상을 보내기 전에 프레임을 뽑아 직접 보고, 보이는 흠은 먼저 말해라. 같은 방법(수식 + IK 로 네 발 걸음)으로 돌아가지 마라 — 09-18 부터 세 번 떨어졌다. 설명은 중학교 2학년 수준.`
+
+- **영상 다시 만들기** (입력: `Documents/MineTunnel/blender/miner_v4_stage16_neck.blend` + `Documents/MineTunnel/blender/mixamo/Mutant Walking.fbx`·`Mutant Run.fbx`, 출력: `build/check_3d4/UP_<이름>.mp4`, 프레임은 `Documents/MineTunnel/blender/anim_render/up_<이름>/`):
+  ```bash
+  cd /c/Users/anjyo/Tunnel/unity && UP_NAME=U2 "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup -P blender/anim/preview_upright.py
+  ```
+  값은 환경 변수로: `UP_HUNCH`(몸통 숙임° 42) · `UP_CROUCH`(엉덩이 낮춤 m 0.16) · `UP_ARM_STILL`(팔 흔들기 죽이기 0~1, 0.85) · `UP_WALK_RATE`(걸음 재생 배수 0.72) · `UP_DIP`(발 디딜 때 내려앉음 m 0.05) · `UP_RUN_MS`(질주 게임 m/s 6.5) · `UP_FREEZE_S`(굳음 초 1.4) · `UP_START_M`(시작 거리 11) · `PV_WATTS`(조명 600) · `UP_WALK`/`UP_RUN`(밑그림 FBX 이름). 시간표(걷기 1.5 s → 서서 왼쪽 0.7 s·오른쪽 1.1 s → 걷기 1.1 s → 굳음 → 질주)는 스크립트의 `do_walk`/`do_stand` 줄.
+  프레임 확인: `anim_render/up_<이름>/f####.png` 8장쯤을 PIL 로 한 장에 붙여 Read 로 본다(이번 세션에서 그렇게 했다).
+- **UP_U2 판정 목록** (사용자 09-19: "다음 세션에서 판단하겠다")
+  - [ ] 걸음이 U1 보다 무서운 쪽으로 갔나, 무게가 느껴지나
+  - [ ] 서서 머리를 딱 돌리는 것이 "찾고 있다"로 읽히나
+  - [ ] 굳음이 이제 "나를 봤다"로 읽히나, 턱이 벌어지는 건 어떤가
+  - [ ] 질주와 마지막(턱 벌린 채 화면으로)은 어떤가
+  - [ ] 아직 사람 같은 곳이 어디인가
+- **이미 아는 흠(내 눈, 09-19)**: 정면에선 몸통 숙임이 잘 안 보인다(앞뒤로 눕힌 건 정면에서 짧아져 보일 뿐) · 질주는 아직 "사람의 전력 질주"(받아 둔 `Mutant Run` 이 팔 벌리고 뛰는 동작) · A4 의 팔로 더듬어 찾기와 환풍구 드나들기는 아직 없다(모션캡처에 없는 동작 — 자세를 하나씩 잡아 만들어야 한다) · 에일리언 아이솔레이션의 걸음 한 주기가 온전히 나오는 게임 영상은 못 찾았다(찾은 건 팬 제작) — 한 걸음 시간 같은 숫자는 확인 못 함.
+- **더 받을 수 있는 밑그림**: Mixamo 에서 숙이고 걷는·팔을 앞에 둔 달리기 등을 더 받으면 질주를 고치기 쉽다 — **받는 건 사용자 Adobe 계정 로그인이 필요해 내가 못 한다**, 사용자에게 부탁한다. 이미 받아 둔 것: `blender/mixamo/` 의 Mutant 묶음(Walking · Run · Roaring · Swiping · Breathing Idle · Jump Attack · Jumping · Dying) + `mixamo_candidates/creature/`(mutant idle · flexing · punch · 좌우 45°/90° 돌기). `mixamo_v2_hunyuan/` 은 쓰지 않는다.
+- **영상에서 통과가 나온 뒤의 길**: 제안서 `docs/제안서_3D4_괴물_행동과_동작_전부_새로.md` 의 2~5절(자세·MA)을 "서서 오는 것 + 모션캡처 밑그림 + 코드 덧칠"로 다시 쓴다 → 승인 → GLB·Unity. 6~8절(숨기·매복 / 도망 구멍·맵 조각 / 학습 1+2+3)은 승인된 그대로 산다. 마일스톤 순서 MA → MB → MR1 → MH1 → ML → MH2 → MC → MR2.
+- **지금 게임에 들어 있는 것(안 바꿨다)**: 기본 걸음 E = 미끄러지는 네 발 걸음(M2b, 판정 불통과) · 제자리 포효 · Mixamo 좀비 대기/잡기/맞음. 전체 `build.sh` 112개 ALL PASS(09-19). 새 방향이 영상에서 정해질 때까지 그대로 둔다.
+- **네 발 영상 도구**(`blender/anim/preview_video.py` + `walk_knuckle.py` 의 `MA` 걸음표·`oneshot`·`_low`·`_sprawl`)는 "다 아니다" 판정으로 멈춤 — 지우지 않고 둔다(ME/MR2 때 옛 클립과 같이 정리).
+
+
 **09-19 35차: 아래 프롬프트의 일(상태 보고 · M1d 판정 받기 · 목 제안서)은 끝났고, M1e 도 승인·구현·전체 검사까지 끝났다. 다음 = 4절 "3D-③b M1e 판정" 답 받기(길이·빠르기 숫자 → `Tuning.STALKER_NECK_*`) → 그 뒤 M2(행동 연결: 수색 때 목만 내밀기·잡기 때 찌르기) 제안서.**
 
 **(끝난 것) 09-19 34차 끝 — 다음 세션 시작 프롬프트(복사):** `C:/Users/anjyo/Tunnel/unity/docs/HANDOFF.md 를 읽고 이어서 해라. 먼저 상태만 보고(에디터 열림 여부 — 열려 있으면 build.sh 가 바로 실패한다, git 상태)하고, 4절 "3D-③b M1d 판정"(머리 돌리기) 확인 목록을 보여 주고 판정 답을 받아라. 그다음 목 길게 빼기 제안서를 쓴다: 목이 약 3 cm(어깨 끝 1.97 → 머리 살 2.00 m, 목 끈 속)라 끈·몸 속에 접혀 숨은 긴 목(마디 3~4개 관)을 새로 넣고 머리를 밀어낼 때 끈 아래에서 빠져나오게 하는 안 — 레퍼런스 조사(목을 빼는 괴물·동물) 먼저, 시험 그림(Blender 복사본, stage15 안 고침)으로 되는지 보이고, 110° 갸웃 때 머리가 어깨에 파고드는 문제도 풀리는지 재라. 승인 전에는 제안서·HANDOFF 말고는 고치지 마라. 설명은 중학교 2학년 수준.`
