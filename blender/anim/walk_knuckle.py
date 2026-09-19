@@ -60,11 +60,64 @@ GAITS["glide_walk"] = dict(glide(19, 2.5, 0.58, 0.62, 18.0, 0.90, 0.16), TOUCH=D
 GAITS["glide_fast"] = glide(18, 5.0, float(os.environ.get("FAST_DUTY_HAND", "0.42")), 0.48, 14.0, float(os.environ.get("FAST_HIP_Z", "0.85")), 0.22)   # 조사 5.0 · 철수 4.0(×0.8) · 1.67 Hz · 3.0 m
 GAITS["glide_chase"] = glide(17, 6.5, 0.40, 0.40, 10.0, 0.82, 0.25)                         # 추격 6.5 · 1.76 Hz · 3.7 m
 CLIPS = 14 + len(GAITS)
+
+# ---- 3D-④ MA (제안서 docs/제안서_3D4_괴물_행동과_동작_전부_새로.md): "지켜보는 큰 짐승". 1단계는 영상 후보만 — 아래 줄들은 PREVIEW/ONLY 로만 굽고 GLB 에는 아직 안 들어간다(MA_EXPORT 로 묶어 둠)
+# charge = 큰 짐승 갤럽. 조사 실측(다리 길이가 같은 기린 6.5 m/s · 개): 주기 0.75 s · 두 손 시차 0.25 · 두 발 0.17 · 발 → 손 사이는 땅에 붙어 있고 손을 뗀 뒤에만 한 번 뜬다 ·
+# 허리는 발 닿기 직전에 가장 말리고 발 뗀 직후 가장 펴진다. 짚는 몫은 팔 길이가 허락하는 만큼(기린 0.36 은 팔이 안 닿는다 — 09-19 시험)
+def charge(flex, bob, lift, hip_z=0.86, duty_hand=0.28):
+    return dict(N=22, SPEED=6.5 / 1.5, DUTY={"Hand": duty_hand, "Foot": float(os.environ.get("CH_DUTY_FOOT", "0.34"))},
+                TOUCH={"LeftHand": 0.0, "RightHand": 0.25, "LeftFoot": 0.64, "RightFoot": 0.81},
+                BOB=bob, SWAY=0.02, ROLL=5.0, BOBN=1, PH=0.10, BOB_PH=0.60, FLEX=flex, LIFT={"Hand": lift, "Foot": lift * 0.7}, MINC=3, AIR=1,
+                HIP_Z=hip_z)
+MA = {"charge": charge(18.0, 0.06, 0.30), "charge_big": charge(26.0, 0.09, 0.42, hip_z=0.88, duty_hand=0.25)}
+# 09-19 첫 영상: 정면(플레이어가 보는 쪽)에서는 머리가 어깨 위에 있으면 "해골 얼굴로 서서 걸어오는 사람"으로 읽힌다 — 네 발인 게 안 보인다.
+# 큰 짐승은 머리가 어깨뼈보다 낮고 앞으로 나와 있다(소·하이에나·덮치기 전 고양이과). LOW = 목을 앞·아래로 빼 머리를 어깨 밑으로, 두 손은 넓게 짚어 어깨가 솟는다
+LOW = dict(NECK_BACK=-25.0, HAND_X=0.60)
+MA["charge_low"] = dict(charge(18.0, 0.06, 0.30, duty_hand=0.24), **LOW)
+MA["charge_low_big"] = dict(charge(26.0, 0.09, 0.42, hip_z=0.88, duty_hand=0.22), **LOW)
+
+# 한 번짜리 동작: BODY(t) → 엉덩이 높이·앞뒤·숙임·척추·머리 높이, PLACE(t, 손발 이름) → (옆으로 더, 앞뒤로 더(− = 앞), 드는 높이). t = 0~1, 되풀이 안 함
+def ease(t, a=0.0, b=1.0):                 # a~b 구간에서 0 → 1 로 부드럽게, 밖은 0 / 1
+    u = max(0.0, min(1.0, (t - a) / (b - a))); return u * u * (3 - 2 * u)
+def lerp(a, b, u): return a + (b - a) * u
+def oneshot(n, body, place):
+    return dict(N=n, SPEED=0.0, DUTY={"Hand": 1.0, "Foot": 1.0}, TOUCH={"LeftHand": 0.0, "RightHand": 0.0, "LeftFoot": 0.0, "RightFoot": 0.0},
+                BOB=0.0, SWAY=0.0, ROLL=0.0, BOBN=1, PH=0.0, FLEX=0.0, LIFT={"Hand": 0.0, "Foot": 0.0}, MINC=0, AIR=0, ONESHOT=True, BODY=body, PLACE=place)
+STILL = (0.0, 0.0, 0.0)
+# 웅크려 굳음 1.0 s: 처음 0.25 s 에 가라앉고 나머지는 돌처럼 0 (조사: 멈춤은 숨도 없는 0, 거기서 바로 최고 빠르기)
+MA["coil_a"] = oneshot(30,  # A 가라앉음: 몸이 낮아지며 무게가 뒤로, 머리도 같이 낮아진다
+    lambda t: dict(hip_z=lerp(0.90, 0.66, ease(t, 0, 0.25)), hip_y=lerp(0, 0.18, ease(t, 0, 0.25)), pitch=lerp(62, 70, ease(t, 0, 0.25)), spine=lerp(7, 3, ease(t, 0, 0.25)), head_z=lerp(1.16, 0.97, ease(t, 0, 0.25))),
+    lambda t, k: STILL)
+MA["coil_b"] = oneshot(30,  # B 한 손을 든다: 덜 가라앉고, 왼손이 바닥에서 떠 앞으로 나간 채 멈춘다 (고양이과가 덮치기 전)
+    lambda t: dict(hip_z=lerp(0.90, 0.74, ease(t, 0, 0.25)), hip_y=lerp(0, 0.12, ease(t, 0, 0.25)), pitch=lerp(62, 66, ease(t, 0, 0.25)), spine=lerp(7, 5, ease(t, 0, 0.25)), head_z=lerp(1.16, 1.02, ease(t, 0, 0.25))),
+    lambda t, k: (0.0, -0.22 * ease(t, 0.05, 0.3), 0.26 * ease(t, 0.05, 0.3)) if k == "LeftHand" else STILL)
+MA["coil_c"] = oneshot(30,  # C 납작: 악어처럼 바닥에 붙는다, 머리는 턱이 바닥에 닿을 만큼
+    lambda t: dict(hip_z=lerp(0.90, 0.58, ease(t, 0, 0.25)), hip_y=lerp(0, 0.10, ease(t, 0, 0.25)), pitch=lerp(62, 80, ease(t, 0, 0.25)), spine=lerp(7, 1, ease(t, 0, 0.25)), head_z=lerp(1.16, 0.72, ease(t, 0, 0.25))),
+    lambda t, k: (0.14 * ease(t, 0, 0.25), 0.0, 0.0) if "Hand" in k else STILL)
+# 덮침 0.2 s: 몸은 낮게 둔 채 두 팔이 먼저 얼굴 쪽으로 모여 뻗고, 머리는 팔 사이에 낮게. 발은 절반까지 땅을 밀고 끌려 온다.
+# (09-19 첫 영상: 몸을 30° 까지 일으켰더니 "팔 벌리고 선 사람"으로 보였다 → 일으키지 않는다)
+MA["pounce"] = oneshot(6,
+    lambda t: dict(hip_z=lerp(0.84, 0.98, ease(t)), hip_y=lerp(0.0, -0.40, ease(t)), pitch=lerp(62, 52, ease(t)), spine=lerp(7, 2, ease(t)), head_z=lerp(1.12, 1.22, ease(t))),
+    lambda t, k: (-0.24 * ease(t), -0.95 * ease(t, 0, 0.7), 0.95 * ease(t, 0, 0.8)) if "Hand" in k else (0.0, -0.25 * ease(t, 0.5, 1), 0.10 * ease(t, 0.5, 1)))
+# 09-19 둘째 영상: 머리만 낮춰도 정면은 여전히 "선 사람"이었다 — 머리가 내 눈높이(게임 1.7 m)에 있고, 몸통이 앞뒤로 눕혀져 정면에선 안 보이며, 가운데로 보이는 다리가 사람 다리로 읽힌다.
+# SPRAWL = 악어·도마뱀처럼 팔다리를 옆으로 벌리고 바닥에 붙는다: 머리가 내 허리 밑(게임 0.9 m)이라 위에서 등을 내려다보게 된다. 무릎이 옆으로 나가므로 "무릎 높이" 검사는 뜻이 없다
+SPRAWL = dict(NECK_BACK=5.0, HAND_X=0.78, FOOT_X=0.55, KNEE_OUT=1.6, HEAD_UP=28.0, HIPS_PITCH=80.0)
+MA["charge_sprawl"] = dict(charge(14.0, 0.05, 0.22, hip_z=0.52, duty_hand=0.26), **SPRAWL)
+MA["coil_sprawl"] = dict(oneshot(30,
+    lambda t: dict(hip_z=lerp(0.52, 0.40, ease(t, 0, 0.25)), hip_y=lerp(0, 0.14, ease(t, 0, 0.25)), pitch=lerp(80, 86, ease(t, 0, 0.25)), spine=lerp(7, 3, ease(t, 0, 0.25))),
+    lambda t, k: STILL), **SPRAWL)
+MA["pounce_sprawl"] = dict(oneshot(6,                       # 아래에서 얼굴로 솟구친다: 두 손이 화면 아래에서 올라온다
+    lambda t: dict(hip_z=lerp(0.52, 0.85, ease(t)), hip_y=lerp(0.0, -0.45, ease(t)), pitch=lerp(80, 50, ease(t)), spine=lerp(7, 0, ease(t))),
+    lambda t, k: (-0.45 * ease(t), -0.85 * ease(t, 0, 0.7), 1.0 * ease(t, 0.1, 0.9)) if "Hand" in k else (0.0, -0.2 * ease(t, 0.5, 1), 0.05 * ease(t, 0.5, 1))), **SPRAWL)
+for nm in ("coil_a", "coil_b", "coil_c", "pounce"):
+    MA[nm + "_low"] = dict(MA[nm], **LOW)
+if os.environ.get("MA", "") == "1":         # MA 동작은 이 열쇠가 있을 때만 걸음표에 든다 (GLB 내보내기 검사의 CLIPS 는 그대로)
+    GAITS.update(MA)
 if os.environ.get("GAIT_JSON"):          # 시험용: 걸음표에 줄을 더하거나 덮는다 (QUICK 과 같이). 예: GAIT_JSON='{"glide": {"N": 17, ...}}' ONLY=glide
     GAITS.update(json.loads(os.environ["GAIT_JSON"]))
 ONLY = os.environ.get("ONLY", "")       # QUICK 일 때 걸음 하나만 (값 고를 때). 내보내기는 늘 둘 다
-if ONLY:
-    GAITS = {ONLY: GAITS[ONLY]}
+if ONLY:                                 # 쉼표로 여럿
+    GAITS = {n: GAITS[n] for n in ONLY.split(",")}
 HIP_Z0 = HIP_Z = float(os.environ.get("HIP_Z", "0.90"))       # 엉덩이 뼈 머리 높이 (쉬는 자세 1.30)
 HIPS_PITCH = float(os.environ.get("HIPS_PITCH", "62"))   # 도, 엉덩이째 앞으로 숙임
 SPINE_PITCH = float(os.environ.get("SPINE_PITCH", "7"))  # 도, 척추 세 마디 각각 더 숙임
@@ -170,6 +223,8 @@ for NAME, G in GAITS.items():
     YAW = 0.0 if SABOTAGE == "noyaw" else YAW_WANT
     YAW_PH = TOUCH["LeftFoot"] + 0.83 * DUTY["Foot"]                           # 왼발을 떼기 직전에 왼 엉덩이가 가장 뒤 (도마뱀 실측: 디딤의 81~85 %)
     HIP_Z = G.get("HIP_Z", HIP_Z0)
+    BOB_PH = G.get("BOB_PH", PH)                                               # 몸이 가장 높은 순간 (갤럽: 손을 뗀 뒤 뜬 동안 — 허리가 가장 펴지는 PH 와 다르다)
+    ONESHOT = G.get("ONESHOT", False)
     ad.action = None
     bpy.context.view_layer.objects.active = arm
     for o in bpy.context.view_layer.objects:
@@ -181,22 +236,23 @@ for NAME, G in GAITS.items():
         """t = 주기 몫 0~1. 엉덩이 자리·숙임·흔들림, 척추, 목"""
         reset_pose()
         rest_h = whead("Hips")
-        z = HIP_Z + BOB * math.cos(2 * math.pi * BOBN * (t - PH))
+        bo = G["BODY"](t) if "BODY" in G else {}
+        z = bo.get("hip_z", HIP_Z + BOB * math.cos(2 * math.pi * BOBN * (t - BOB_PH)))
         x = SWAY * math.sin(2 * math.pi * t)
         fx = FLEX * math.cos(2 * math.pi * (t - PH))          # + 펴짐(발로 민 뒤 공중) · − 말림(손 뗀 뒤 발이 앞으로 들어올 때). 걷기는 0
         yw = math.radians(YAW) * math.cos(2 * math.pi * (t - YAW_PH))             # + = 왼 엉덩이가 뒤로 (위에서 보아 시계 반대)
-        R = Matrix.Rotation(yw, 4, "Z") @ Matrix.Rotation(math.radians(ROLL) * math.sin(2 * math.pi * t), 4, "Y") @ Matrix.Rotation(math.radians(HIPS_PITCH + fx / 2), 4, "X")
+        R = Matrix.Rotation(yw, 4, "Z") @ Matrix.Rotation(math.radians(ROLL) * math.sin(2 * math.pi * t), 4, "Y") @ Matrix.Rotation(math.radians(bo.get("pitch", G.get("HIPS_PITCH", HIPS_PITCH) + fx / 2)), 4, "X")
         W = wmat("Hips")
-        pb("Hips").matrix = Mi @ (Matrix.Translation(Vector((x, rest_h.y, z))) @ R @ Matrix.Translation(-rest_h) @ W)
+        pb("Hips").matrix = Mi @ (Matrix.Translation(Vector((x, rest_h.y + bo.get("hip_y", 0.0), z))) @ R @ Matrix.Translation(-rest_h) @ W)
         upd()
         for s in ("Spine", "Spine1", "Spine2"):
-            rotate_world(s, Matrix.Rotation(-yw / 3, 4, "Z") @ Matrix.Rotation(math.radians(SPINE_PITCH - fx / 3), 4, "X"))
+            rotate_world(s, Matrix.Rotation(-yw / 3, 4, "Z") @ Matrix.Rotation(math.radians(bo.get("spine", SPINE_PITCH - fx / 3)), 4, "X"))
         for side in ("Left", "Right"):                        # 어깨뼈를 앞·아래로 — 팔 뿌리가 낮아져 손이 바닥에 닿는다
             rotate_world(side + "Shoulder", Matrix.Rotation(math.radians(CLAV_DOWN), 4, "X"))
-        rotate_world("Neck", Matrix.Rotation(math.radians(-NECK_BACK), 4, "X"))
+        rotate_world("Neck", Matrix.Rotation(math.radians(-G.get("NECK_BACK", NECK_BACK)), 4, "X"))
         if head_z is not None:                                # P2 머리 고정: 가슴이 오르내린 만큼 가슴 마디를 숙이거나 들어 머리 높이를 맞춘다
             for _ in range(3):
-                e = whead("Head").z - head_z
+                e = whead("Head").z - bo.get("head_z", head_z)
                 L = (whead("Head") - whead("Spine2")).length
                 rotate_world("Spine2", Matrix.Rotation(math.asin(max(-0.5, min(0.5, e / L))), 4, "X"))
         curl_fingers()
@@ -220,10 +276,10 @@ for NAME, G in GAITS.items():
 
     limbs = {}
     for side, sx in (("Left", 1), ("Right", -1)):
-        limbs[side + "Hand"] = dict(kind="Hand", bone=side + "ForeArm", x=sx * HAND_X, yc=sh_y + HAND_Y_OFF, z0=0.0, lift=LIFT["Hand"],
+        limbs[side + "Hand"] = dict(kind="Hand", bone=side + "ForeArm", x=sx * G.get("HAND_X", HAND_X), yc=sh_y + HAND_Y_OFF, z0=0.0, lift=LIFT["Hand"],
                                     pole=(sx * 1.2, sh_y + 1.0, 1.4), sx=sx)
-        limbs[side + "Foot"] = dict(kind="Foot", bone=side + "Leg", x=sx * FOOT_X, yc=hip_y + FOOT_Y_OFF, z0=rest_world[side + "Foot"].translation.z,
-                                    lift=LIFT["Foot"], pole=(sx * 0.3, hip_y - 1.5, 0.6), sx=sx)
+        limbs[side + "Foot"] = dict(kind="Foot", bone=side + "Leg", x=sx * G.get("FOOT_X", FOOT_X), yc=hip_y + FOOT_Y_OFF, z0=rest_world[side + "Foot"].translation.z,
+                                    lift=LIFT["Foot"], pole=(sx * G.get("KNEE_OUT", 0.3), hip_y - (0.5 if "KNEE_OUT" in G else 1.5), 0.6), sx=sx)
     tg = {k: empty("tg_" + k) for k in limbs}
     po = {k: empty("po_" + k, v["pole"]) for k, v in limbs.items()}
 
@@ -240,7 +296,7 @@ for NAME, G in GAITS.items():
         rot[side + "Hand"] = orient_empty("ro_%sHand" % side, F1 @ F0.transposed() @ R0)
         rot[side + "Foot"] = orient_empty("ro_%sFoot" % side, rest_world[side + "Foot"].to_3x3())
     Rh = rest_world["Head"].to_3x3()
-    rot["Head"] = orient_empty("ro_Head", Matrix.Rotation(math.radians(-HEAD_UP), 3, "X") @ Rh)
+    rot["Head"] = orient_empty("ro_Head", Matrix.Rotation(math.radians(-G.get("HEAD_UP", HEAD_UP)), 3, "X") @ Rh)
 
     for k, v in limbs.items():
         c = pb(v["bone"]).constraints.new("IK")
@@ -252,6 +308,10 @@ for NAME, G in GAITS.items():
     def place(t):
         """주기 몫 t 에서 손발 과녁 자리"""
         for k, v in limbs.items():
+            if "PLACE" in G:                                  # 한 번짜리 동작: 쉬는 자리에서 (옆 · 앞뒤 · 위)로 더한다
+                dx, dy, dz_ = G["PLACE"](t, k)
+                tg[k].location = (v["x"] + v["sx"] * dx, v["yc"] + dy, v["z0"] + dz_ + v.get("dz", 0.0))
+                continue
             ph = (t - TOUCH[k]) % 1.0
             du, st = DUTY[v["kind"]], STRIDE[v["kind"]]
             if ph < du:                                       # 짚음: 앞(−Y)에서 닿아 뒤로 밀린다
@@ -302,7 +362,7 @@ for NAME, G in GAITS.items():
     for e in tg.values():
         e.animation_data_create()
     for f in range(N + 1):
-        t = (f % N) / N
+        t = f / N if ONESHOT else (f % N) / N
         scene.frame_set(f)
         body_pose(t); place(t); upd()
         for n in ("Hips", "Spine", "Spine1", "Spine2", "Neck"):
@@ -329,6 +389,13 @@ for NAME, G in GAITS.items():
     bpy.data.collections.remove(col)
     print("baked", act.name, act.frame_range[:])
 
+    if ONESHOT:                                               # 한 번짜리: 되풀이·빠르기 검사는 뜻이 없다 — 발톱이 바닥을 안 뚫는지만
+        low = 9.9
+        for f in range(N + 1):
+            scene.frame_set(f); upd()
+            low = min(low, lowest("Left"), lowest("Right"))
+        check(low >= CLAW_Z - 0.005, "발톱 끝이 바닥을 안 뚫음 (가장 낮은 %.3f)" % low)
+        continue
     # ---- 5. 자기 검사 (굽힌 동작을 프레임마다 재생해서 잰다)
     def heading(a, b):
         d = whead(a) - whead(b)
@@ -384,7 +451,7 @@ for NAME, G in GAITS.items():
     air = sum(1 for r in rows[:N] if all(r["hand"][s].z > 0.05 and r["toe"][s].z > toe0 + 0.02 for s in ("Left", "Right")))
     check(air >= AIR if AIR else air == 0, "네 발이 다 뜬 프레임 %d (%s)" % (air, "≥ %d — 뛴다" % AIR if AIR else "0 — 걷는다"))
     rng = lambda k: max(r[k] for r in rows[:N]) - min(r[k] for r in rows[:N])
-    check(abs(rng("pelvis") - 2 * YAW_WANT) <= 4.0 and rng("girdle") <= max(4.0, rng("pelvis") / 3),
+    check(abs(rng("pelvis") - 2 * YAW_WANT) <= 4.0 and (YAW_WANT == 0 or rng("girdle") <= max(4.0, rng("pelvis") / 3)),
           "옆으로 휘는 허리: 골반 좌우 회전 폭 %.1f° (= %.0f ± 4) · 어깨 %.1f° (≤ 골반의 1/3 — 허리만 휜다)" % (rng("pelvis"), 2 * YAW_WANT, rng("girdle")))
     if BOB == 0.0:
         check(sd("chest") <= 0.02, "미끄러지는 몸: 가슴 높이 흔들림 %.4f ≤ 0.02" % sd("chest"))
@@ -446,6 +513,9 @@ for NAME, G in GAITS.items():
         bpy.data.objects.remove(o, do_unlink=True)
     os.remove(os.path.join(RENDER, "_tmp.png"))
 NAME = ""
+if os.environ.get("PREVIEW"):              # 영상 후보 (3D-④ MA 1단계): 구운 동작들로 플레이어 눈높이 영상을 뽑고 끝 — GLB·blend 는 안 건드린다
+    exec(compile(open(os.path.join(HERE, "preview_video.py"), encoding="utf-8").read(), "preview_video.py", "exec"))
+    sys.exit(0 if not fails else 2)
 if QUICK:
     print("walk_knuckle QUICK %s  fails=%d %s" % ("ALL PASS" if not fails else "FAIL", len(fails), fails))
     sys.exit(0 if not fails else 2)
