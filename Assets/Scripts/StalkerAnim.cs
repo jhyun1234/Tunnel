@@ -8,7 +8,7 @@ using UnityEngine;
 [DefaultExecutionOrder(100)]
 public class StalkerAnim : MonoBehaviour
 {
-    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "glide_walk", "run", "run_knuckle", "glide_fast", "glide_chase", "roar", "hit", "crawl", "attack_swipe" };
+    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "glide_walk", "run", "run_knuckle", "glide_fast", "glide_chase", "up_stand", "up_walk", "up_run", "roar", "hit", "crawl", "attack_swipe" };
     [System.NonSerialized] public int gait = Tuning.STALKER_WANDER_GAIT;   // 배회 걸음 A/B/C (U 키)
     [System.NonSerialized] public int manual;                             // 행동 꺼짐일 때 트는 동작 (N 키)
     [System.NonSerialized] public bool rateMatch = true;                  // 사보타주 slide 가 끈다 (늘 1배)
@@ -56,13 +56,30 @@ public class StalkerAnim : MonoBehaviour
     [System.NonSerialized] public bool bouncy;                            // 사보타주 bouncy: 빠른 걸음을 뜀박질 run_knuckle 로 (3D-③b M2b 전 상태)
     [System.NonSerialized] public bool stiffSpine;                        // 사보타주 stiffspine: 배회를 허리가 옆으로 안 휘는 walk_knuckle 로
     [System.NonSerialized] public bool oldRun;                                                   // 사보타주 oldrun: 달리기를 옛 run 으로
+    // 서서 오는 괴물 (3D-④ 5b, 영상 UP_U4 통과 09-19): 걸음 F. 클립 up_walk·up_stand·up_run 은 Blender 가 덧칠(숙임·낮춤·팔)을 구운 것이고,
+    // 길이가 걸음과 달라 못 굽는 것 — 굳음 · 턱 · 상체가 머리를 늦게 따라감 · 손가락 · 발 디딤 화면 흔들림 — 은 여기서 얹는다
+    public bool Upright => gait == 5;
+    public string IdleClip => Upright ? "up_stand" : Tuning.STALKER_MODEL_IDLE;
+    public bool Frozen { get; private set; }                              // 들킴: 걷다 만 자세 그대로 돌이 된다 (재생 0)
+    [System.NonSerialized] public bool driveTorso = true;                 // 사보타주 stifftorso
+    [System.NonSerialized] public bool driveFingers = true;               // 사보타주 stillhands
+    [System.NonSerialized] public bool stomp = true;                      // 사보타주 noimpact
+    public float BodyYaw { get; private set; }                            // 상체가 머리를 따라 돈 각도 (도)
+    public readonly System.Collections.Generic.List<Vector2> StompLog = new System.Collections.Generic.List<Vector2>();   // (플레이어까지 거리, 흔든 크기) — 검사
+    Transform[] torso, toeB;                                              // Spine, Spine1, Spine2 (부모 먼저)
+    readonly Transform[][,] fingerJ = new Transform[2][,];                // [손][손가락 검지·중지·약지·새끼·엄지, 마디 0~2]
+    readonly Transform[] handB = new Transform[2];
+    readonly Vector3[] curlAxis = new Vector3[2];                         // 손 뼈 공간의 굽힘 축 (+ 로 돌리면 손바닥 쪽으로)
+    float fingerT;
+    readonly bool[] toeUp = { true, true };
+    static readonly string[] FingerNames = { "Index", "Middle", "Ring", "Pinky", "Thumb" };
     public string RunClip => oldRun ? "run" : "run_knuckle";
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
     public float Speed { get; private set; }                              // 잰 빠르기 m/s (벽타기는 위로 가는 것 포함)
     public float Tilt { get; private set; }                               // 0 = 서 있음, 1 = 벽에 붙음
-    public static string GaitName(int g) => g == 0 ? "A crouch-walk matched" : g == 1 ? "B slow run" : g == 2 ? "C crouch-walk capped" : g == 3 ? "D knuckle-walk" : "E glide (default)";
+    public static string GaitName(int g) => g == 0 ? "A crouch-walk matched" : g == 1 ? "B slow run" : g == 2 ? "C crouch-walk capped" : g == 3 ? "D knuckle-walk" : g == 4 ? "E glide" : "F upright (default)";
 
     Stalker st;
     Animator anim;
@@ -94,6 +111,30 @@ public class StalkerAnim : MonoBehaviour
             neckRestM = System.Array.ConvertAll(neckExt, b => Quaternion.Inverse(transform.rotation) * b.rotation);
             neckRestT = new Vector3[neckExt.Length];
             for (int i = 0; i < neckExt.Length; i++) PathAt(BoneS(i), out neckRestT[i]);
+        }
+        torso = System.Array.ConvertAll(new[] { "Spine", "Spine1", "Spine2" }, n => System.Array.Find(allT, b => b.name == "mixamorig:" + n));
+        toeB = new[] { System.Array.Find(allT, b => b.name == "mixamorig:LeftToeBase"), System.Array.Find(allT, b => b.name == "mixamorig:RightToeBase") };
+        for (int h = 0; h < 2; h++)
+        {
+            string side = h == 0 ? "Left" : "Right";
+            handB[h] = System.Array.Find(allT, b => b.name == $"mixamorig:{side}Hand");
+            fingerJ[h] = new Transform[5, 3];
+            for (int f = 0; f < 5; f++)
+                for (int j = 0; j < 3; j++)
+                    fingerJ[h][f, j] = System.Array.Find(allT, b => b.name == $"mixamorig:{side}Hand{FingerNames[f]}{j + 1}");
+            // 굽는 쪽: 쉬는 자세(팔 벌린 T, 손바닥 아래)에서 가운데 손가락을 20° 씩 돌려 끝이 가장 많이 내려가는 축 — Blender 와 같은 법, 뼈 축은 가져오기에서 바뀌어 재서 고른다
+            Transform tip = System.Array.Find(allT, b => b.name == $"mixamorig:{side}HandMiddle4");
+            if (handB[h] == null || tip == null || fingerJ[h][1, 0] == null) { handB[h] = null; continue; }
+            float best = 0f;
+            foreach (var ax in new[] { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back })
+            {
+                var keep = new Quaternion[3];
+                float y0 = transform.InverseTransformPoint(tip.position).y;
+                for (int j = 0; j < 3; j++) { keep[j] = fingerJ[h][1, j].localRotation; fingerJ[h][1, j].rotation = Quaternion.AngleAxis(20f, handB[h].rotation * ax) * fingerJ[h][1, j].rotation; }
+                float drop = y0 - transform.InverseTransformPoint(tip.position).y;
+                for (int j = 0; j < 3; j++) fingerJ[h][1, j].localRotation = keep[j];
+                if (drop > best) { best = drop; curlAxis[h] = ax; }
+            }
         }
         jaw = System.Array.Find(allT, b => b.name == "mixamorig:Jaw");
         if (jaw != null)
@@ -129,6 +170,8 @@ public class StalkerAnim : MonoBehaviour
         else
             switch (st.state)
             {
+                case Stalker.State.Alert when Upright: clip = string.IsNullOrEmpty(Current) ? IdleClip : Current; break;   // 포효 없음 — 하던 동작 그대로 굳는다
+                case Stalker.State.Catch when Upright: clip = "up_run"; break;                                             // 휘두르기 없음 — 팔 뻗은 채 그대로 들어온다
                 case Stalker.State.Alert: clip = "roar"; fade = Tuning.STALKER_ANIM_FADE_FAST_S; offset = Tuning.STALKER_ROAR_START_S; break;
                 case Stalker.State.Stun: clip = "hit"; fade = Tuning.STALKER_ANIM_FADE_FAST_S; break;
                 case Stalker.State.Catch: clip = "attack_swipe"; fade = Tuning.STALKER_ANIM_FADE_FAST_S; break;
@@ -136,12 +179,13 @@ public class StalkerAnim : MonoBehaviour
                 case Stalker.State.Hidden: clip = Current; break;           // 몸이 안 보인다
                 default:
                     moving = Speed > Tuning.STALKER_ANIM_STILL * (moving ? 1f : 2f);
-                    clip = moving ? Locomotion(out rate) : Tuning.STALKER_MODEL_IDLE;
+                    clip = moving ? Locomotion(out rate) : IdleClip;
                     break;
             }
         if (!rateMatch) rate = 1f;
         Rate = rate;
-        anim.speed = freezeTime ? 0f : rate;
+        Frozen = Upright && st.enabled && st.state == Stalker.State.Alert;
+        anim.speed = freezeTime || Frozen ? 0f : rate;
         if (!string.IsNullOrEmpty(clip) && clip != Current)
         {
             anim.CrossFadeInFixedTime(clip, fade, 0, offset);
@@ -178,7 +222,8 @@ public class StalkerAnim : MonoBehaviour
         var s = st.state;
         int mode = !st.enabled ? headTest
             : s == Stalker.State.Alert || s == Stalker.State.Chase || s == Stalker.State.Catch || (s == Stalker.State.Investigate && st.LightChase) ? 1
-            : s == Stalker.State.Investigate ? 4 : s == Stalker.State.Search ? 2 : 0;
+            : s == Stalker.State.Investigate ? 4 : s == Stalker.State.Search ? 2
+            : Upright && s == Stalker.State.Wander && !moving ? 2 : 0;       // 서서 오는 괴물: 배회하다 멈추면 서서 둘러본다 (영상 U4 "찾고 있다")
         HeadMode = mode;
         float wantYaw = 0f, wantPitch = 0f, wantTilt = 0f;
         if (mode == 1 || mode == 3) YawPitch(me - eye, out wantYaw, out wantPitch);
@@ -189,8 +234,9 @@ public class StalkerAnim : MonoBehaviour
             searchT -= dt;
             if (searchT <= 0f)
             {
-                searchT = Tuning.STALKER_HEAD_SEARCH_STEP_S;
-                searchYaw = ((float)headRng.NextDouble() * 2f - 1f) * headYawMax;
+                bool up = Upright && st.enabled;                          // 서서 오는 괴물: 고르지 않은 간격으로 머물고, 영상만큼만 돌린다(55°·35°)
+                searchT = up ? Mathf.Lerp(Tuning.STALKER_UP_LOOK_HOLD_MIN_S, Tuning.STALKER_UP_LOOK_HOLD_MAX_S, (float)headRng.NextDouble()) : Tuning.STALKER_HEAD_SEARCH_STEP_S;
+                searchYaw = ((float)headRng.NextDouble() * 2f - 1f) * (up ? Tuning.STALKER_UP_LOOK_YAW : headYawMax);
                 searchTilt = ((float)headRng.NextDouble() * 2f - 1f) * headTilt * Tuning.STALKER_HEAD_SEARCH_TILT_K;
             }
             wantYaw = searchYaw; wantTilt = searchTilt;
@@ -204,6 +250,7 @@ public class StalkerAnim : MonoBehaviour
         {
             lookYaw = animYaw; lookPitch = animPitch; tiltNow = 0f;          // 켜질 때 지금 얼굴에서 출발
             HeadYaw = animYaw; HeadTiltNow = 0f;
+            Torso(0f, dt);
             return;
         }
         if (mode == 0) { wantYaw = animYaw; wantPitch = animPitch; wantTilt = 0f; }
@@ -213,6 +260,7 @@ public class StalkerAnim : MonoBehaviour
         lookPitch = Mathf.MoveTowards(lookPitch, wantPitch, rate * dt);
         tiltNow = Mathf.MoveTowards(tiltNow, wantTilt, rate * dt);
         float dy = (lookYaw - animYaw) * headW, dp = (lookPitch - animPitch) * headW, dr = tiltNow * headW;
+        dy -= Torso(dy, dt);                                               // 상체가 돈 만큼은 머리가 덜 돈다 — 얼굴이 가는 곳은 같다
         // 모델 공간: 좌우(모델 위 축) → 위아래(돌린 뒤 옆 축) → 갸웃(돌린 뒤 얼굴 축). 세상으로 바꿔 목 몫·머리 몫으로 나눠 앞에 곱한다
         Quaternion yawQ = Quaternion.AngleAxis(dy, Vector3.up);
         Quaternion qm = Quaternion.AngleAxis(dr, Quaternion.AngleAxis(animYaw + dy, Vector3.up) * Vector3.forward)
@@ -224,6 +272,67 @@ public class StalkerAnim : MonoBehaviour
         YawPitch(FaceDir, out float nowYaw, out _);
         HeadYaw = nowYaw;
         HeadTiltNow = dr;
+    }
+
+    // 상체가 머리를 늦게(0.5 s 쯤) 따라간다: 머리 각도의 STALKER_UP_TORSO_SHARE, ± STALKER_UP_TORSO_MAX 까지. 척추 세 마디에 나눠 돌린다. 돌려주는 것 = 지금 상체 각도
+    float Torso(float headYaw, float dt)
+    {
+        bool on = Upright && driveTorso && System.Array.IndexOf(torso, null) < 0;
+        float want = on ? Mathf.Clamp(headYaw * Tuning.STALKER_UP_TORSO_SHARE, -Tuning.STALKER_UP_TORSO_MAX, Tuning.STALKER_UP_TORSO_MAX) : 0f;
+        if (!Frozen) BodyYaw = Mathf.Lerp(BodyYaw, want, 1f - Mathf.Exp(-Tuning.STALKER_UP_TORSO_FOLLOW * dt));
+        if (!on || Mathf.Abs(BodyYaw) < 0.01f) return 0f;
+        Quaternion q = Quaternion.AngleAxis(BodyYaw / 3f, transform.up);
+        foreach (var b in torso) b.rotation = q * b.rotation;
+        return BodyYaw;
+    }
+
+    // 손가락 (영상 U4): 4.5 s 한 바퀴 — 주먹을 천천히 쥐었다 편다 1.4 s → 검지부터 차례로 피아노 치듯 두드린다. 두 손은 엇박자. 굳으면 같이 멈춘다. 질주 클립은 갈고리 손을 구워 뒀다
+    void Fingers(float dt)
+    {
+        if (!Frozen) fingerT += dt;
+        var a = new float[3];
+        for (int h = 0; h < 2; h++)
+        {
+            if (handB[h] == null) continue;
+            float u = (fingerT + (h == 1 ? 1.9f : 0f)) % 4.5f;
+            Vector3 ax = handB[h].rotation * curlAxis[h];
+            for (int f = 0; f < 5; f++)
+            {
+                if (u < 1.4f)
+                {
+                    float c = Mathf.Sin(Mathf.PI * Mathf.Clamp01((u - f * 0.05f) / 1.2f)); c *= c;
+                    a[0] = 8f + 55f * c; a[1] = 10f + 70f * c; a[2] = 8f + 55f * c;
+                }
+                else
+                {
+                    float c = Mathf.Max(0f, Mathf.Sin(2f * Mathf.PI * 1.8f * u - f * 1.15f)); c *= c;
+                    a[0] = 8f + 42f * c; a[1] = 10f + 18f * c; a[2] = 8f + 12f * c;
+                }
+                float k = f == 4 ? 0.5f : 1f;
+                for (int j = 0; j < 3; j++)
+                    if (fingerJ[h][f, j] != null) fingerJ[h][f, j].rotation = Quaternion.AngleAxis(a[j] * k, ax) * fingerJ[h][f, j].rotation;
+            }
+        }
+    }
+
+    // 무게: 발끝이 내려와 닿는 순간 플레이어 화면을 흔든다 — 가까울수록 세게 (영상 U4 와 같은 식)
+    void Stomp()
+    {
+        bool run = Current == "up_run";
+        for (int i = 0; i < 2; i++)
+        {
+            if (toeB[i] == null) return;
+            bool up = transform.InverseTransformPoint(toeB[i].position).y > Tuning.STALKER_UP_TOE_UP_M;
+            bool hit = toeUp[i] && !up;
+            toeUp[i] = up;
+            if (!hit || Frozen || !(run || Current == "up_walk") || st.player == null) continue;
+            float dist = Vector3.Distance(st.player.position, st.transform.position);
+            if (dist > Tuning.STALKER_STOMP_MAX_M) continue;
+            float amt = (run ? Tuning.STALKER_STOMP_RUN_M : Tuning.STALKER_STOMP_WALK_M) * Mathf.Pow(Mathf.Min(1f, Tuning.STALKER_STOMP_FULL_M / Mathf.Max(dist, 0.9f)), 0.8f);
+            StompLog.Add(new Vector2(dist, amt));
+            var pl = st.player.GetComponent<Player>();
+            if (pl != null) pl.Shake(amt, Tuning.STALKER_STOMP_SPAN_S);
+        }
     }
 
     static float BoneS(int i) => Tuning.STALKER_NECK_TOP_IN_M + i * Tuning.STALKER_NECK_LEN_M / Tuning.STALKER_NECK_JOINTS;
@@ -316,9 +425,16 @@ public class StalkerAnim : MonoBehaviour
     void Jaw(float dt)
     {
         float target;
+        if (Frozen)                                                        // 굳음: 턱만 천천히 벌어진다 — "곧 뛰어오겠다" (영상 U4)
+        {
+            JawDeg = Mathf.MoveTowards(JawDeg, Tuning.STALKER_JAW_FREEZE_DEG, Tuning.STALKER_JAW_FREEZE_DEG / Tuning.STALKER_ALERT_S * dt);
+            jaw.localRotation = Quaternion.AngleAxis(JawDeg, jawAxis) * jawRest;
+            jaw.localPosition = jawRestPos;
+            return;
+        }
         switch (Current)
         {
-            case "roar": case "attack_swipe": target = jawWideDeg; break;
+            case "roar": case "attack_swipe": case "up_run": target = jawWideDeg; break;
             case "run": case "run_knuckle": case "run_stand": case "glide_fast": case "glide_chase": target = Tuning.STALKER_JAW_CHASE_DEG; break;
             case "hit": target = Tuning.STALKER_JAW_HIT_DEG; break;
             default:
@@ -347,6 +463,11 @@ public class StalkerAnim : MonoBehaviour
     public string ClipFor(float v, out float clipSpeed)
     {
         bool fast = v > Tuning.STALKER_ANIM_RUN_ABOVE;
+        if (gait == 5)
+        {
+            clipSpeed = fast ? Tuning.STALKER_CLIP_SPEED_UP_RUN : Tuning.STALKER_CLIP_SPEED_UP_WALK;
+            return fast ? "up_run" : "up_walk";
+        }
         if (gait == 4 && fast && !oldRun && !bouncy)
         {
             // 3D-③b M2b: 미끄러지는 걸음 — 몸 높이 고정·공중 0·옆으로 휘는 허리. 빨라져도 박자는 그대로, 보폭이 다른 클립으로 간다
@@ -389,6 +510,10 @@ public class StalkerAnim : MonoBehaviour
             NeckOut(Time.deltaTime);
         if (jaw != null && driveJaw)
             Jaw(Time.deltaTime);
+        if (Upright && driveFingers && Current != "up_run")
+            Fingers(Time.deltaTime);
+        if (Upright && stomp)
+            Stomp();
         if (straightFingers)
             for (int i = 0; i < fingers.Length; i++) fingers[i].localRotation = fingerRest[i];
         if (!clampArms)

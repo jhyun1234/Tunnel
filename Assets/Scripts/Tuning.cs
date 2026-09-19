@@ -219,7 +219,7 @@ public static class Tuning
     // ---- 괴물 (M3 소음 듣는 최소판). Godot Tuning.gd 괴물(#35) 절. 눈·빛·추격·잡기·천장은 다음 마일스톤 ----
     public const float STALKER_R = 0.6f;               // m, 충돌 캡슐 반지름
     public const float STALKER_H = 2.8f;               // m, 충돌 캡슐 높이
-    public const float STALKER_SPEED_WANDER = 2.5f;    // m/s, Godot STALKER_SPEED["wander"]
+    public const float STALKER_SPEED_WANDER = 1.85f;   // m/s. Godot STALKER_SPEED["wander"] 2.5 → 사용자 승인 09-19(제안서 3D-④ 5b 물음 10 ①): 영상 U4 에서 통과한 걸음의 빠르기 그대로. 빛 보고 다가오기도 이 값
     public const float STALKER_SPEED_INVESTIGATE = 5.0f;   // Godot 4.0. 사용자 판정(09-15) "모델이 들어가고 5.0 이면 무섭겠다" → 5.0
     public const float STALKER_SPEED_SEARCH = 2.5f;
     public const float STALKER_EAR_MUL = 1.0f;         // 소음 반경에 곱함 — 반경 안이면 듣는다
@@ -314,8 +314,8 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_GLIDE_FAST = 5.0f / 1.5f;    // glide_fast: 조사 5.0 · 철수 4.0(배수 0.8)
     public const float STALKER_CLIP_SPEED_GLIDE_CHASE = 6.5f / 1.5f;   // glide_chase: 추격 6.5
     public const float STALKER_ANIM_CHASE_ABOVE = 5.75f;    // m/s, 이보다 빠르면 glide_chase (조사 5.0 과 추격 6.5 의 가운데)
-    public const int STALKER_CLIP_COUNT = 19;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋). BuildM1·검사가 대조한다
-    public const int STALKER_GAIT_COUNT = 5;                // 걸음 안 A/B/C/D/E (U 키)
+    public const int STALKER_CLIP_COUNT = 22;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋 + up 셋). BuildM1·검사가 대조한다
+    public const int STALKER_GAIT_COUNT = 6;                // 걸음 안 A/B/C/D/E/F (U 키)
     // 턱 (3D-③b M1c, 제안서 docs/제안서_3D3b_M1c_턱_뼈.md, 승인 09-19). 각도는 제안값 — 판정 때 DevHud H/J 로 WIDE 를 찾는다.
     // 레퍼런스 공통점: 평소 조금 벌어져 늘어짐 + 숨 / 덮치는 순간 사람보다 크게(사람 최대 32~39°) 확 / 추격 중 벌어짐
     public const float STALKER_JAW_IDLE_DEG = 8f;           // 걷기·대기·벽타기
@@ -366,9 +366,26 @@ public static class Tuning
     public const float STALKER_ROAR_START_S = 1.2f;         // s, roar(2.83 s) 중 들킴 1.0 s 동안 틀 구간의 시작 = 두 손이 가장 멀어지는 순간 1.70 s(-only anim 실측 09-18) − 0.5 s
     // 배회 걸음 (걷기 빠르기 이하일 때): 0 = A 웅크려 걷기, 발 맞춤(약 3.7배) · 1 = B 달리기, 발 맞춤(약 0.56배) · 2 = C 웅크려 걷기 STALKER_WALK_RATE_CAP 배까지만(나머지는 미끄러짐)
     // · 3 = D 새 걷기 walk_knuckle 네 점 걸음(배수 1.0, 3D-③b M1). 사용자가 U 키로 고른다 — 기본값은 판정 뒤에 바꾼다
-    public const int STALKER_WANDER_GAIT = 4;               // 4 = E 미끄러지는 걸음(3D-③b M2b, 사용자 승인 09-19: 기본값). 0~3 은 비교용
+    // 서서 오는 괴물 (3D-④ 5b, Unity 전용). 클립은 blender/anim/bake_upright.py — 원래 빠르기는 그 스크립트가 찍는 "UPRIGHT clip speeds" ÷ 1.5
+    public const float STALKER_CLIP_SPEED_UP_WALK = 1.84f / 1.5f;      // up_walk: 배회 1.85 → 배수 1.0 · 수색 2.5 → 1.36
+    public const float STALKER_CLIP_SPEED_UP_RUN = 6.39f / 1.5f;       // up_run: 추격 6.5 → 1.02 · 조사 5.0 → 0.78 · 철수 4.0 → 0.63
+    public const float STALKER_JAW_FREEZE_DEG = 22f;        // 들킴(굳음) 동안 STALKER_ALERT_S 에 걸쳐 여기까지 벌어진다 (영상 JAW_FREEZE)
+    public const float STALKER_UP_LOOK_YAW = 55f;           // 도, 서서 둘러볼 때 머리 좌우 (영상: 왼 55 · 오른 35)
+    public const float STALKER_UP_LOOK_HOLD_MIN_S = 0.6f;   // s, 한 곳을 보고 머무는 시간 — 고르지 않게 (영상 0.7 · 1.1)
+    public const float STALKER_UP_LOOK_HOLD_MAX_S = 1.2f;
+    public const float STALKER_UP_TORSO_SHARE = 0.45f;      // 상체가 머리 각도의 이만큼 따라 돈다
+    public const float STALKER_UP_TORSO_MAX = 25f;          // 도 (영상에서 본 가장 큰 값 55 × 0.45)
+    public const float STALKER_UP_TORSO_FOLLOW = 2.2f;      // 1/s — 0.5 s 쯤 늦게 (영상: 프레임마다 남은 차이의 7 %)
+    public const float STALKER_UP_TOE_UP_M = 0.13f;         // 모델 m, 발끝이 이보다 높았다 낮아지는 순간 = 발 디딤 (bake_upright.py 와 같은 값)
+    public const float STALKER_STOMP_WALK_M = 0.03f;        // m, 걷는 발 디딤에 화면이 눌리는 크기 (3.5 m 안에서 가장 셈). 곡괭이 타격이 0.02
+    public const float STALKER_STOMP_RUN_M = 0.06f;
+    public const float STALKER_STOMP_FULL_M = 3.5f;         // m, 이 안이면 가장 세게. 밖은 (3.5 ÷ 거리)^0.8
+    public const float STALKER_STOMP_MAX_M = 15f;           // m, 이 밖은 안 흔든다
+    public const float STALKER_STOMP_SPAN_S = 0.15f;
+    public const int STALKER_WANDER_GAIT = 5;               // 5 = F 서서 오는 괴물(3D-④ 5b, 사용자 승인 09-19: 기본값). 0~4 는 비교용(4 = E 미끄러지는 걸음, M2b 불통과)
     public const float STALKER_WALK_RATE_CAP = 2.0f;
     public const float STALKER_PREVIEW_FROM_M = 8.0f;       // m, DevHud U 걸어오기 미리보기: 세운 괴물이 이 거리에서 출발해
+    public const float STALKER_PREVIEW_SPEED = 2.5f;        // m/s, 걸어오기 미리보기 빠르기 — 걸음 A~E 를 견주던 옛 배회 빠르기 그대로 (배회는 09-19 에 1.85 가 됐다)
     public const float STALKER_PREVIEW_TO_M = 2.5f;         // m, 여기까지 오면 처음 자리로 (배회 빠르기 STALKER_SPEED_WANDER)
     public const float STALKER_CLIMB_GAP = 0.05f;           // m, 벽타기 때 손발이 닿는 면과 벽 사이 (crawl 을 90° 세워 손발이 벽에)
     public const float STALKER_CLIMB_TILT_S = 0.3f;         // s, 서 있다가 벽에 붙는(세워지는) 시간

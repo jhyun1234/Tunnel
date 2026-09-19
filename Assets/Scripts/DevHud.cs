@@ -94,7 +94,7 @@ public class DevHud : MonoBehaviour
             if (to.magnitude <= Tuning.STALKER_PREVIEW_TO_M)
                 PlaceAhead(Tuning.STALKER_PREVIEW_FROM_M);
             else
-                stalker.GetComponent<CharacterController>().Move((to.normalized * Tuning.STALKER_SPEED_WANDER + Vector3.down) * Time.deltaTime);
+                stalker.GetComponent<CharacterController>().Move((to.normalized * Tuning.STALKER_PREVIEW_SPEED + Vector3.down) * Time.deltaTime);
         }
         var look = stalker != null ? stalker.GetComponentInChildren<StalkerLook>() : null;   // 3D-②b: 살 요철·거칠기·눈 발광 — 사용자가 값을 찾는다
         if (look != null)
