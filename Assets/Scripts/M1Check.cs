@@ -12,10 +12,29 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|straightfingers|shutjaw|stiffneck|shortneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
+    // 걸음 클립마다 모으는 표본 (anim 구간의 Sample 이 채운다)
+    class GaitAcc
+    {
+        public int frames, lifts;
+        public int[] handOn = new int[2];
+        public float sh, hip, rawMin = 99f;
+        public List<float> rates = new List<float>(), chest = new List<float>(), pelvis = new List<float>(), headYaw = new List<float>();
+        public List<float[]> heights = new List<float[]>();                 // 두 손 발톱 끝 · 두 발끝의 바닥 위 높이
+        public float Med(List<float> l) => l.Count > 0 ? l.OrderBy(v => v).ElementAt(l.Count / 2) : 0f;
+        public float Range(List<float> l) => l.Count > 0 ? l.Max() - l.Min() : 0f;
+        public float Sd(List<float> l) { if (l.Count == 0) return 99f; float m = l.Average(); return Mathf.Sqrt(l.Average(v => (v - m) * (v - m))); }
+        public int Airborne(float above)                                     // 네 손발이 모두 제 가장 낮은 높이 + above 위에 뜬 프레임
+        {
+            if (heights.Count == 0) return 0;
+            var min = Enumerable.Range(0, 4).Select(i => heights.Min(h => h[i])).ToArray();
+            return heights.Count(h => Enumerable.Range(0, 4).All(i => h[i] > min[i] + above));
+        }
+    }
+
     public Player player;
     public Headlamp lamp;
     public Volume volume;
@@ -179,6 +198,10 @@ public class M1Check : MonoBehaviour
             sanim.oldWalk = true;
         if (sabotage == "oldrun" && sanim != null)       // 3D-③b M2 전 상태: 달리기가 옛 run (손목째 바닥 밑 → 팔 들기)
             sanim.oldRun = true;
+        if (sabotage == "bouncy" && sanim != null)       // 3D-③b M2b 전 상태: 빠른 걸음이 뜀박질 run_knuckle (몸이 튀고 공중에 뜬다)
+            sanim.bouncy = true;
+        if (sabotage == "stiffspine" && sanim != null)   // 배회가 허리가 옆으로 안 휘는 walk_knuckle
+            sanim.stiffSpine = true;
         if (sabotage == "straightfingers" && sanim != null)   // 3D-③b M1b 전 상태: 손가락 곧음
             sanim.straightFingers = true;
         if (sabotage == "shutjaw" && sanim != null)      // 3D-③b M1c 전 상태: 턱이 안 움직인다
@@ -1202,16 +1225,16 @@ public class M1Check : MonoBehaviour
         // 걷기·달리기 표본: 프레임마다(그린 뒤라 뿌리와 뼈가 같은 순간) 두 발끝의 땅 위 빠르기 중 느린 쪽 = 딛고 있는 발.
         // 걸을 땐 늘 한 발은 땅에 서 있다 — 느린 발도 움직이면 미끄러진다. "더 낮은 발"로 고르면 웅크려 걷기는 두 발이 다 낮아 흔드는 발이 섞였다(첫 실행 09-18)
         // 손: 가장 낮은 높이·가장 바깥 x. 모든 뼈 중 가장 낮은 것(바닥 = 괴물 뿌리 높이, 손가락 끝까지)이 검사 잣대
-        string runClip = sa.RunClip;
-        var slip = new Dictionary<string, List<Vector2>>{ ["walk_crouch"] = new List<Vector2>(), [runClip] = new List<Vector2>() };
+        // 기본 걸음(E 미끄러지는 걸음)에서 빠르기마다 나와야 하는 클립 — StalkerAnim 과 같은 길로 묻는다. 사보타주면 여기도 옛 클립이 나온다(이름 검사가 FAIL)
+        float glideWalkRate = 0f, glideChaseRate = 0f, glideRetreatRate = 0f;
+        string glideNames = "-";
+        string walkClip = sa.ClipFor(Tuning.STALKER_SPEED_WANDER, out _), fastClip = sa.ClipFor(Tuning.STALKER_SPEED_RETREAT, out _), chaseClip = sa.ClipFor(Tuning.STALKER_SPEED_CHASE, out _);
+        var slip = new Dictionary<string, List<Vector2>>{ [walkClip] = new List<Vector2>(), [fastClip] = new List<Vector2>(), [chaseClip] = new List<Vector2>() };
+        var acc = new Dictionary<string, GaitAcc>();
+        Transform chestB = Bone("Spine2");
         Transform[] shoulders = { Bone("LeftArm"), Bone("RightArm") }, thighs = { Bone("LeftUpLeg"), Bone("RightUpLeg") };
         var handTips = hands.Select(h => h.GetComponentsInChildren<Transform>()).ToArray();
-        // 3D-③b M2 새 달리기: 추격 중 순수 달리기 프레임의 팔 들기 횟수 · 손 발톱 끝이 바닥 0.05 m 안인 몫 · 어깨·엉덩이 높이
-        int rFrames = 0, rLifts = 0, rLiftPrev = 0;
-        int[] rHandOn = new int[2];
-        float rSh = 0f, rHip = 0f, rRawMin = 99f;
-        var rRates = new List<float>();
-        bool rChase = false;
+        int accLiftPrev = 0;
         float handLow = 99f, handOut = 0f, boneLow = 99f;
         string boneLowName = "-";
         IEnumerator Sample(string clip, float seconds, Func<bool> go)
@@ -1219,25 +1242,36 @@ public class M1Check : MonoBehaviour
             bool have = false;
             Vector3 p0 = default, p1 = default;
             float s = 0f;
+            accLiftPrev = sa.LiftCount;
+            if (!acc.TryGetValue(clip, out var A)) acc[clip] = A = new GaitAcc();
             while (s < seconds && go())
             {
                 yield return new WaitForEndOfFrame();
                 float dt = Time.deltaTime;
                 s += dt;
-                int liftD = sa.LiftCount - rLiftPrev;
-                rLiftPrev = sa.LiftCount;
+                int liftD = sa.LiftCount - accLiftPrev;
+                accLiftPrev = sa.LiftCount;
                 if (!anim.GetCurrentAnimatorStateInfo(0).IsName(clip) || anim.IsInTransition(0)) { have = false; continue; }
                 float floor = st.transform.position.y;
-                if (rChase)
                 {
-                    rFrames++;
-                    rLifts += liftD;
-                    rRates.Add(sa.Rate);
-                    rRawMin = Mathf.Min(rRawMin, sa.ArmLowRaw[0], sa.ArmLowRaw[1]);
+                    A.frames++;
+                    A.lifts += liftD;
+                    A.rates.Add(sa.Rate);
+                    A.rawMin = Mathf.Min(A.rawMin, sa.ArmLowRaw[0], sa.ArmLowRaw[1]);
+                    var h4 = new float[4];
                     for (int i = 0; i < 2; i++)
-                        if (handTips[i].Min(b => b.position.y) - floor <= 0.05f) rHandOn[i]++;
-                    rSh += (shoulders[0].position.y + shoulders[1].position.y) * 0.5f - floor;
-                    rHip += (thighs[0].position.y + thighs[1].position.y) * 0.5f - floor;
+                    {
+                        h4[i] = handTips[i].Min(b => b.position.y) - floor;
+                        h4[2 + i] = toes[i].position.y - floor;
+                        if (h4[i] <= 0.05f) A.handOn[i]++;
+                    }
+                    A.heights.Add(h4);
+                    A.sh += (shoulders[0].position.y + shoulders[1].position.y) * 0.5f - floor;
+                    A.hip += (thighs[0].position.y + thighs[1].position.y) * 0.5f - floor;
+                    A.chest.Add(chestB.position.y - floor);
+                    Vector3 pv = model.InverseTransformDirection(thighs[0].position - thighs[1].position), hf = model.InverseTransformDirection(sa.FaceDir);
+                    A.pelvis.Add(Mathf.Atan2(pv.z, Mathf.Abs(pv.x)) * Mathf.Rad2Deg);      // 골반이 몸 앞 방향에서 좌우로 돈 각도
+                    A.headYaw.Add(Mathf.Atan2(hf.x, hf.z) * Mathf.Rad2Deg);
                 }
                 if (have && dt > 0f)
                 {
@@ -1279,11 +1313,11 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.6f);
         seen["idle_crouch (wander pause)"] = Playing("idle_crouch");
         t = 0f;
-        while (sa.Current != "walk_crouch" && t < 3f) { t += Time.deltaTime; yield return null; }
+        while (sa.Current != walkClip && t < 3f) { t += Time.deltaTime; yield return null; }
         yield return new WaitForSeconds(Tuning.STALKER_ANIM_FADE_S + 0.1f);
-        seen["walk_crouch (wander)"] = Playing("walk_crouch");
+        seen["walk (wander)"] = Playing(walkClip);
         float walkRate = sa.Rate;
-        yield return Sample("walk_crouch", 5f, () => st.state == Stalker.State.Wander);
+        yield return Sample(walkClip, 5f, () => st.state == Stalker.State.Wander);
 
         // ①b 3D-③b M1 새 걷기 (배회 걸음 D = walk_knuckle): 배수 · 딛은 손발 미끄러짐 · 손 짚는 몫 · 팔 들기 0번 · 어깨 > 엉덩이 · 머리 꼭대기 · 머리 흔들림
         Transform chest = Bone("Spine2"), headTop = Bone("HeadTop_End") ?? head;
@@ -1379,12 +1413,9 @@ public class M1Check : MonoBehaviour
         seen["roar (alert)"] = Playing("roar");
         while (st.state == Stalker.State.Alert) yield return null;
         yield return new WaitForSeconds(0.15f);
-        seen["run (chase)"] = Playing(runClip);
-        float chaseRate = sa.Rate, chaseSpeed = sa.Speed;
-        rChase = true;
-        rLiftPrev = sa.LiftCount;
-        yield return Sample(runClip, 3f, () => st.state == Stalker.State.Chase);
-        rChase = false;
+        seen["run (chase)"] = Playing(chaseClip) || Playing(fastClip);      // 추격 첫 0.3 s 는 빠르기가 붙는 중이라 조사용 클립을 지나간다
+        float chaseRate = sa.Rate;
+        yield return Sample(chaseClip, 3f, () => st.state == Stalker.State.Chase);
         t = 0f;
         while (st.state != Stalker.State.Catch && t < 3f) { t += Time.deltaTime; yield return null; }
         yield return null;
@@ -1420,8 +1451,8 @@ public class M1Check : MonoBehaviour
         t = 0f;
         while (st.state != Stalker.State.Retreat && t < 1f) { t += Time.deltaTime; yield return null; }
         yield return new WaitForSeconds(0.3f);
-        seen["run (retreat)"] = Playing(runClip);
-        yield return Sample(runClip, 5f, () => st.state == Stalker.State.Retreat);
+        seen["run (retreat)"] = Playing(fastClip);
+        yield return Sample(fastClip, 5f, () => st.state == Stalker.State.Retreat);
         t = 0f;
         while (st.state != Stalker.State.Climb && t < 3f) { t += Time.deltaTime; yield return null; }
         yield return new WaitForSeconds(Tuning.STALKER_CLIMB_TILT_S + 0.3f);
@@ -1448,17 +1479,27 @@ public class M1Check : MonoBehaviour
         while (st.state == Stalker.State.Hidden && t < 2f) { t += Time.deltaTime; yield return null; }
 
         Check("anim_state_to_clip", seen.Values.All(v => v) && seen.Count == 8,
-            string.Join(", ", seen.Select(kv => $"{kv.Key} {(kv.Value ? "ok" : "NO")}")) + $" (rates walk x{walkRate:F2} chase x{chaseRate:F2} climb x{climbRate:F2})");
-        float walkSlip = SlipOf("walk_crouch", out int nWalk), runSlip = SlipOf(runClip, out int nRun);
-        // 3D-③b M2: 추격이 새 달리기를 배수 1.0 으로 틀고, 손이 바닥을 짚고(팔 들기 0번), 어깨가 엉덩이보다 높다
-        float rRate = rRates.Count > 0 ? rRates.OrderBy(v => v).ElementAt(rRates.Count / 2) : 0f;   // 가운데값 — 추격 첫 0.3 s 는 빠르기가 붙는 중
-        Check("anim_run_knuckle_plays", runClip == "run_knuckle" && Mathf.Abs(rRate - 1f) <= 0.05f,
-            $"chase plays {runClip} median x{rRate:F2} over {rRates.Count} frames (x{chaseRate:F2} at {chaseSpeed:F2} m/s 0.15 s in) (want run_knuckle x0.95–1.05)");
-        float rH0 = rFrames > 0 ? rHandOn[0] / (float)rFrames : 0f, rH1 = rFrames > 0 ? rHandOn[1] / (float)rFrames : 0f;
-        Check("anim_run_knuckle_plants", rFrames >= 60 && rLifts == 0 && Mathf.Min(rH0, rH1) >= Tuning.STALKER_RUN_HAND_PLANT_MIN && rSh > rHip,
-            $"{rFrames} pure chase frames: arm lifts {rLifts} (want 0), claw tip before lift lowest {rRawMin:F3} m · claw tips on floor L {rH0:P0} R {rH1:P0} (min {Tuning.STALKER_RUN_HAND_PLANT_MIN:P0}) · shoulders {rSh / Mathf.Max(1, rFrames):F2} m > hips {rHip / Mathf.Max(1, rFrames):F2} m");
+            string.Join(", ", seen.Select(kv => $"{kv.Key} {(kv.Value ? "ok" : "NO")}")) + $" (rates walk x{walkRate:F2} chase x{chaseRate:F2} (0.15 s in) climb x{climbRate:F2})");
+        float walkSlip = SlipOf(walkClip, out int nWalk), runSlip = SlipOf(chaseClip, out int nRun);
         Check("anim_feet_do_not_slide", walkSlip <= Tuning.STALKER_FOOT_SLIP_MAX && runSlip <= Tuning.STALKER_FOOT_SLIP_MAX && nWalk >= 20 && nRun >= 20,
             $"planted foot moves walk {walkSlip:F2} m/s ({nWalk} frames) · run {runSlip:F2} m/s ({nRun} frames) (max {Tuning.STALKER_FOOT_SLIP_MAX})");
+        // 3D-③b M2b 미끄러지는 걸음: 몸이 안 튀고 공중에 안 뜬다 · 손이 짚는다 · 배회 때 허리만 옆으로 휘고 머리는 가만히 · 빨라져도 박자는 그대로
+        GaitAcc Acc(string c) => acc.TryGetValue(c, out var a) ? a : new GaitAcc();
+        GaitAcc gw = Acc(walkClip), gc = Acc(chaseClip), gf = Acc(fastClip);
+        float ClipLen(string c) => anim.runtimeAnimatorController.animationClips.Where(x => x.name == c).Select(x => x.length).DefaultIfEmpty(1f).First();
+        glideWalkRate = gw.Med(gw.rates); glideChaseRate = gc.Med(gc.rates); glideRetreatRate = gf.Med(gf.rates);
+        glideNames = $"{walkClip}/{fastClip}/{chaseClip}";
+        int airC = gc.Airborne(0.08f), airW = gw.Airborne(0.08f);
+        Check("anim_glide_no_bob", gc.frames >= 60 && gw.frames >= 60 && gc.Sd(gc.chest) <= 0.03f && gw.Sd(gw.chest) <= 0.03f && airC == 0 && airW == 0,
+            $"chest height sd chase {gc.Sd(gc.chest):F3} m · wander {gw.Sd(gw.chest):F3} m (max 0.03) · frames with all four limbs 0.08 m off the floor: chase {airC} of {gc.frames} · wander {airW} of {gw.frames} (want 0)");
+        float cH0 = gc.frames > 0 ? gc.handOn[0] / (float)gc.frames : 0f, cH1 = gc.frames > 0 ? gc.handOn[1] / (float)gc.frames : 0f;
+        Check("anim_glide_plants", gc.frames >= 60 && gc.lifts == 0 && gw.lifts == 0 && Mathf.Min(cH0, cH1) >= Tuning.STALKER_RUN_HAND_PLANT_MIN && gc.sh > gc.hip,
+            $"{gc.frames} pure chase frames: arm lifts chase {gc.lifts} · wander {gw.lifts} (want 0), claw tip before lift lowest {gc.rawMin:F3} m · claw tips on floor L {cH0:P0} R {cH1:P0} (min {Tuning.STALKER_RUN_HAND_PLANT_MIN:P0}) · shoulders {gc.sh / Mathf.Max(1, gc.frames):F2} m > hips {gc.hip / Mathf.Max(1, gc.frames):F2} m");
+        Check("anim_glide_spine_sways", gw.frames >= 60 && gw.Range(gw.pelvis) >= 25f && gw.Range(gw.headYaw) <= 8f,
+            $"wander ({walkClip}, {gw.frames} frames): pelvis swings {gw.Range(gw.pelvis):F0}° side to side (min 25) while the face swings {gw.Range(gw.headYaw):F1}° (max 8); chase pelvis {gc.Range(gc.pelvis):F0}°");
+        float hzW = glideWalkRate / ClipLen(walkClip), hzC = glideChaseRate / ClipLen(chaseClip), hzF = glideRetreatRate / ClipLen(fastClip);
+        Check("anim_glide_cadence_fixed", new[] { hzW, hzC }.All(v => v >= 1.5f && v <= 1.9f) && hzF >= 1.2f && hzF <= 1.9f,
+            $"limb cycles per second: wander {hzW:F2} · chase {hzC:F2} (want 1.5–1.9 — speed comes from stride, not cadence) · retreat {hzF:F2} (glide_fast slowed to 4 m/s, want 1.2–1.9)");
         Check("anim_climb_on_wall", climbFrames >= 10 && headAbove > 0.3f && pierce <= 0.02f && nearest <= 0.2f,
             $"{climbFrames} frames, head above hips ≥ {headAbove:F2} m, deepest bone past wall {pierceName} {pierce:F2} m [{pierceWhy}], closest bone gap {nearest:F2} m");
         Check("anim_hands_stay_in_tunnel", boneLow >= -0.05f && handOut <= Tuning.TUNNEL_WALL_X,
@@ -1472,7 +1513,7 @@ public class M1Check : MonoBehaviour
             float calmSince = jawLog.Count > 0 ? jawLog[0].time : 0f;
             foreach (var j in jawLog)
             {
-                bool calm = j.s == Stalker.State.Wander && (j.clip == "walk_crouch" || j.clip == "walk_knuckle" || j.clip == "idle_crouch");
+                bool calm = j.s == Stalker.State.Wander && (j.clip == walkClip || j.clip == "walk_crouch" || j.clip == "walk_knuckle" || j.clip == "idle_crouch");
                 if (!calm) calmSince = float.MaxValue;
                 else if (calmSince == float.MaxValue) calmSince = j.time;
                 if (calm && j.time > calmSince + Tuning.STALKER_JAW_CLOSE_S + 0.1f && j.time > jawLog[0].time + 1f) wan.Add(j);
@@ -1480,7 +1521,7 @@ public class M1Check : MonoBehaviour
             var al = jawLog.Where(j => j.s == Stalker.State.Alert).ToList();
             var ca = jawLog.Where(j => j.s == Stalker.State.Catch).ToList();
             float chase0 = jawLog.FirstOrDefault(j => j.s == Stalker.State.Chase).time;
-            var ch = jawLog.Where(j => j.s == Stalker.State.Chase && j.clip == runClip && j.time > chase0 + 0.5f).ToList();
+            var ch = jawLog.Where(j => j.s == Stalker.State.Chase && j.clip == chaseClip && j.time > chase0 + 0.5f).ToList();
             float wMin = wan.Count > 0 ? wan.Min(j => j.deg) : -1f, wMax = wan.Count > 0 ? wan.Max(j => j.deg) : -1f;
             float aMax = al.Count > 0 ? al.Max(j => j.deg) : -1f, cMax = ca.Count > 0 ? ca.Max(j => j.deg) : -1f, chAvg = ch.Count > 0 ? ch.Average(j => j.deg) : -1f;
             var a30 = al.FirstOrDefault(j => j.deg >= 30f);
@@ -1518,7 +1559,7 @@ public class M1Check : MonoBehaviour
             sa.freezeTime = false;
             yield return new WaitForSeconds(Tuning.STALKER_CLIMB_TILT_S + 0.2f);
             sa.freezeTime = true;
-            if (clip == "walk_crouch" || clip == "walk_knuckle" || clip == "run" || clip == "run_knuckle" || clip == "crawl")
+            if (clip == "walk_crouch" || clip == "walk_knuckle" || clip == "run" || clip == "run_knuckle" || clip.StartsWith("glide_") || clip == "crawl")
             {
                 // 진단: 동작 1배일 때 바닥에 닿은 발끝이 모델 뒤쪽으로 가는 빠르기(게임 크기 m/s) = 원래 걸음 빠르기. 가장 낮은 뼈 높이도
                 float len = anim.runtimeAnimatorController.animationClips.First(c => c.name == clip).length;
@@ -1556,7 +1597,8 @@ public class M1Check : MonoBehaviour
         }
         // ⑥b 3D-③b M1: 옛 걷기 / 새 걷기 나란히 — 같은 자리·같은 방향, 7 m 정면 · 2 m 옆, 한 주기 12장 (사용자가 비교한다)
         // 3D-③b M2: 옛 달리기 / 새 달리기도 같은 자리에서 (42_run_*)
-        foreach (var (clip, tag) in new[] { ("walk_crouch", "22_walk_old"), ("walk_knuckle", "22_walk_new"), ("run", "42_run_old"), ("run_knuckle", "42_run_new") })
+        foreach (var (clip, tag) in new[] { ("walk_crouch", "22_walk_old"), ("walk_knuckle", "22_walk_new"), ("run", "42_run_old"), ("run_knuckle", "42_run_new"),
+            ("glide_walk", "44_glide_walk"), ("glide_fast", "44_glide_fast"), ("glide_chase", "44_glide_chase") })
         {
             sa.manual = Array.IndexOf(StalkerAnim.ManualClips, clip);
             sa.freezeTime = false;
@@ -1745,6 +1787,7 @@ public class M1Check : MonoBehaviour
             gaitOk &= hud.walkPreview && sa.Speed > 2f && (sa.gait == 1 ? sa.Current == sa.RunClip && sa.Rate < 0.8f
                 : sa.gait == 2 ? sa.Current == "walk_crouch" && Mathf.Abs(sa.Rate - Tuning.STALKER_WALK_RATE_CAP) < 0.05f
                 : sa.gait == 3 ? sa.Current == "walk_knuckle" && Mathf.Abs(sa.Rate - 1f) < 0.2f
+                : sa.gait == 4 ? sa.Current == sa.ClipFor(Tuning.STALKER_SPEED_WANDER, out _) && Mathf.Abs(sa.Rate - 1f) < 0.2f
                 : sa.Current == "walk_crouch" && sa.Rate > 3f);
         }
         Check("anim_gait_key_walks_in", gaitOk && sa.gait == g0, string.Join(" · ", gaitSeen) + $", preview {hud.walkPreview}");
@@ -1780,6 +1823,10 @@ public class M1Check : MonoBehaviour
                 tiltMax = Mathf.Max(tiltMax, Vector3.Angle(sa.HeadUpDir, model.up));
             }
             string heard = $"{st.state} heard '{st.lastHeard}'";
+            string invClip = sa.Current; float invRate = sa.Rate;
+            Check("anim_glide_clip_by_speed", glideNames == "glide_walk/glide_fast/glide_chase" && invClip == "glide_fast" && Mathf.Abs(invRate - 1f) <= 0.08f
+                    && Mathf.Abs(glideWalkRate - 1f) <= 0.05f && Mathf.Abs(glideChaseRate - 1f) <= 0.05f && Mathf.Abs(glideRetreatRate - 0.8f) <= 0.05f,
+                $"clips wander/retreat/chase = {glideNames} (want glide_walk/glide_fast/glide_chase) · median rates wander x{glideWalkRate:F2} · chase x{glideChaseRate:F2} (want 0.95–1.05) · retreat x{glideRetreatRate:F2} (want 0.75–0.85) · investigate 0.6 s in: {invClip} x{invRate:F2} (want glide_fast x0.92–1.08)");
             Check("anim_head_snaps_to_noise", snapT <= 0.3f && tiltMax >= sa.headTilt - 30f,
                 $"{heard}: head within {headFirst:F0}° of the noise {snapT:F2} s after it (max 0.3) while the body was still {bodyThen:F0}° off · head top leaned up to {tiltMax:F0}° (listen tilt {sa.headTilt:F0}) · closest head {heMin:F0}° at {tAtMin:F2} s with body {beAtMin:F0}° off, clip {sa.Current}");
             t = 0f;

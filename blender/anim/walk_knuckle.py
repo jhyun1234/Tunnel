@@ -44,12 +44,28 @@ GAITS = {
                         BOB=float(os.environ.get("RUN_BOB", "0.08")), SWAY=0.02, ROLL=3.0, BOBN=1, PH=0.95, FLEX=float(os.environ.get("RUN_FLEX", "24")),
                         LIFT={"Hand": 0.30, "Foot": 0.22}, MINC=3, AIR=2),
 }
+# 미끄러지는 걸음 (제안서 3D-③b M2b, 조사 docs/조사_괴물_움직임_레퍼런스.md 방향 ②: 거미·도마뱀식). 박자는 1.6~1.8 Hz 로 거의 같고 보폭만 다르다(벌레·게),
+# 몸 오르내림 0 · 공중 0(거미), 발 순서는 대각 순서(발이 닿고 0.75 주기 뒤 같은 쪽 손 — 영장류. 옛 walk_knuckle 의 옆 순서는 사람이 길 때 쓰는 순서였다),
+# YAW = 옆으로 휘는 허리(도마뱀: 골반을 위 축으로 ±YAW, 척추 세 마디가 반대로 나눠 돌아 어깨·머리는 제자리. 가장 휘는 때 = 그 쪽 발을 떼기 직전),
+# HIP_Z = 엉덩이 높이 — 빠를수록 낮게 깔려야 팔이 닿는다(09-19 시험: 0.90 에선 짚는 몫 0.40 이 미끄러지고 0.82 에선 통과, 0.75 는 무릎이 바닥)
+DIAG = {"LeftHand": 0.0, "LeftFoot": 0.25, "RightHand": 0.5, "RightFoot": 0.75}
+if os.environ.get("WALK_SEQ") == "primate":              # 비교용: 조사값(고릴라 대각성 52~64 %)에 가까운 순서
+    DIAG_WALK = {"LeftHand": 0.0, "LeftFoot": 0.40, "RightHand": 0.5, "RightFoot": 0.90}
+else:
+    DIAG_WALK = DIAG
+def glide(n, v, dh, df, yaw, hz, lift):
+    return dict(N=n, SPEED=v / 1.5, DUTY={"Hand": dh, "Foot": df}, TOUCH=DIAG, BOB=0.0, SWAY=0.02, ROLL=3.0, BOBN=1, PH=0.0, FLEX=0.0,
+                LIFT={"Hand": lift, "Foot": lift * 0.7}, MINC=3, AIR=0, YAW=yaw, HIP_Z=hz)
+GAITS["glide_walk"] = dict(glide(19, 2.5, 0.58, 0.62, 18.0, 0.90, 0.16), TOUCH=DIAG_WALK)   # 배회·수색 2.5 m/s · 1.58 Hz · 게임 보폭 1.58 m
+GAITS["glide_fast"] = glide(18, 5.0, float(os.environ.get("FAST_DUTY_HAND", "0.42")), 0.48, 14.0, float(os.environ.get("FAST_HIP_Z", "0.85")), 0.22)   # 조사 5.0 · 철수 4.0(×0.8) · 1.67 Hz · 3.0 m
+GAITS["glide_chase"] = glide(17, 6.5, 0.40, 0.40, 10.0, 0.82, 0.25)                         # 추격 6.5 · 1.76 Hz · 3.7 m
+CLIPS = 14 + len(GAITS)
 if os.environ.get("GAIT_JSON"):          # 시험용: 걸음표에 줄을 더하거나 덮는다 (QUICK 과 같이). 예: GAIT_JSON='{"glide": {"N": 17, ...}}' ONLY=glide
     GAITS.update(json.loads(os.environ["GAIT_JSON"]))
 ONLY = os.environ.get("ONLY", "")       # QUICK 일 때 걸음 하나만 (값 고를 때). 내보내기는 늘 둘 다
 if ONLY:
     GAITS = {ONLY: GAITS[ONLY]}
-HIP_Z = float(os.environ.get("HIP_Z", "0.90"))       # 엉덩이 뼈 머리 높이 (쉬는 자세 1.30)
+HIP_Z0 = HIP_Z = float(os.environ.get("HIP_Z", "0.90"))       # 엉덩이 뼈 머리 높이 (쉬는 자세 1.30)
 HIPS_PITCH = float(os.environ.get("HIPS_PITCH", "62"))   # 도, 엉덩이째 앞으로 숙임
 SPINE_PITCH = float(os.environ.get("SPINE_PITCH", "7"))  # 도, 척추 세 마디 각각 더 숙임
 NECK_BACK = 30.0                        # 도, 목을 뒤로 젖힘 (나머지는 머리가 세상 기준 고정으로 받는다)
@@ -150,6 +166,10 @@ for NAME, G in GAITS.items():
     N, SPEED, DUTY, TOUCH, LIFT = G["N"], G["SPEED"], G["DUTY"], G["TOUCH"], G["LIFT"]
     BOB, SWAY, ROLL, BOBN, PH, FLEX, MINC, AIR = G["BOB"], G["SWAY"], G["ROLL"], G["BOBN"], G["PH"], G["FLEX"], G["MINC"], G["AIR"]
     STRIDE = {k: SPEED * d * N / FPS for k, d in DUTY.items()}                   # 짚는 동안 밀리는 길이
+    YAW_WANT = G.get("YAW", 0.0)
+    YAW = 0.0 if SABOTAGE == "noyaw" else YAW_WANT
+    YAW_PH = TOUCH["LeftFoot"] + 0.83 * DUTY["Foot"]                           # 왼발을 떼기 직전에 왼 엉덩이가 가장 뒤 (도마뱀 실측: 디딤의 81~85 %)
+    HIP_Z = G.get("HIP_Z", HIP_Z0)
     ad.action = None
     bpy.context.view_layer.objects.active = arm
     for o in bpy.context.view_layer.objects:
@@ -164,12 +184,13 @@ for NAME, G in GAITS.items():
         z = HIP_Z + BOB * math.cos(2 * math.pi * BOBN * (t - PH))
         x = SWAY * math.sin(2 * math.pi * t)
         fx = FLEX * math.cos(2 * math.pi * (t - PH))          # + 펴짐(발로 민 뒤 공중) · − 말림(손 뗀 뒤 발이 앞으로 들어올 때). 걷기는 0
-        R = Matrix.Rotation(math.radians(ROLL) * math.sin(2 * math.pi * t), 4, "Y") @ Matrix.Rotation(math.radians(HIPS_PITCH + fx / 2), 4, "X")
+        yw = math.radians(YAW) * math.cos(2 * math.pi * (t - YAW_PH))             # + = 왼 엉덩이가 뒤로 (위에서 보아 시계 반대)
+        R = Matrix.Rotation(yw, 4, "Z") @ Matrix.Rotation(math.radians(ROLL) * math.sin(2 * math.pi * t), 4, "Y") @ Matrix.Rotation(math.radians(HIPS_PITCH + fx / 2), 4, "X")
         W = wmat("Hips")
         pb("Hips").matrix = Mi @ (Matrix.Translation(Vector((x, rest_h.y, z))) @ R @ Matrix.Translation(-rest_h) @ W)
         upd()
         for s in ("Spine", "Spine1", "Spine2"):
-            rotate_world(s, Matrix.Rotation(math.radians(SPINE_PITCH - fx / 3), 4, "X"))
+            rotate_world(s, Matrix.Rotation(-yw / 3, 4, "Z") @ Matrix.Rotation(math.radians(SPINE_PITCH - fx / 3), 4, "X"))
         for side in ("Left", "Right"):                        # 어깨뼈를 앞·아래로 — 팔 뿌리가 낮아져 손이 바닥에 닿는다
             rotate_world(side + "Shoulder", Matrix.Rotation(math.radians(CLAV_DOWN), 4, "X"))
         rotate_world("Neck", Matrix.Rotation(math.radians(-NECK_BACK), 4, "X"))
@@ -185,10 +206,10 @@ for NAME, G in GAITS.items():
     def empty(name, loc=(0, 0, 0)):
         e = bpy.data.objects.new(name, None); e.location = loc; col.objects.link(e); return e
 
-    BOB0, SWAY0, ROLL0, FLEX0 = BOB, SWAY, ROLL, FLEX
-    BOB = SWAY = ROLL = FLEX = 0.0
+    BOB0, SWAY0, ROLL0, FLEX0, YAW0 = BOB, SWAY, ROLL, FLEX, YAW
+    BOB = SWAY = ROLL = FLEX = YAW = 0.0
     body_pose(0.0); head_z = whead("Head").z
-    BOB, SWAY, ROLL, FLEX = BOB0, SWAY0, ROLL0, FLEX0
+    BOB, SWAY, ROLL, FLEX, YAW = BOB0, SWAY0, ROLL0, FLEX0, YAW0
     print("head z (흔들림 없을 때) %.3f" % head_z)
     reset_pose()
     rest_world = {n: wmat(n).copy() for n in ("LeftHand", "RightHand", "LeftFoot", "RightFoot", "Head")}
@@ -309,6 +330,9 @@ for NAME, G in GAITS.items():
     print("baked", act.name, act.frame_range[:])
 
     # ---- 5. 자기 검사 (굽힌 동작을 프레임마다 재생해서 잰다)
+    def heading(a, b):
+        d = whead(a) - whead(b)
+        return math.degrees(math.atan2(d.y, d.x))
     def sample():
         rows = []
         for f in range(N + 1):
@@ -319,6 +343,7 @@ for NAME, G in GAITS.items():
                 toe={s: M @ pb(s + "ToeBase").tail for s in ("Left", "Right")},
                 sh=(whead("LeftArm").z + whead("RightArm").z) / 2, hip=(whead("LeftUpLeg").z + whead("RightUpLeg").z) / 2,
                 chord={s: chord(s) for s in ("Left", "Right")},
+                pelvis=heading("LeftUpLeg", "RightUpLeg"), girdle=heading("LeftArm", "RightArm"),
                 knee=min(whead("LeftLeg").z, whead("RightLeg").z), head=whead("Head").z, chest=whead("Spine2").z, top=max(wtail("HeadTop_End").z, wtail("Head").z)))
         return rows
     rows = sample()
@@ -358,6 +383,11 @@ for NAME, G in GAITS.items():
     toe0 = min(r["toe"][s].z for r in rows[:N] for s in ("Left", "Right"))
     air = sum(1 for r in rows[:N] if all(r["hand"][s].z > 0.05 and r["toe"][s].z > toe0 + 0.02 for s in ("Left", "Right")))
     check(air >= AIR if AIR else air == 0, "네 발이 다 뜬 프레임 %d (%s)" % (air, "≥ %d — 뛴다" % AIR if AIR else "0 — 걷는다"))
+    rng = lambda k: max(r[k] for r in rows[:N]) - min(r[k] for r in rows[:N])
+    check(abs(rng("pelvis") - 2 * YAW_WANT) <= 4.0 and rng("girdle") <= max(4.0, rng("pelvis") / 3),
+          "옆으로 휘는 허리: 골반 좌우 회전 폭 %.1f° (= %.0f ± 4) · 어깨 %.1f° (≤ 골반의 1/3 — 허리만 휜다)" % (rng("pelvis"), 2 * YAW_WANT, rng("girdle")))
+    if BOB == 0.0:
+        check(sd("chest") <= 0.02, "미끄러지는 몸: 가슴 높이 흔들림 %.4f ≤ 0.02" % sd("chest"))
     cmax = max(r["chord"][s] for r in rows[:N] for s in ("Left", "Right"))
     check(cmax <= CHORD_MAX, "손가락 굽음: 뿌리 → 끝 곧은 거리 ÷ 마디 길이 합 가장 클 때 %.3f (≤ %.2f, 곧으면 1 에 가깝다)" % (cmax, CHORD_MAX))
 
@@ -395,11 +425,12 @@ for NAME, G in GAITS.items():
         return loc, (h - loc).to_track_quat("-Z", "Y").to_euler()
     views = {"side": (lambda: ((2.9, -0.25, 0.75), (math.radians(90), 0, math.radians(90))), 30),
              "front": (lambda: ((0.0, -3.1, 0.9), (math.radians(86), 0, 0)), 30),
+             "top": (lambda: ((0.0, -0.2, 4.6), (0, 0, 0)), 30),        # 위에서 — 옆으로 휘는 허리(M2b)
              "hand": (hand_cam, 50)}
     for vname, (pose_cam, lens) in views.items():
         cam.data.lens = lens
         tiles = []
-        for f in range(0, N, N // 10):
+        for f in [int(i * N / 10) for i in range(10)]:
             scene.frame_set(f); upd()
             cam.location, cam.rotation_euler = pose_cam()
             scene.render.filepath = os.path.join(RENDER, "_tmp.png")
@@ -451,7 +482,7 @@ print("exported", OUT_GLB, round(os.path.getsize(OUT_GLB) / 1e6, 2), "MB")
 
 j, _ = glb_json(OUT_GLB)
 anims = {a["name"]: a for a in j.get("animations", [])}
-check(len(anims) == 16 and all(nm in anims for nm in acts), "동작 16개, %s 있음 (%d)" % (" · ".join(acts), len(anims)))
+check(len(anims) == CLIPS and all(nm in anims for nm in acts), "동작 %d개, %s 있음 (%d)" % (CLIPS, " · ".join(acts), len(anims)))
 for nm, (_, n_) in acts.items():
     if nm in anims:
         ins = [j["accessors"][s["input"]] for s in anims[nm]["samplers"]]

@@ -8,7 +8,7 @@ using UnityEngine;
 [DefaultExecutionOrder(100)]
 public class StalkerAnim : MonoBehaviour
 {
-    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "run", "run_knuckle", "roar", "hit", "crawl", "attack_swipe" };
+    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "glide_walk", "run", "run_knuckle", "glide_fast", "glide_chase", "roar", "hit", "crawl", "attack_swipe" };
     [System.NonSerialized] public int gait = Tuning.STALKER_WANDER_GAIT;   // 배회 걸음 A/B/C (U 키)
     [System.NonSerialized] public int manual;                             // 행동 꺼짐일 때 트는 동작 (N 키)
     [System.NonSerialized] public bool rateMatch = true;                  // 사보타주 slide 가 끈다 (늘 1배)
@@ -53,6 +53,8 @@ public class StalkerAnim : MonoBehaviour
     Vector3 headRestPos;
     readonly System.Collections.Generic.List<Vector3> path = new System.Collections.Generic.List<Vector3>();
     readonly System.Collections.Generic.List<float> pathS = new System.Collections.Generic.List<float>();
+    [System.NonSerialized] public bool bouncy;                            // 사보타주 bouncy: 빠른 걸음을 뜀박질 run_knuckle 로 (3D-③b M2b 전 상태)
+    [System.NonSerialized] public bool stiffSpine;                        // 사보타주 stiffspine: 배회를 허리가 옆으로 안 휘는 walk_knuckle 로
     [System.NonSerialized] public bool oldRun;                                                   // 사보타주 oldrun: 달리기를 옛 run 으로
     public string RunClip => oldRun ? "run" : "run_knuckle";
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
@@ -60,7 +62,7 @@ public class StalkerAnim : MonoBehaviour
     public float Rate { get; private set; } = 1f;
     public float Speed { get; private set; }                              // 잰 빠르기 m/s (벽타기는 위로 가는 것 포함)
     public float Tilt { get; private set; }                               // 0 = 서 있음, 1 = 벽에 붙음
-    public static string GaitName(int g) => g == 0 ? "A crouch-walk matched" : g == 1 ? "B slow run" : g == 2 ? "C crouch-walk capped" : "D knuckle-walk (new)";
+    public static string GaitName(int g) => g == 0 ? "A crouch-walk matched" : g == 1 ? "B slow run" : g == 2 ? "C crouch-walk capped" : g == 3 ? "D knuckle-walk" : "E glide (default)";
 
     Stalker st;
     Animator anim;
@@ -317,7 +319,7 @@ public class StalkerAnim : MonoBehaviour
         switch (Current)
         {
             case "roar": case "attack_swipe": target = jawWideDeg; break;
-            case "run": case "run_knuckle": case "run_stand": target = Tuning.STALKER_JAW_CHASE_DEG; break;
+            case "run": case "run_knuckle": case "run_stand": case "glide_fast": case "glide_chase": target = Tuning.STALKER_JAW_CHASE_DEG; break;
             case "hit": target = Tuning.STALKER_JAW_HIT_DEG; break;
             default:
                 jawT += dt;
@@ -335,18 +337,39 @@ public class StalkerAnim : MonoBehaviour
     // 걷기·달리기 고르기: 걷기 빠르기 이하면 배회 걸음 안(gait)대로
     string Locomotion(out float rate)
     {
-        if (Speed > Tuning.STALKER_ANIM_RUN_ABOVE || gait == 1)
+        string clip = ClipFor(Speed, out float clipSpeed);
+        rate = Speed / (clipSpeed * Tuning.STALKER_MODEL_SCALE);
+        if (gait == 2 && clip == "walk_crouch") rate = Mathf.Min(rate, Tuning.STALKER_WALK_RATE_CAP);
+        return clip;
+    }
+
+    // 빠르기 → 클립과 그 클립의 원래 빠르기(모델 크기 1). 검사도 이 길로 "이 빠르기엔 무엇이 나와야 하나"를 묻는다
+    public string ClipFor(float v, out float clipSpeed)
+    {
+        bool fast = v > Tuning.STALKER_ANIM_RUN_ABOVE;
+        if (gait == 4 && fast && !oldRun && !bouncy)
         {
-            rate = Speed / ((oldRun ? Tuning.STALKER_CLIP_SPEED_RUN : Tuning.STALKER_CLIP_SPEED_RUN_KNUCKLE) * Tuning.STALKER_MODEL_SCALE);
+            // 3D-③b M2b: 미끄러지는 걸음 — 몸 높이 고정·공중 0·옆으로 휘는 허리. 빨라져도 박자는 그대로, 보폭이 다른 클립으로 간다
+            bool chase = v > Tuning.STALKER_ANIM_CHASE_ABOVE;
+            clipSpeed = chase ? Tuning.STALKER_CLIP_SPEED_GLIDE_CHASE : Tuning.STALKER_CLIP_SPEED_GLIDE_FAST;
+            return chase ? "glide_chase" : "glide_fast";
+        }
+        if (gait == 4 && !fast && !stiffSpine)
+        {
+            clipSpeed = Tuning.STALKER_CLIP_SPEED_GLIDE_WALK;
+            return "glide_walk";
+        }
+        if (fast || gait == 1)
+        {
+            clipSpeed = oldRun ? Tuning.STALKER_CLIP_SPEED_RUN : Tuning.STALKER_CLIP_SPEED_RUN_KNUCKLE;
             return RunClip;                                               // 3D-③b M2: 손 둘 → 발 둘로 짚는 뜀박질. 옛 run(Mixamo running crawl)은 손목째 바닥 밑이라 팔 들기에 기댔다
         }
-        if (gait == 3 && !oldWalk)
+        if ((gait == 3 && !oldWalk) || gait == 4)
         {
-            rate = Speed / (Tuning.STALKER_CLIP_SPEED_KNUCKLE * Tuning.STALKER_MODEL_SCALE);   // 3D-③b M1: 두 손·두 발로 짚는 네 점 걸음
+            clipSpeed = Tuning.STALKER_CLIP_SPEED_KNUCKLE;               // 3D-③b M1: 두 손·두 발로 짚는 네 점 걸음
             return "walk_knuckle";
         }
-        rate = Speed / (Tuning.STALKER_CLIP_SPEED_WALK * Tuning.STALKER_MODEL_SCALE);
-        if (gait == 2) rate = Mathf.Min(rate, Tuning.STALKER_WALK_RATE_CAP);
+        clipSpeed = Tuning.STALKER_CLIP_SPEED_WALK;
         return "walk_crouch";
     }
 

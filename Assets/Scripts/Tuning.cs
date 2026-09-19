@@ -309,8 +309,13 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_CRAWL = 0.57f;    // crawl (벽타기)
     public const float STALKER_CLIP_SPEED_KNUCKLE = 2.5f / 1.5f;   // walk_knuckle (3D-③b M1): blender/anim/walk_knuckle.py 가 배회 2.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 배회 배수 1.0
     public const float STALKER_CLIP_SPEED_RUN_KNUCKLE = 6.5f / 1.5f;   // run_knuckle (3D-③b M2): walk_knuckle.py 가 추격 6.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 추격 배수 1.0 · 조사 0.77 · 철수 0.62
-    public const int STALKER_CLIP_COUNT = 16;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle). BuildM1·검사가 대조한다
-    public const int STALKER_GAIT_COUNT = 4;                // 배회 걸음 안 A/B/C/D (U 키)
+    // 미끄러지는 걸음 셋 (3D-③b M2b, 조사 docs/조사_괴물_움직임_레퍼런스.md 방향 ②): 박자 1.6~1.8 Hz 로 거의 같고 보폭만 다르다. 빠르기 구간마다 제 클립을 배수 1.0 근처로 튼다
+    public const float STALKER_CLIP_SPEED_GLIDE_WALK = 2.5f / 1.5f;    // glide_walk: 배회·수색 2.5 m/s
+    public const float STALKER_CLIP_SPEED_GLIDE_FAST = 5.0f / 1.5f;    // glide_fast: 조사 5.0 · 철수 4.0(배수 0.8)
+    public const float STALKER_CLIP_SPEED_GLIDE_CHASE = 6.5f / 1.5f;   // glide_chase: 추격 6.5
+    public const float STALKER_ANIM_CHASE_ABOVE = 5.75f;    // m/s, 이보다 빠르면 glide_chase (조사 5.0 과 추격 6.5 의 가운데)
+    public const int STALKER_CLIP_COUNT = 19;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋). BuildM1·검사가 대조한다
+    public const int STALKER_GAIT_COUNT = 5;                // 걸음 안 A/B/C/D/E (U 키)
     // 턱 (3D-③b M1c, 제안서 docs/제안서_3D3b_M1c_턱_뼈.md, 승인 09-19). 각도는 제안값 — 판정 때 DevHud H/J 로 WIDE 를 찾는다.
     // 레퍼런스 공통점: 평소 조금 벌어져 늘어짐 + 숨 / 덮치는 순간 사람보다 크게(사람 최대 32~39°) 확 / 추격 중 벌어짐
     public const float STALKER_JAW_IDLE_DEG = 8f;           // 걷기·대기·벽타기
@@ -361,7 +366,7 @@ public static class Tuning
     public const float STALKER_ROAR_START_S = 1.2f;         // s, roar(2.83 s) 중 들킴 1.0 s 동안 틀 구간의 시작 = 두 손이 가장 멀어지는 순간 1.70 s(-only anim 실측 09-18) − 0.5 s
     // 배회 걸음 (걷기 빠르기 이하일 때): 0 = A 웅크려 걷기, 발 맞춤(약 3.7배) · 1 = B 달리기, 발 맞춤(약 0.56배) · 2 = C 웅크려 걷기 STALKER_WALK_RATE_CAP 배까지만(나머지는 미끄러짐)
     // · 3 = D 새 걷기 walk_knuckle 네 점 걸음(배수 1.0, 3D-③b M1). 사용자가 U 키로 고른다 — 기본값은 판정 뒤에 바꾼다
-    public const int STALKER_WANDER_GAIT = 0;
+    public const int STALKER_WANDER_GAIT = 4;               // 4 = E 미끄러지는 걸음(3D-③b M2b, 사용자 승인 09-19: 기본값). 0~3 은 비교용
     public const float STALKER_WALK_RATE_CAP = 2.0f;
     public const float STALKER_PREVIEW_FROM_M = 8.0f;       // m, DevHud U 걸어오기 미리보기: 세운 괴물이 이 거리에서 출발해
     public const float STALKER_PREVIEW_TO_M = 2.5f;         // m, 여기까지 오면 처음 자리로 (배회 빠르기 STALKER_SPEED_WANDER)
