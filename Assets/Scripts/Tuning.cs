@@ -308,7 +308,8 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_RUN = 3.04f;      // run. stage5.log 3.01 → 게임 안 실측(-only anim "ANIM stride": 딛은 발 4.56 m/s ÷ 1.5)으로 고침 — 3.01 이면 발 미끄러짐 0.31 m/s
     public const float STALKER_CLIP_SPEED_CRAWL = 0.57f;    // crawl (벽타기)
     public const float STALKER_CLIP_SPEED_KNUCKLE = 2.5f / 1.5f;   // walk_knuckle (3D-③b M1): blender/anim/walk_knuckle.py 가 배회 2.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 배회 배수 1.0
-    public const int STALKER_CLIP_COUNT = 15;               // GLB 동작 수 (3D-③b M1: 14 + walk_knuckle). BuildM1·검사가 대조한다
+    public const float STALKER_CLIP_SPEED_RUN_KNUCKLE = 6.5f / 1.5f;   // run_knuckle (3D-③b M2): walk_knuckle.py 가 추격 6.5 m/s ÷ 크기 1.5 에 맞춰 만든 원래 빠르기 → 추격 배수 1.0 · 조사 0.77 · 철수 0.62
+    public const int STALKER_CLIP_COUNT = 16;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle). BuildM1·검사가 대조한다
     public const int STALKER_GAIT_COUNT = 4;                // 배회 걸음 안 A/B/C/D (U 키)
     // 턱 (3D-③b M1c, 제안서 docs/제안서_3D3b_M1c_턱_뼈.md, 승인 09-19). 각도는 제안값 — 판정 때 DevHud H/J 로 WIDE 를 찾는다.
     // 레퍼런스 공통점: 평소 조금 벌어져 늘어짐 + 숨 / 덮치는 순간 사람보다 크게(사람 최대 32~39°) 확 / 추격 중 벌어짐
@@ -350,6 +351,7 @@ public static class Tuning
     public static readonly Color STALKER_NECK_RED_TINT = new Color(1f, 0.35f, 0.30f);
     public const float STALKER_NECK_OFF_PATH_MAX = 0.02f;   // 검사: 마디 뼈가 길에서 벗어난 거리 상한 (모델 m)
     public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
+    public const float STALKER_RUN_HAND_PLANT_MIN = 0.10f;  // 새 달리기: 같은 몫 하한. 짚는 몫이 0.25 인데 닿고 떼는 호를 빼면 게임 실측 L 14 % · R 18 % (09-19) — 제안서 15 % 는 어림값이었다
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)
     public const float STALKER_ANIM_RUN_ABOVE = 3.0f;       // m/s, 제안값. 이보다 빠르면 run (배회·수색 2.5 는 걷기, 철수 4.0 부터 달리기)

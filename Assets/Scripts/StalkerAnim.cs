@@ -8,7 +8,7 @@ using UnityEngine;
 [DefaultExecutionOrder(100)]
 public class StalkerAnim : MonoBehaviour
 {
-    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "run", "roar", "hit", "crawl", "attack_swipe" };
+    public static readonly string[] ManualClips = { "idle_crouch", "walk_crouch", "walk_knuckle", "run", "run_knuckle", "roar", "hit", "crawl", "attack_swipe" };
     [System.NonSerialized] public int gait = Tuning.STALKER_WANDER_GAIT;   // 배회 걸음 A/B/C (U 키)
     [System.NonSerialized] public int manual;                             // 행동 꺼짐일 때 트는 동작 (N 키)
     [System.NonSerialized] public bool rateMatch = true;                  // 사보타주 slide 가 끈다 (늘 1배)
@@ -53,6 +53,8 @@ public class StalkerAnim : MonoBehaviour
     Vector3 headRestPos;
     readonly System.Collections.Generic.List<Vector3> path = new System.Collections.Generic.List<Vector3>();
     readonly System.Collections.Generic.List<float> pathS = new System.Collections.Generic.List<float>();
+    [System.NonSerialized] public bool oldRun;                                                   // 사보타주 oldrun: 달리기를 옛 run 으로
+    public string RunClip => oldRun ? "run" : "run_knuckle";
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
@@ -315,7 +317,7 @@ public class StalkerAnim : MonoBehaviour
         switch (Current)
         {
             case "roar": case "attack_swipe": target = jawWideDeg; break;
-            case "run": case "run_stand": target = Tuning.STALKER_JAW_CHASE_DEG; break;
+            case "run": case "run_knuckle": case "run_stand": target = Tuning.STALKER_JAW_CHASE_DEG; break;
             case "hit": target = Tuning.STALKER_JAW_HIT_DEG; break;
             default:
                 jawT += dt;
@@ -335,8 +337,8 @@ public class StalkerAnim : MonoBehaviour
     {
         if (Speed > Tuning.STALKER_ANIM_RUN_ABOVE || gait == 1)
         {
-            rate = Speed / (Tuning.STALKER_CLIP_SPEED_RUN * Tuning.STALKER_MODEL_SCALE);
-            return "run";
+            rate = Speed / ((oldRun ? Tuning.STALKER_CLIP_SPEED_RUN : Tuning.STALKER_CLIP_SPEED_RUN_KNUCKLE) * Tuning.STALKER_MODEL_SCALE);
+            return RunClip;                                               // 3D-③b M2: 손 둘 → 발 둘로 짚는 뜀박질. 옛 run(Mixamo running crawl)은 손목째 바닥 밑이라 팔 들기에 기댔다
         }
         if (gait == 3 && !oldWalk)
         {
