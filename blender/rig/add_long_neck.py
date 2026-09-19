@@ -208,8 +208,8 @@ def funnel(c, r_from, z_from, dz, r_to, n_rings, bone, seed):
         t = j / (n_rings - 1.0); z = z_from + dz * t; cen = Vector((c.x, c.y)).lerp(axis_xy(z), t)
         for k in range(24):
             a = 2 * math.pi * k / 24
-            r = (r_from + (r_to - r_from) * t ** 0.7) * (1 + 0.08 * math.sin(3 * a + j + seed))
-            zz = z + (0.018 * math.sin(5 * a + seed) * (1 if dz < 0 else -1) if j == n_rings - 1 else 0.0)
+            r = (r_from + (r_to - r_from) * t ** 0.7) * (1 + 0.04 * math.sin(3 * a + j + seed))
+            zz = z + (0.008 * math.sin(5 * a + seed) * (1 if dz < 0 else -1) if j == n_rings - 1 else 0.0)
             verts.append(Vector((cen.x + r * math.cos(a), cen.y + r * math.sin(a), zz))); arc.append(0.3 + 0.025 * j); ang_k.append(k)
     for j in range(n_rings - 1):
         for k in range(24):
@@ -221,8 +221,9 @@ def funnel(c, r_from, z_from, dz, r_to, n_rings, bone, seed):
             faces.append(f)
     caps.append((i0, n_rings * 24, bone))
 if SABOTAGE not in ("nocap", "nosleeve"):
-    funnel(hc, hr * 1.05, hc.z + 0.01, -0.09, R_HEAD + 0.006, 5, "Head", 0.0)
-    funnel(bc, br * 1.0, bc.z - 0.01, 0.05, R_BASE + 0.004, 4, "Spine2", 1.7)
+    # 2차 판정 09-19 "노이즈가 있는 것처럼 보인다 · 약간 어색하다": 소매 윗고리가 머리 살 겉면과 같은 자리라 두 면이 번갈아 비쳤다 → 속(구멍의 0.9배, 3 cm 안)에서 시작
+    funnel(hc, hr * 0.90, hc.z + 0.03, -0.10, R_HEAD + 0.006, 5, "Head", 0.0)
+    funnel(bc, br * 0.90, bc.z - 0.03, 0.07, R_BASE + 0.004, 4, "Spine2", 1.7)
 print("마개: 머리 밑 가운데 %s 반지름 %.3f · 목구멍 가운데 %s 반지름 %.3f" % (tuple(round(x, 3) for x in hc), hr, tuple(round(x, 3) for x in bc), br))
 
 me = bpy.data.meshes.new("Miner_Neck"); me.from_pydata(verts, [], faces); me.update()
@@ -242,15 +243,21 @@ def make_textures():
     rng = np.random.default_rng(16)
     wob = 0.035 * np.sin(2 * np.pi * (3 * v + 0.3)) + 0.02 * np.sin(2 * np.pi * (7 * v + u))
     hgt = np.zeros_like(u)
-    for n, amp in ((5, 0.45), (13, 0.30), (29, 0.18), (61, 0.07)):                       # 세로 힘줄 가닥 (둘레로 n 개, 길이 따라 살짝 물결)
+    for n, amp in ((5, 0.50), (13, 0.32), (29, 0.12)):                                   # 61 가닥은 멀리서 노이즈처럼 보였다 (사용자 09-19)                       # 세로 힘줄 가닥 (둘레로 n 개, 길이 따라 살짝 물결)
         hgt += amp * (0.5 + 0.5 * np.cos(2 * np.pi * (n * (u + wob) + rng.random())))
     hgt += 0.12 * (0.5 + 0.5 * np.sin(2 * np.pi * (4 * v + 2 * u)))                         # 느린 얼룩
     hgt = (hgt - hgt.min()) / (hgt.max() - hgt.min())
-    dark, red, pale = np.array([0.11, 0.025, 0.025]), np.array([0.46, 0.10, 0.08]), np.array([0.66, 0.52, 0.42])   # 평균 0.074 는 어두웠다 → × 1.5
-    col = dark + (red - dark) * hgt[..., None] + (pale - red) * (np.clip(hgt - 0.78, 0, 1) / 0.22)[..., None] ** 2 * 0.8
+    # 색은 몸 살 그림에서 잰 두 평균(붉은 근육 · 허연 살)으로 — 사용자 2차 판정 09-19 "붉은색이 몸보다 선명하다, 몸 색으로 해 보고 싶다, 이어지지 않는다".
+    # 그림을 베끼지 않고 평균 색 둘만 쓴다. 더 붉게는 Unity 에서 I/M 키(StalkerLook.neckRed)로 곱해 본다
+    bimg = next(n for n in body.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].links[0].from_node.image
+    bp = np.empty(bimg.size[0] * bimg.size[1] * 4, np.float32); bimg.pixels.foreach_get(bp); bp = bp.reshape(-1, 4)[::7, :3]
+    bp = bp[bp.sum(1) > 0.15]; redness = bp[:, 0] - 0.5 * (bp[:, 1] + bp[:, 2])
+    red = bp[redness > 0.08].mean(0) * 1.6; pale = bp[(redness < 0.04) & (bp.mean(1) > 0.35)].mean(0) * 1.6; dark = red * 0.55   # 평균 그대로는 게임에서 몸보다 훨씬 어두웠다(색 평균 0.119, 09-19 그림 37) → 1.6배. 밝기는 Unity Q/R 키로 더 맞춘다
+    print("몸 살 그림에서 잰 색: 근육 %s · 허연 살 %s" % (tuple(round(float(c), 3) for c in red), tuple(round(float(c), 3) for c in pale)))
+    col = dark + (red - dark) * hgt[..., None] + (pale - red) * (np.clip(hgt - 0.62, 0, 1) / 0.38)[..., None] ** 1.5 * 0.9
     col *= (0.85 + 0.15 * np.sin(2 * np.pi * (2 * v + 0.1)))[..., None]
     gx = np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1); gy = np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0)
-    nrm = np.dstack([-gx * 6, -gy * 6, np.ones_like(hgt)]); nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
+    nrm = np.dstack([-gx * 3, -gy * 3, np.ones_like(hgt)]); nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
     out = {}
     for name, arr, cs in (("neck_muscle_color", np.clip(col, 0, 1), "sRGB"), ("neck_muscle_normal", nrm * 0.5 + 0.5, "Non-Color")):
         im = bpy.data.images.new(name, Wt, Ht, alpha=False); im.colorspace_settings.name = cs
@@ -327,7 +334,7 @@ rv = np.array([[ (rg[i][k] - Vector(line[i])).length for k in range(SIDES)] for 
 lump = float(np.median((rv.max(1) - rv.min(1)) / rv.mean(1)))
 check(lump >= 0.2, "목 관이 둥근 호스가 아니다: 고리의 (가장 굵은 곳 − 가장 가는 곳) ÷ 평균 = %.2f (≥ 0.2, 둥근 관 ≈ 0.1)" % lump)
 check(torn <= 0.02 * len(ratios), "목 관 UV: 찢어진 면 %d / %d (≤ 2 %%)" % (torn, len(ratios)))
-check(0.05 <= tex_mean <= 0.25, "목 근육 색 그림 평균 밝기 %.3f (0.05 ~ 0.25 — 몸 살 0.25 보다 어둡게, 새까맣지 않게)" % tex_mean)
+check(0.08 <= tex_mean <= 0.40, "목 근육 색 그림 평균 밝기 %.3f (0.08 ~ 0.40 — 몸 살 색에서 만든다)" % tex_mean)
 
 DIRS = [Vector(d).normalized() for d in ((1, .013, .007), (-1, .013, .007), (.013, 1, .007), (.013, -1, .007), (.013, .007, 1), (.013, .007, -1))]
 def body_bvh():

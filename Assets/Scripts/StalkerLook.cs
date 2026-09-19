@@ -13,6 +13,10 @@ public class StalkerLook : MonoBehaviour
     [System.NonSerialized] public float normalScale = Tuning.STALKER_SKIN_NORMAL_SCALE;
     [System.NonSerialized] public float roughMul = Tuning.STALKER_SKIN_ROUGH_MUL;
     [System.NonSerialized] public float eyeEmission = Tuning.STALKER_EYE_EMISSION;
+    [System.NonSerialized] public float neckBright = Tuning.STALKER_NECK_BRIGHT;   // DevHud Q/R
+    [System.NonSerialized] public float neckRed = Tuning.STALKER_NECK_RED;   // 3D-③b M1e: 목 재질(목_근육) 붉기 — DevHud I/M
+    static readonly int BaseColorId = Shader.PropertyToID("baseColorFactor");
+    Material[] neck = new Material[0];
     static readonly int NormalTexId = Shader.PropertyToID("normalTexture");
     static readonly int RoughId = Shader.PropertyToID("roughnessFactor");
     static readonly int EmissiveId = Shader.PropertyToID("emissiveFactor");
@@ -31,6 +35,11 @@ public class StalkerLook : MonoBehaviour
             foreach (var m in r.materials)                  // 사본 — 임포트된 재질 에셋은 안 바꾼다
                 if (m.name.StartsWith("살")) list.Add(m);
         skin = list.ToArray();
+        var nl = new System.Collections.Generic.List<Material>();
+        foreach (var r in Renderers)
+            foreach (var m in r.materials)
+                if (m.name.StartsWith("목")) nl.Add(m);
+        neck = nl.ToArray();
         srcNormal = new Texture[skin.Length];
         scaled = new RenderTexture[skin.Length];
         for (int i = 0; i < skin.Length; i++) srcNormal[i] = skin[i].GetTexture(NormalTexId);
@@ -40,6 +49,8 @@ public class StalkerLook : MonoBehaviour
 
     public void Apply()
     {
+        foreach (var m in neck)
+            m.SetColor(BaseColorId, Color.Lerp(Color.white, Tuning.STALKER_NECK_RED_TINT, neckRed) * neckBright);
         for (int i = 0; i < skin.Length; i++)
         {
             var m = skin[i];

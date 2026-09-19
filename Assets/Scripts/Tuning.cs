@@ -345,6 +345,9 @@ public static class Tuning
     public const float STALKER_NECK_TILT_OUT_M = 0.25f;     // 갸웃하면 저절로 이만큼 — 갸웃 110° 에서 머리가 어깨에 파고든 점이 다섯 자세 모두 0 이 되는 길이 (얼굴 쪽 방향으로 20 cm 는 옆 90° 에서 12점 남음, 09-19 Blender 실측)
     public const float STALKER_NECK_TILT_FROM_DEG = 45f;    // 갸웃이 이 각도부터 나오기 시작해
     public const float STALKER_NECK_TILT_FULL_DEG = 90f;    // 이 각도에서 TILT_OUT 다 나온다
+    public const float STALKER_NECK_RED = 0f;               // 목 붉기 0~1 (DevHud I/M): 0 = 몸 살 색 그대로, 1 = 붉게 곱함. 사용자 09-19 "몸 색으로 해도 좋다고 느껴진다, 테스트해 보고 싶다" → 0 에서 시작
+    public const float STALKER_NECK_BRIGHT = 1f;            // 목 밝기 배율 (DevHud Q/R) — 몸 살과 이어져 보이는 값을 사용자가 찾는다
+    public static readonly Color STALKER_NECK_RED_TINT = new Color(1f, 0.35f, 0.30f);
     public const float STALKER_NECK_OFF_PATH_MAX = 0.02f;   // 검사: 마디 뼈가 길에서 벗어난 거리 상한 (모델 m)
     public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
