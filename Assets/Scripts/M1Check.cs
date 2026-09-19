@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw|stiffneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|straightfingers|shutjaw|stiffneck|shortneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -184,6 +184,8 @@ public class M1Check : MonoBehaviour
         flatProps = sabotage == "flatprops";
         if (sabotage == "stiffneck" && sanim != null)    // 3D-③b M1d 전 상태: 머리가 동작 그대로 (몸과 같이 돈다)
             sanim.driveHead = false;
+        if (sabotage == "shortneck" && sanim != null)    // 3D-③b M1e 전 상태: 목이 안 나온다 (마디 뼈는 가슴 뼈에 굳은 채)
+            sanim.driveNeck = false;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
@@ -1612,6 +1614,48 @@ public class M1Check : MonoBehaviour
                 $"search: head jumped {steps} times in 3 s (want ≥ 5), moving {movingFrames} of {frames} frames (want ≤ half — holds between jumps)");
             yield return Sheet("26_head_search_sheet", 12, i => Wait(0.1f));
             sa.headTest = 0;
+            // ⑥e 3D-③b M1e 목 길게 빼기 (DevHud Z/X 와 같은 값 neckWant): 안 뺐을 때 마디가 등뼈 길 위 · 60 cm 빼기 · 갸웃하면 저절로 나옴 + 사진
+            {
+                st.Teleport(M0, 180f);
+                Teleport(cc, M0 + Vector3.back * 3.5f, 0f);
+                yield return new WaitForSeconds(0.6f);
+                float gap0 = sa.HeadToExit;
+                float off0 = sa.NeckOffPath();
+                sa.manual = Array.IndexOf(StalkerAnim.ManualClips, "walk_knuckle");     // 등을 굽힌 자세에서도 길 위에
+                yield return new WaitForSeconds(0.8f);
+                float offBent = sa.NeckOffPath();
+                sa.manual = Array.IndexOf(StalkerAnim.ManualClips, "idle_crouch");
+                yield return new WaitForSeconds(0.6f);
+                Check("anim_neck_hidden_at_rest", sa.HasNeck && sa.NeckOutNow <= 0f && off0 <= Tuning.STALKER_NECK_OFF_PATH_MAX && offBent <= Tuning.STALKER_NECK_OFF_PATH_MAX,
+                    $"neck bones found {sa.HasNeck}, out {sa.NeckOutNow * 100f:F0} cm; joints off the head→exit→spine path: idle {off0 * 100f:F1} cm · bent-over walk {offBent * 100f:F1} cm (max {Tuning.STALKER_NECK_OFF_PATH_MAX * 100f:F0}, model units)");
+                yield return Capture("34_neck_out_00cm", _ => { });
+                sa.headTest = 1;                                                          // 나 따라보기 — 목은 얼굴이 보는 쪽으로 나온다
+                foreach (int cm in new[] { 20, 40, 60 })
+                {
+                    sa.neckWant = cm / 100f;
+                    yield return new WaitForSeconds(sa.neckOutS + 0.3f);
+                    yield return Capture($"34_neck_out_{cm}cm", _ => { });
+                }
+                float grew = sa.HeadToExit - gap0;
+                sa.NeckSpacing(out float dMin, out float dMax);
+                float link = Tuning.STALKER_NECK_LEN_M / Tuning.STALKER_NECK_JOINTS;
+                Check("anim_neck_extends", Mathf.Abs(grew - 0.6f) <= 0.05f && dMin >= 0.6f * link && dMax <= 1.05f * link && sa.NeckOffPath() <= Tuning.STALKER_NECK_OFF_PATH_MAX,
+                    $"asked 60 cm: head moved {grew * 100f:F0} cm from the neck exit (want 60 ± 5), joints {dMin * 100f:F1}–{dMax * 100f:F1} cm apart (link {link * 100f:F1}), off path {sa.NeckOffPath() * 100f:F1} cm");
+                sa.headTest = 0;                                                          // 옆 사진은 앞을 본 채로
+                Teleport(cc, M0 + Vector3.left * 2.3f + Vector3.back * 0.5f, 90f);
+                yield return new WaitForSeconds(0.5f);
+                yield return Capture("34_neck_out_60cm_side", _ => { });
+                Teleport(cc, M0 + Vector3.back * 3.5f, 0f);
+                sa.neckWant = 0f;
+                yield return new WaitForSeconds(sa.neckOutS + 0.3f);
+                sa.headTest = 3;                                                          // 갸웃하며 나 보기 → 목이 저절로
+                yield return new WaitForSeconds(1.0f);
+                Check("anim_neck_frees_tilt", Mathf.Abs(sa.HeadTiltNow) >= 90f && sa.NeckOutNow >= Tuning.STALKER_NECK_TILT_OUT_M - 0.01f,
+                    $"listen tilt {sa.HeadTiltNow:F0}°: neck came out by itself {sa.NeckOutNow * 100f:F0} cm (want {Tuning.STALKER_NECK_TILT_OUT_M * 100f:F0} — Blender self-check: at that length 0 head points inside the body)");
+                yield return Capture("34_neck_tilt_auto", _ => { });
+                sa.headTest = 0;
+                yield return new WaitForSeconds(0.6f);
+            }
             // 갱목·못·가죽끈 사진 (09-19): 등 뒤 2 m · 왼팔 2 m · 등 뒤 7 m — 머리 시험 끔, 대기 자세
             st.Teleport(M0, 0f);
             Teleport(cc, M0 + Vector3.back * 2f + Vector3.right * 0.3f, 0f);

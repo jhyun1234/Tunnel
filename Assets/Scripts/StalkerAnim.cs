@@ -40,6 +40,19 @@ public class StalkerAnim : MonoBehaviour
     Vector3 faceLocal, upLocal;                                            // 머리 뼈 공간의 얼굴 방향·정수리 방향 (쉬는 자세에서 모델 앞·위)
     float lookYaw, lookPitch, tiltNow, headW, searchT, searchYaw, searchTilt;
     readonly System.Random headRng = new System.Random(7);
+    // 목 길게 빼기 (3D-③b M1e): 몸 속 등뼈를 따라 누운 마디 7개 관. 머리 뼈를 밀어내고 마디 뼈를 "머리 → 나오는 곳 → 등뼈" 길 위에 차례로 놓는다.
+    // 길이는 모델 크기 1 기준 m. 갸웃이 크면 저절로 나온다(머리가 어깨에 파고들지 않게)
+    [System.NonSerialized] public bool driveNeck = true;                  // 사보타주 shortneck 이 끈다 (마디 뼈가 가슴 뼈에 굳은 채, 목 안 나옴)
+    [System.NonSerialized] public float neckWant;                         // DevHud Z/X: 빼 둘 길이
+    [System.NonSerialized] public float neckOutS = Tuning.STALKER_NECK_OUT_S;   // DevHud C/B
+    public float NeckOutNow { get; private set; }
+    public bool HasNeck => neckExt != null;
+    Transform[] neckExt, spineB;                                           // spineB = Spine2, Spine1, Spine, Hips
+    Quaternion[] neckRestM;
+    Vector3[] neckRestT;
+    Vector3 headRestPos;
+    readonly System.Collections.Generic.List<Vector3> path = new System.Collections.Generic.List<Vector3>();
+    readonly System.Collections.Generic.List<float> pathS = new System.Collections.Generic.List<float>();
     public int LiftCount { get; private set; }                            // 팔 들기(LateUpdate)가 팔을 든 프레임 수 — 새 동작은 0 이어야 한다
     public string Current { get; private set; } = "";
     public float Rate { get; private set; } = 1f;
@@ -66,6 +79,18 @@ public class StalkerAnim : MonoBehaviour
         neckB = System.Array.Find(allT, b => b.name == "mixamorig:Neck");
         headB = System.Array.Find(allT, b => b.name == "mixamorig:Head");
         if (headB != null) { faceLocal = Quaternion.Inverse(headB.rotation) * transform.forward; upLocal = Quaternion.Inverse(headB.rotation) * transform.up; }
+        var ext = new Transform[Tuning.STALKER_NECK_JOINTS];
+        for (int i = 0; i < ext.Length; i++) ext[i] = System.Array.Find(allT, b => b.name == "mixamorig:NeckExt_" + i);
+        var sp = System.Array.ConvertAll(new[] { "Spine2", "Spine1", "Spine", "Hips" }, n => System.Array.Find(allT, b => b.name == "mixamorig:" + n));
+        if (headB != null && neckB != null && System.Array.IndexOf(ext, null) < 0 && System.Array.IndexOf(sp, null) < 0)
+        {
+            neckExt = ext; spineB = sp;
+            headRestPos = headB.localPosition;
+            BuildPath();                                                   // 쉬는 자세의 길 — 마디마다 쉬는 방향을 적어 둔다
+            neckRestM = System.Array.ConvertAll(neckExt, b => Quaternion.Inverse(transform.rotation) * b.rotation);
+            neckRestT = new Vector3[neckExt.Length];
+            for (int i = 0; i < neckExt.Length; i++) PathAt(BoneS(i), out neckRestT[i]);
+        }
         jaw = System.Array.Find(allT, b => b.name == "mixamorig:Jaw");
         if (jaw != null)
         {
@@ -197,6 +222,93 @@ public class StalkerAnim : MonoBehaviour
         HeadTiltNow = dr;
     }
 
+    static float BoneS(int i) => Tuning.STALKER_NECK_TOP_IN_M + i * Tuning.STALKER_NECK_LEN_M / Tuning.STALKER_NECK_JOINTS;
+    Vector3 ToModel(Vector3 world) => transform.InverseTransformPoint(world);
+
+    // 길(모델 공간): 관 꼭대기(머리 속) → 머리 뼈 → [둥근 길] → 목 나오는 곳(Neck 뼈) → 등뼈 → 엉덩이 아래. blender/rig/add_long_neck.py 의 쉬는 길과 같다
+    void BuildPath()
+    {
+        path.Clear(); pathS.Clear();
+        Vector3 H = ToModel(headB.position), X = ToModel(neckB.position), S2 = ToModel(spineB[0].position);
+        Vector3 headUp = transform.InverseTransformDirection(HeadUpDir).normalized, spineUp = (X - S2).normalized;
+        path.Add(H + headUp * Tuning.STALKER_NECK_TOP_IN_M);
+        float d = (X - H).magnitude * 0.45f;
+        Vector3 p1 = H - headUp * d, p2 = X + spineUp * d;
+        for (int k = 0; k <= 16; k++)
+        {
+            float u = k / 16f, v = 1f - u;
+            path.Add(v * v * v * H + 3f * v * v * u * p1 + 3f * v * u * u * p2 + u * u * u * X);
+        }
+        for (int k = 0; k < spineB.Length; k++) path.Add(ToModel(spineB[k].position));
+        path.Add(path[path.Count - 1] + (path[path.Count - 1] - path[path.Count - 2]).normalized * 0.6f);
+        float acc = 0f;
+        for (int k = 0; k < path.Count; k++)
+        {
+            if (k > 0) acc += (path[k] - path[k - 1]).magnitude;
+            pathS.Add(acc);
+        }
+    }
+
+    // 관 꼭대기에서 잰 길이 s 의 자리, toHead = 머리 쪽을 보는 방향
+    Vector3 PathAt(float s, out Vector3 toHead)
+    {
+        int k = 1;
+        while (k < path.Count - 1 && (pathS[k] < s || pathS[k] - pathS[k - 1] < 1e-6f)) k++;
+        Vector3 a = path[k - 1], b = path[k];
+        float len = Mathf.Max(1e-6f, pathS[k] - pathS[k - 1]);
+        toHead = (a - b) / len;
+        return Vector3.LerpUnclamped(a, b, (s - pathS[k - 1]) / len);
+    }
+
+    void NeckOut(float dt)
+    {
+        float tilt = Mathf.Abs(HeadTiltNow);
+        float auto = Tuning.STALKER_NECK_TILT_OUT_M * Mathf.InverseLerp(Tuning.STALKER_NECK_TILT_FROM_DEG, Tuning.STALKER_NECK_TILT_FULL_DEG, tilt);
+        float want = Mathf.Clamp(Mathf.Max(neckWant, auto), 0f, Tuning.STALKER_NECK_OUT_MAX_M);
+        NeckOutNow = Mathf.MoveTowards(NeckOutNow, want, Tuning.STALKER_NECK_OUT_MAX_M / Mathf.Max(0.02f, neckOutS) * dt);
+        headB.localPosition = headRestPos;                                 // 동작에 머리 자리 키가 없어 지난 프레임에 민 것이 남는다
+        if (NeckOutNow > 0f)
+        {
+            // 보는 쪽으로 내민다. 얼굴이 위를 볼 때(대기 동작은 턱을 들고 있다)는 위 성분을 버린다 — 3 m 괴물 머리 위는 바로 갱도 천장이다.
+            // 아래(나)를 보면 그대로 내려온다
+            Vector3 face = transform.InverseTransformDirection(FaceDir).normalized;
+            face.y = Mathf.Min(face.y, 0f);
+            Vector3 dir = (face.normalized + Vector3.up * Tuning.STALKER_NECK_UP).normalized;
+            headB.position += transform.TransformVector(dir * NeckOutNow);
+        }
+        BuildPath();
+        Quaternion q = Quaternion.identity;
+        for (int i = neckExt.Length - 1; i >= 0; i--)                      // 몸 속 끝에서 머리 쪽으로: 앞 마디의 돌림을 이어받아 비틀림 없이
+        {
+            Vector3 p = PathAt(BoneS(i), out Vector3 t);
+            q = Quaternion.FromToRotation(q * neckRestT[i], t) * q;
+            neckExt[i].SetPositionAndRotation(transform.TransformPoint(p), transform.rotation * q * neckRestM[i]);
+        }
+    }
+
+    // 검사·진단: 마디 뼈가 지금 자세의 길에서 가장 멀리 벗어난 거리 (모델 m). NeckOut 이 돌면 0 에 가깝다
+    public float NeckOffPath()
+    {
+        if (neckExt == null) return 99f;
+        BuildPath();
+        float worst = 0f;
+        for (int i = 0; i < neckExt.Length; i++)
+            worst = Mathf.Max(worst, (ToModel(neckExt[i].position) - PathAt(BoneS(i), out _)).magnitude);
+        return worst;
+    }
+
+    // 검사: 머리 뼈 ↔ 목 나오는 곳 거리 (모델 m), 이웃 마디 사이 가장 짧은·긴 거리
+    public float HeadToExit => headB != null && neckB != null ? (ToModel(headB.position) - ToModel(neckB.position)).magnitude : 0f;
+    public void NeckSpacing(out float min, out float max)
+    {
+        min = float.MaxValue; max = 0f;
+        for (int i = 1; neckExt != null && i < neckExt.Length; i++)
+        {
+            float d = (ToModel(neckExt[i].position) - ToModel(neckExt[i - 1].position)).magnitude;
+            min = Mathf.Min(min, d); max = Mathf.Max(max, d);
+        }
+    }
+
     void Jaw(float dt)
     {
         float target;
@@ -248,6 +360,8 @@ public class StalkerAnim : MonoBehaviour
     {
         if (neckB != null && headB != null && driveHead)
             Head(Time.deltaTime);
+        if (neckExt != null && driveNeck)
+            NeckOut(Time.deltaTime);
         if (jaw != null && driveJaw)
             Jaw(Time.deltaTime);
         if (straightFingers)

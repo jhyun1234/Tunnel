@@ -333,6 +333,18 @@ public static class Tuning
     public const float STALKER_HEAD_SEARCH_STEP_S = 0.4f;   // 수색: 이 시간마다 머리만 새 방향으로 끊어 돌림
     public const float STALKER_HEAD_SEARCH_TILT_K = 0.3f;   // 수색 때 갸웃은 ± TILT × 이 값 안에서 무작위
     public const float STALKER_HEAD_NECK_SHARE = 0.4f;      // 돌림 중 목 뼈 몫 (나머지 머리 뼈)
+    // 목 길게 빼기 (3D-③b M1e, 제안서 docs/제안서_3D3b_M1e_목_길게_빼기.md, 승인 09-19). 길이는 모델 크기 1 기준 m (게임에선 × STALKER_MODEL_SCALE) —
+    // blender/rig/add_long_neck.py 와 같은 값. 몸 속에 등뼈를 따라 누운 관(마디 7개)을 StalkerAnim.NeckOut 이 "머리 → 나오는 곳 → 등뼈" 길 위에 놓는다
+    public const int STALKER_NECK_JOINTS = 7;               // 마디 뼈 NeckExt_0~6 (4개는 한 마디가 82° 꺾여 각져 보였다, 7개 56° — 09-19 시험)
+    public const float STALKER_NECK_LEN_M = 0.80f;          // 목 전체
+    public const float STALKER_NECK_TOP_IN_M = 0.03f;       // 관 꼭대기는 머리 뼈 뿌리에서 머리 속으로 이만큼
+    public const float STALKER_NECK_OUT_MAX_M = 0.60f;      // 가장 많이 뺐을 때 (제안값, DevHud Z/X)
+    public const float STALKER_NECK_OUT_S = 0.3f;           // 0 → MAX 빼는 시간 (제안값, DevHud C/B)
+    public const float STALKER_NECK_UP = 0.4f;              // 빼는 방향 = 얼굴이 보는 쪽 + 몸 위 × 이 값. 위로만 빼면 40 cm 부터 머리가 갱도 천장을 뚫었다 (09-19 게임 그림)
+    public const float STALKER_NECK_TILT_OUT_M = 0.25f;     // 갸웃하면 저절로 이만큼 — 갸웃 110° 에서 머리가 어깨에 파고든 점이 다섯 자세 모두 0 이 되는 길이 (얼굴 쪽 방향으로 20 cm 는 옆 90° 에서 12점 남음, 09-19 Blender 실측)
+    public const float STALKER_NECK_TILT_FROM_DEG = 45f;    // 갸웃이 이 각도부터 나오기 시작해
+    public const float STALKER_NECK_TILT_FULL_DEG = 90f;    // 이 각도에서 TILT_OUT 다 나온다
+    public const float STALKER_NECK_OFF_PATH_MAX = 0.02f;   // 검사: 마디 뼈가 길에서 벗어난 거리 상한 (모델 m)
     public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)
