@@ -4,9 +4,9 @@
 출력: Documents/MineTunnel/blender/miner_v5_stage19_m3_neck.blend → SRC_BLEND 로 walk_knuckle.py 에 (tools/bake_m3.sh)
 하는 일: ① 네 그물(머리·몸·안감·속 몸통)의 걸친 살 점을 한쪽으로, 머리↔몸 잇는 면은 지우지 않고 몸 쪽에 남김 (add_long_neck.py ①② 와 같은 식)
         ② Meshy 목: 밑동 나팔(아래 18 %) 자름 → 곧게 폄(Meshy 가 깊이 쪽으로 휘게 지어냈다) → 길이 83 cm(머리 속 3 + 80) → 등뼈 돌기가 등 쪽을 보게
-           목 마디 뼈 길(머리 속 → NeckExt_0~6) 위에 놓음 → 안 뺐을 때 밖에서 안 보이는 가장 큰 굵기 → 높이에 따라 마디 뼈에 나눠 붙임
+           목 마디 뼈 길(머리 속 → NeckExt_0~6)에서 새 목 가운데로 비켜 놓음 → 굵기 0.8(사용자 09-20) → 높이에 따라 마디 뼈에 나눠 붙임 + 머리 밑 마개
         ③ 옛 관 Miner_Neck(셈으로 만든 관·소매·마개, m2_body.py 가 0.15배로 줄여 둔 것)은 뺀다. 새 그물이 이름(Miner_Neck)·재질 이름(목_근육)을 물려받는다 — Unity 가 그 이름으로 찾는다
-사보타주: SABOTAGE=blend(안 가름) -> 검사 1·2 FAIL · delstraddle(잇는 면 지움) -> 3 FAIL · nofit(굵기 1.0 그대로) -> 4 FAIL · bent(안 폄) -> 5 FAIL · flip(면 뒤집음) -> 6 FAIL"""
+사보타주: SABOTAGE=blend(안 가름) -> 검사 1·2 FAIL · delstraddle(잇는 면 지움) -> 3 FAIL · nofit(굵기 1.0) -> 4 FAIL · bent(안 폄) -> 5 FAIL · flip(면 뒤집음) · nocap(머리 밑 마개 없음) -> 6 FAIL · loose(늘어진 가닥 안 누름) -> 4 FAIL"""
 import bpy, bmesh, os, sys, math, numpy as np
 from mathutils import Vector, Matrix
 
@@ -122,7 +122,7 @@ bone_s = np.array([TOP_IN + i * LINK for i in range(JOINTS)])
 old = bpy.data.objects["Miner_Neck"]
 for m_ in list(old.data.materials):
     m_.name = "old_" + m_.name
-bpy.data.objects.remove(old, do_unlink=True)
+old_me = old.data; bpy.data.objects.remove(old, do_unlink=True); bpy.data.meshes.remove(old_me)      # 그물 이름 Miner_Neck 을 비운다 — glTF 그물 이름이 된다(walk_knuckle.py 검사)
 have = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=GLB)
 new = [o for o in bpy.data.objects if o not in have]
@@ -150,7 +150,7 @@ else:
     L[:, :2] -= cen.mean(0)
 s_v = (z_top - L[:, 2]) * k                                   # 꼭대기에서 잰 길이 (m)
 u_v, b_v = -L[:, 0] * k, -L[:, 1] * k                         # 180° 돌림: 뽑힌 그물은 등뼈 돌기가 −y(앞)를 본다 → 등 쪽으로
-# 허공에 늘어진 힘줄 가닥(반지름이 기둥의 두 배까지)이 목 살 밖으로 삐져나와 굵기를 0.4 까지 끌어내렸다(09-20) → 가닥을 기둥 겉에 눌러 붙인다:
+# 허공에 늘어진 힘줄 가닥(반지름이 기둥의 두 배까지)을 기둥 겉에 눌러 붙인다 — 굵기 0.8 에서 삐져나온 점 1.64 → 1.32 % (09-20 실측; 큰 원인은 아니다):
 # 높이 칸마다 평균 반지름의 STRAND 배를 넘는 점은 그 반지름으로 당긴다 (가닥 모양·그림은 남고 뜬 것만 없어진다). SABOTAGE=loose 로 끈다
 STRAND = float(os.environ.get("STRAND", "1.4"))
 r_v = np.hypot(u_v, b_v); kbin = np.clip((s_v / TOTAL * 40).astype(int), 0, 39)
@@ -187,7 +187,7 @@ if bs.inputs["Base Color"].links:                             # 색만 곱한다
     lk = bs.inputs["Base Color"].links[0]; nt = mat.node_tree
     mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MULTIPLY"; mix.inputs[0].default_value = 1.0
     nt.links.new(lk.from_socket, mix.inputs[6]); mix.inputs[7].default_value = (DARK, DARK, DARK, 1); nt.links.new(mix.outputs[2], bs.inputs["Base Color"])
-neck.name = "Miner_Neck"; neck.data.name = "Miner_Neck_m3"
+neck.name = "Miner_Neck"; neck.data.name = "Miner_Neck"
 
 # 굵기: 안 뺐을 때 밖(여덟 방향, 가슴~머리 높이 둘)에서 속 목이 보이는 점이 0.5 % 아래인 가장 큰 배율
 rng = np.random.default_rng(3); pick = rng.choice(len(L), 2500, replace=False)
@@ -219,13 +219,10 @@ def seen(Wd):
                 else: poke += 1
                 break
     return poke / len(pick), peek / len(pick)
-fit = float(os.environ.get("FIT", "1.0"))
-while True:
-    Wd = place(fit); vis, peek = seen(Wd)
-    print("굵기 %.2f: 살 밖으로 삐져나온 속 목 점 %.2f %% · 살 구멍으로 비치는 점 %.2f %%" % (fit, vis * 100, peek * 100))
-    if vis <= 0.005 or SABOTAGE == "nofit" or fit <= 0.31 or os.environ.get("FIT"):
-        break
-    fit = round(fit - 0.05, 2)
+# 굵기 0.8 · 삐져나옴 ≤ 1.5 % = 사용자 09-20 A안 (1.0 → 3.0 % · 0.8 → 1.3 % · 0.6 → 0.9 % · 0.4 → 0.5 %; 0.8 이면 속 목 반지름 3.2 cm 로 새 목 살 3.5~4.4 cm 안). 속 목이 새 목 살 안에 들어가는 굵기
+fit = 1.0 if SABOTAGE == "nofit" else float(os.environ.get("FIT", "0.8"))
+Wd = place(fit); vis, peek = seen(Wd)
+print("굵기 %.2f: 살 밖으로 삐져나온 속 목 점 %.2f %% · 살 구멍으로 비치는 점 %.2f %%" % (fit, vis * 100, peek * 100))
 
 # 머리 밑 마개: 목을 빼고 밑에서 올려다보면 머리 밑 구멍과 속 목 사이로 머리 속이 보인다(굵기 1.0 에서 광선 192 중 11) → 구멍 2 cm 위(머리 속)에 아래를 보는 원판, 머리 뼈에 붙음.
 # 그림은 속 목 그림의 한 점(어두운 근육색)을 쓴다 — 옛 관의 마개와 같은 구실
@@ -291,7 +288,7 @@ after = {o.name: eval_co(o) for o in skins}
 d0 = max(float(np.abs(after[n][:len(before[n])] - before[n]).max()) for n in before)
 lost = {o.name: faces_before[o.name] - len(o.data.polygons) for o in skins if len(o.data.polygons) < faces_before[o.name]}
 check(d0 < 1e-4 and not lost, "쉬는 자세의 살 점이 그대로 (최대 차 %.6f m < 0.0001) · 없어진 면 %s" % (d0, lost or 0))
-check(vis <= 0.005 and fit >= 0.6, "안 뺐을 때 살 밖으로 삐져나온 속 목 점 %.2f %% (≤ 0.5) · 굵기 배율 %.2f (≥ 0.6) · 찢긴 살 구멍으로 비치는 점 %.2f %% (기록만 — 판정 몫)" % (vis * 100, fit, peek * 100))
+check(vis <= 0.015 and fit >= 0.6, "안 뺐을 때 살 밖으로 삐져나온 속 목 점 %.2f %% (≤ 1.5) · 굵기 배율 %.2f (≥ 0.6) · 찢긴 살 구멍으로 비치는 점 %.2f %% (기록만 — 판정 몫)" % (vis * 100, fit, peek * 100))
 reset_pose(); Wd = eval_co(neck)[:n_col]
 c, e_side, e_back, e_up = frames(at0, s_v)
 c = c + e_side * np.interp(s_v, s_k, off_k[:, 0])[:, None] + e_back * np.interp(s_v, s_k, off_k[:, 1])[:, None]; rel = Wd - c
