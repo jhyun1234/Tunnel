@@ -214,8 +214,10 @@ public class M1Check : MonoBehaviour
             sanim.flatHands = false;
         if (sabotage == "nohear")                        // 더듬다 소리를 들어도 안 굳고 바로 간다 ("들었나?" 없음)
             stalker.heardPause = false;
-        if (sabotage == "handfind")                      // 손 닿는 데까지 찾는다 — 사용자 결정(09-20) "손은 2.5 m, 찾는 규칙은 2 m"를 어긴 상태
-            stalker.foundM = 2.6f;
+        if (sabotage == "handfind")                      // 손보다 멀리까지 찾는다 (규칙 = 손 닿는 2.5 m, 사용자 MB 판정 09-20)
+            stalker.foundM = 3.0f;
+        if (sabotage == "shortfind")                     // 옛 2 m 규칙: 손이 닿는 2.3 m 에 있어도 안 들킨다
+            stalker.foundM = 2.0f;
         if (sabotage == "stiffspine" && sanim != null)   // 배회가 허리가 옆으로 안 휘는 walk_knuckle
             sanim.stiffSpine = true;
         if (sabotage == "straightfingers" && sanim != null)   // 3D-③b M1b 전 상태: 손가락 곧음
@@ -1268,7 +1270,7 @@ public class M1Check : MonoBehaviour
             $"groping on arrival {gropedFirst} · up_grope in {clipOk}/{frames} crouched frames · groped {gropeS:F1} s (want {Tuning.STALKER_GROPE_S} ± 0.5) · at later spots {laterGrope}/{laterFrames} frames crouched (want 0) · left Search after {t:F1} s as {st.state}, sense {st.sense}, last heard {st.lastHeard}, {st.DistToPlayer:F1} m from me");
         Check("anim_grope_hands_plant_flat", rest >= 60 && flat >= 0.85f * rest && straight >= 0.93f && low >= -0.03f && pats >= 3 && used[0] && used[1],
             $"{rest} planted hand-frames, all four fingertips within 9 cm of the surface in {(rest > 0 ? 100f * flat / rest : 0f):F0} % (min 85) · fingers straight min {straight:F3} (min 0.93, claw ≈ 0.80) · deepest under surface {Mathf.Min(low, 0f):F3} m (max 0.03) · {pats} pats, left {used[0]} right {used[1]}, on upright surfaces {sa.PatOnWall}");
-        Check("anim_grope_reaches_far", reach >= 2.2f && reach <= 2.9f, $"planted fingertips reach {reach:F2} m ahead of the body (want 2.2–2.9; rule to be found stays {Tuning.STALKER_FOUND_M} m)");
+        Check("anim_grope_reaches_far", reach >= 2.2f && reach <= 2.9f, $"planted fingertips reach {reach:F2} m ahead of the body (want 2.2–2.9; rule to be found is {Tuning.STALKER_FOUND_M} m)");
         Check("anim_grope_feet_stay", frames >= 60 && footMove <= 0.03f, $"ankles move at most {footMove * 100f:F1} cm while the hips shift toward the hands (max 3)");
 
         // ② "들었나?": 더듬는 중 옆에서 소리 → 몸은 굳고 머리만 그쪽을 딱 → STALKER_HEARD_S 뒤에 조사하러 간다
@@ -1307,18 +1309,18 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
         Check("anim_heard_sometimes_without_noise", rnd && st.heardCount == h0 + 1 && st.Groping, $"froze without any noise {rnd} (count +{st.heardCount - h0}) · afterwards still groping {st.Groping} ({st.state})");
 
-        // ④ 찾는 규칙은 2 m 그대로 — 손끝이 닿는 2.4 m 에 있어도 안 들키고, 1.9 m 면 들킨다
+        // ④ 찾는 규칙 = 손 닿는 2.5 m — 2.8 m 옆에 있으면 안 들키고, 2.3 m 면 들킨다
         yield return ToGrope(new Vector3(0f, 0.1f, 34f), 0f);
         yield return new WaitForSeconds(1.0f);
-        Teleport(cc, st.transform.position + st.transform.right * 2.4f, 0f);
+        Teleport(cc, st.transform.position + st.transform.right * 2.8f, 0f);
         player.frozen = true;
         yield return new WaitForSeconds(1.5f);
-        var at24 = st.state;
-        Teleport(cc, st.transform.position + st.transform.right * 1.9f, 0f);
+        var at28 = st.state;
+        Teleport(cc, st.transform.position + st.transform.right * 2.3f, 0f);
         yield return new WaitForSeconds(0.5f);
-        var at19 = st.state;
-        Check("search_found_rule_still_2m", at24 == Stalker.State.Search && at19 != Stalker.State.Search && at19 != Stalker.State.Wander,
-            $"lamp off, 2.4 m beside the groping creature for 1.5 s: {at24} (want Search) · moved to 1.9 m: {at19} (want Alert/Chase)");
+        var at23 = st.state;
+        Check("search_found_rule_2_5m", at28 == Stalker.State.Search && at23 != Stalker.State.Search && at23 != Stalker.State.Wander,
+            $"lamp off, 2.8 m beside the groping creature for 1.5 s: {at28} (want Search) · moved to 2.3 m: {at23} (want Alert/Chase)");
         // ⑤ 사람이 볼 그림: 4 m 앞에서 램프를 켜고(눈·빛 감각은 잠시 0 — 게임에선 이러면 들킨다) 0.4 s 간격 12장
         yield return ToGrope(new Vector3(0f, 0.1f, 34f), 0f);
         st.eyeM = 0f; st.lightM = 0f;
@@ -2394,7 +2396,7 @@ public class M1Check : MonoBehaviour
         float t = 0f;
         while (st.state != Stalker.State.Search && t < 8f) { t += Time.deltaTime; yield return null; }
         toPocket = Flat(mid.transform.position - st.transform.position);
-        Check("stalker_two_hits_arrives_2m", st.hits == 2 && st.state == Stalker.State.Search && toPocket < Tuning.STALKER_FOUND_M && t < 6f,
+        Check("stalker_two_hits_arrives_2m", st.hits == 2 && st.state == Stalker.State.Search && toPocket < Tuning.STALKER_NOISE_SAME_M && t < 6f,
             $"hits {st.hits}, {toPocket:F2} m from pocket after {t:F1} s, state {st.state}");
         Teleport(cc, new Vector3(0f, 0.1f, st.zMin + 1f), 0f);    // 수색 길에서 비킨다
 

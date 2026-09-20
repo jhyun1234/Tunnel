@@ -227,7 +227,8 @@ public static class Tuning
     public const int STALKER_SPOTS_MIN = 2;            // 수색 곳 수
     public const int STALKER_SPOTS_MAX = 3;
     public const float STALKER_DWELL_S = 2.0f;         // s, 곳마다 머무는 시간
-    public const float STALKER_FOUND_M = 2.0f;         // m, 수색 자리에서 이 안이면 들킴 (M3 에서는 '도착' 기준으로만 쓴다)
+    public const float STALKER_FOUND_M = 2.5f;         // m, 수색 중 이 안이면 들킴 — 2.0 → 2.5 (사용자 MB 판정 09-20: 손끝이 2.5 m 까지 오는데 2 m 밖이면 안 들키는 게 이상하다)
+    public const float STALKER_NOISE_SAME_M = 2.0f;    // m, 이어진 소리가 이 안이면 '같은 자리' · 소리 난 자리에 '도착' 기준 (FOUND_M 이 2.0 이던 때 같이 쓰던 값 — 소리 규칙은 그대로)
     public const int STALKER_WANDER_CELLS = 3;         // 배회 반경 (격자 칸)
     public const float STALKER_WANDER_PAUSE_S = 1.0f;  // s, 배회 도착마다 멈춤
     // Unity 전용 (제안서 M3 제안값): 1타 = 방향만, 2타 연속 = 정확 (설계서 v2 Step 5)

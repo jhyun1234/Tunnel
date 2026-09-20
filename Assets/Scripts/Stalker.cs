@@ -50,7 +50,7 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public bool grope = true;                       // 사보타주 nogrope
     [System.NonSerialized] public float heardChance = Tuning.STALKER_HEARD_CHANCE;
     [System.NonSerialized] public bool heardPause = true;                  // 사보타주 nohear: 더듬다 소리를 들어도 안 굳고 바로 간다
-    [System.NonSerialized] public float foundM = Tuning.STALKER_FOUND_M;   // 사보타주 handfind: 손 닿는 데(2.6 m)까지 찾는다
+    [System.NonSerialized] public float foundM = Tuning.STALKER_FOUND_M;   // 사보타주 handfind 3.0 m(손보다 멀리) · shortfind 2.0 m(옛 값)
     [System.NonSerialized] public int heardCount;                          // 검사
     bool groping, heardPending;
     float heardLeft, heardAt;
@@ -90,7 +90,7 @@ public class Stalker : MonoBehaviour
         float d = Flat(pos - transform.position);
         if (d > radius * earMul)
             return;
-        if (Time.time - noiseTime > Tuning.STALKER_HEAR_CONFIRM_S || Flat(pos - noisePos) > Tuning.STALKER_FOUND_M)
+        if (Time.time - noiseTime > Tuning.STALKER_HEAR_CONFIRM_S || Flat(pos - noisePos) > Tuning.STALKER_NOISE_SAME_M)
             hits = 0;
         hits++;
         noisePos = pos;
