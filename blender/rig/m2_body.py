@@ -124,8 +124,8 @@ for side in ("Left", "Right"):
             setattr(b, end, Vector((iw @ np.append(p[0], 1))[:3]))
 bpy.ops.object.mode_set(mode="OBJECT")
 # ---- ④a 팔 굵기 (사용자 09-20 "팔이 너무 앙상하다"): 팔 축에서 바깥으로 ARM_THICK 배. 어깨에서 서서히, 손목에서는 손 굵기에 맞춰 끝낸다(손목 턱 없애기)
-ARM_THICK = float(os.environ.get("ARM_THICK", "2.6"))   # 1.3 → 사용자 09-20 "기존보다 2배 더" = 2.6
-WRIST_THICK = float(os.environ.get("WRIST_THICK", "1.7"))  # 손목까지 원래 굵기로 줄이면 2.6배 팔에서 너무 급하게 가늘어진다
+ARM_THICK = float(os.environ.get("ARM_THICK", "1.7"))   # 1.3(앙상) → 2.6(Claude 가 "지금의 2배"로 잘못 읽음, 너무 굵다) → 사용자 09-20 확정: 원래의 1.7배
+WRIST_THICK = float(os.environ.get("WRIST_THICK", "1.3"))  # 손목까지 원래 굵기로 줄이면 2.6배 팔에서 너무 급하게 가늘어진다
 ss = lambda x: np.clip(x, 0, 1) ** 2 * (3 - 2 * np.clip(x, 0, 1))
 girth = {}
 for side in ("Left", "Right"):
@@ -180,7 +180,7 @@ tip_hang = wrist_hang - (hv[:, 0].max() - W("LeftHand").x)
 print("ARM_K %.3f  팔 %.3f → %.3f m  늘어뜨리면 손목 %.2f m (무릎 %.2f) · 발톱 끝 %.2f m (발목 %.2f)" % (K, up + fo, up2 + fo2, wrist_hang, knee_z, tip_hang, W("LeftFoot").z))
 check(abs(wrist_hang - knee_z) <= 0.03, "손목이 무릎 높이: 늘어뜨린 손목 %.3f m = 무릎 %.3f ± 0.03" % (wrist_hang, knee_z))
 check(W("LeftFoot").z <= tip_hang <= knee_z, "발톱 끝이 정강이 안: %.3f m (발목 %.3f ~ 무릎 %.3f)" % (tip_hang, W("LeftFoot").z, knee_z))
-check(ARM_THICK >= 2.0, "팔이 굵어졌다: 위팔·전완 %.2f배 (≥ 2.0) · 손목 %.2f배 · 손 손목을 거기에 맞춤" % (ARM_THICK, WRIST_THICK))
+check(1.6 <= ARM_THICK <= 1.8, "팔 굵기가 사용자 확정값: 위팔·전완 %.2f배 (1.7 ± 0.1) · 손목 %.2f배 · 손 손목을 거기에 맞춤" % (ARM_THICK, WRIST_THICK))
 check(abs(hv[:, 0].min() - W("LeftHand").x) <= 0.08, "손 살이 손 뼈를 따라감: 손 살 시작 x %.3f · 손목 뼈 x %.3f (≤ 0.08)" % (hv[:, 0].min(), W("LeftHand").x))
 
 # ---- ④b 늘린 뒤의 겉에 잔금·잔결을 입히고 어둡게 (몸 그물만 굽고, 나머지는 색만 곱한다)
@@ -220,7 +220,7 @@ for o in parts:
     noi = nt.nodes.new("ShaderNodeTexNoise"); noi.inputs["Scale"].default_value = 520.0; noi.inputs["Detail"].default_value = 3.0; nt.links.new(tc.outputs["Object"], noi.inputs["Vector"])
     blotch = nt.nodes.new("ShaderNodeTexNoise"); blotch.inputs["Scale"].default_value = 5.0; blotch.inputs["Detail"].default_value = 3.0; nt.links.new(tc.outputs["Object"], blotch.inputs["Vector"])
     h = nt.nodes.new("ShaderNodeMath"); h.operation = "ADD"; nt.links.new(both.outputs[0], h.inputs[0])
-    hn = nt.nodes.new("ShaderNodeMath"); hn.operation = "MULTIPLY"; hn.inputs[1].default_value = 0.12; nt.links.new(noi.outputs["Fac"], hn.inputs[0]); nt.links.new(hn.outputs[0], h.inputs[1])
+    hn = nt.nodes.new("ShaderNodeMath"); hn.operation = "MULTIPLY"; hn.inputs[1].default_value = 0.22; nt.links.new(noi.outputs["Fac"], hn.inputs[0]); nt.links.new(hn.outputs[0], h.inputs[1])
     bump = nt.nodes.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = 1.0 if DETAIL else 0.0; bump.inputs["Distance"].default_value = 0.004
     nt.links.new(h.outputs[0], bump.inputs["Height"])
     nmap = next((n for n in nt.nodes if n.type == "NORMAL_MAP"), None)
