@@ -4,7 +4,7 @@
 입력: Documents/MineTunnel/mesh/meshy_{m2,head1,hand1}.glb + meshy_torso1.glb (gen_meshy.py)   출력: mesh/meshy_m3.glb (m2 좌표 그대로, 그물 넷 — glTFast 는 스킨 그물 하나에 재질 둘을 못 읽는다)
 숫자는 probe 로 잰 것: 헬멧 챙 너비 m2 0.206 / head1 0.486, m2 손목 x 0.64 · 손끝 0.95, hand1 은 길이 축 y(손목 +0.70 → 발톱 끝 −0.95)
 사보타주: SABOTAGE=nohead -> "머리 그물이 몸 목 위에 얹힘" FAIL · SABOTAGE=noholes -> "몸통 피부에 상처 구멍" FAIL
-SABOTAGE=scales -> "몸 색 그림에 자잘한 무늬 없음" FAIL
+SABOTAGE=blindholes -> "속이 없는 곳은 안 뚫었다" FAIL · SABOTAGE=scales -> "몸 색 그림에 자잘한 무늬 없음" FAIL
 (SABOTAGE=meshynormal 은 비교용 — Meshy 가 준 비늘 노멀맵을 그대로 둔다)"""
 import bpy, os, sys, math, numpy as np
 from mathutils import Vector, Matrix
@@ -90,16 +90,21 @@ T = co(torso); T = np.c_[T[:, 0] * TORSO_F, T[:, 1] * TORSO_F + 0.02, (T[:, 2] -
 mat = body.data.materials[0]
 img = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].links[0].from_node.image
 w, h = img.size; px = np.empty(w * h * 4, np.float32); img.pixels.foreach_get(px); px = px.reshape(h, w, 4)
-uv = body.data.uv_layers.active.data; B = co(body); holes = []
+uv = body.data.uv_layers.active.data; B = co(body); holes = []; holes_c = []
+# 속 몸통이 바로 뒤(면 안쪽 5 cm 안)에 있는 면만 뚫는다 — 색만 보고 뚫으면 골반 밑·어깨처럼 속이 없는 곳이 휑하게 뚫린다(사용자 09-20 "엉덩이 골반·오른쪽 어깨가 뚫려 있음")
+from mathutils.bvhtree import BVHTree
+bvh = BVHTree.FromObject(torso, bpy.context.evaluated_depsgraph_get())
 for poly in body.data.polygons:
     c = B[list(poly.vertices)].mean(0)
     if not (abs(c[0]) < 0.19 and -0.10 < c[2] < 0.47):
+        continue
+    if SAB != "blindholes" and bvh.ray_cast(Vector(c), -poly.normal, 0.05)[0] is None:
         continue
     u = np.mean([uv[i].uv for i in poly.loop_indices], axis=0)
     r, g, b_ = px[int(u[1] % 1 * (h - 1)), int(u[0] % 1 * (w - 1)), :3]
     mx = max(r, g, b_)
     if SAB != "noholes" and mx - min(r, g, b_) > 0.10 and (mx - min(r, g, b_)) / mx > 0.25:   # 살·뼈 = 채도 0.25 위 + 색 차 0.10 위 (어두운 피부는 잡음만으로 채도가 높게 나온다 — 86 % 가 뚫렸었다)
-        holes.append(poly.index)
+        holes.append(poly.index); holes_c.append((tuple(c), tuple(-poly.normal)))
 torso_faces = sum(1 for poly in body.data.polygons if abs(B[list(poly.vertices)].mean(0)[0]) < 0.19 and -0.10 < B[list(poly.vertices)].mean(0)[2] < 0.47)
 bpy.ops.object.select_all(action="DESELECT"); body.select_set(True); bpy.context.view_layer.objects.active = body
 bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
@@ -127,8 +132,20 @@ n_crumbs = len(crumbs)
 bmesh.ops.delete(bm, geom=crumbs, context="FACES"); bm.to_mesh(body.data); bm.free(); body.data.update()
 print("crumb faces removed", n_crumbs)
 check(0 < len(body.data.polygons) and n_crumbs < 3000, "부스러기만 지웠다: %d 면 지움 · 몸 %d 면 남음" % (n_crumbs, len(body.data.polygons)))
-mat.use_backface_culling = False                  # 구멍으로 등 안쪽이 보인다 — 양면으로 (glTF doubleSided)
-check(0.15 <= len(holes) / torso_faces <= 0.75, "몸통 피부에 상처 구멍: 몸통 면 %d 중 %d 뚫음 (%.0f %%, 15~75)" % (torso_faces, len(holes), 100 * len(holes) / torso_faces))
+# 구멍으로 피부 안쪽이 보인다. 양면 재질은 Unity 에서 뒷면이 새까맣게 나왔다(사용자 09-20 "갈비뼈 사이 검은 것") → 몸통 피부를 뒤집은 안감 그물을 따로 둔다(어두운 살색, 그림 없음)
+bpy.ops.object.select_all(action="DESELECT"); body.select_set(True); bpy.context.view_layer.objects.active = body
+bpy.ops.object.duplicate(); liner = bpy.context.active_object; liner.name = "Miner_Liner"
+bm = bmesh.new(); bm.from_mesh(liner.data)
+bmesh.ops.delete(bm, geom=[f for f in bm.faces if not (abs(f.calc_center_median().x) < 0.24 and -0.16 < f.calc_center_median().z < 0.53)], context="FACES")
+for v in bm.verts:
+    v.co -= v.normal * 0.002
+bmesh.ops.reverse_faces(bm, faces=bm.faces); bm.to_mesh(liner.data); bm.free()
+lm = bpy.data.materials.new("안감_살")      # "살" 로 시작하면 Unity StalkerLook·검사가 살 재질로 세어 노멀맵을 찾는다; lm.use_nodes = True
+lb = next(n for n in lm.node_tree.nodes if n.type == "BSDF_PRINCIPLED"); lb.inputs["Base Color"].default_value = (0.10, 0.025, 0.02, 1); lb.inputs["Roughness"].default_value = 0.85
+liner.data.materials.clear(); liner.data.materials.append(lm)
+check(0.10 <= len(holes) / torso_faces <= 0.75, "몸통 피부에 상처 구멍: 몸통 면 %d 중 %d 뚫음 (%.0f %%, 15~75)" % (torso_faces, len(holes), 100 * len(holes) / torso_faces))
+blind = sum(1 for i in holes_c if bvh.ray_cast(Vector(i[0]), Vector(i[1]), 0.05)[0] is None)
+check(blind == 0, "속이 없는 곳은 안 뚫었다: 뚫은 면 %d 중 뒤에 속 몸통이 없는 면 %d" % (len(holes_c), blind))
 B = co(body); T = co(torso); skin = B[(abs(B[:, 0]) < 0.19) & (B[:, 2] > -0.10) & (B[:, 2] < 0.47)]
 out_x = max(0.0, abs(T[:, 0]).max() - abs(skin[:, 0]).max()); out_y = max(0.0, skin[:, 1].min() - T[:, 1].min(), T[:, 1].max() - skin[:, 1].max())
 check(out_x <= 0.01 and out_y <= 0.015, "속 몸통이 피부 안에 든다: 옆으로 %.3f · 앞뒤로 %.3f m 삐져나옴 (≤ 0.01 · 0.015)" % (out_x, out_y))
@@ -187,10 +204,12 @@ check(off <= 0.03, "목 이음매 가운데 어긋남 %.3f m (≤ 0.03)" % off)
 check(abs(B[:, 0]).max() <= WRIST_X + 0.005 and abs(D[:, 0]).min() >= WRIST_X - 0.02, "손 그물이 손목에서 이어짐: 몸 |x| 끝 %.3f · 손 시작 %.3f" % (abs(B[:, 0]).max(), abs(D[:, 0]).min()))
 tip = abs(D[:, 0]).max()
 check(0.90 <= tip <= 1.02, "손끝 |x| %.3f (m2 0.95 ± 0.06 — 손 크기가 맞다)" % tip)
-faces = {o.name: len(o.data.polygons) for o in (body, head, hand, torso)}
+faces = {o.name: len(o.data.polygons) for o in (body, head, hand, torso, liner)}
 print("faces", faces, "sum", sum(faces.values()))
 if fails:
     sys.exit("m3_assemble FAIL %d — 안 내보냄: %s" % (len(fails), fails))
+for m_ in bpy.data.materials:
+    m_.use_backface_culling = True               # Meshy GLB 는 양면으로 들어온다 — 그대로 두면 Unity 에서 피부 뒷면이 새까맣게 보인다(안감 그물이 그 일을 한다)
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True, export_image_format="AUTO")
 print("m3_assemble ALL PASS →", OUT, round(os.path.getsize(OUT) / 1e6, 1), "MB")

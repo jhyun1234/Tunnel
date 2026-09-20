@@ -6,7 +6,7 @@
 하는 일: ① 뼈대 크기로 맞춤(어깨 높이 기준) ② 팔을 뼈대 팔 자리에 맞춤 ③ 옛 몸·부위 그물에서 무게를 옮김(가까운 면 보간)
         ④ 어깨→손목을 ARM_K 배 — 살 점과 뼈에 같은 식 ⑤ 옛 몸·머리·갱목·못·끈을 뺌 (갱목은 새 몸 겉에 다시 맞춰야 한다 — 아직 안 함)
 그물이 여럿이어도(m3: 몸·머리·손·속 몸통) 하나씩 같은 식으로 — glTFast 는 스킨 그물 하나에 재질 둘을 못 읽어 합치지 않는다.
-사보타주: ARM_K=1 -> "손목이 무릎 높이" FAIL · SABOTAGE=noinv -> "자세 잡은 살이 제 뼈 곁에" FAIL"""
+사보타주: ARM_K=1 -> "손목이 무릎 높이" FAIL · SABOTAGE=noinv -> "자세 잡은 살이 제 뼈 곁에" FAIL · SABOTAGE=nodetail -> "늘린 팔 겉에 잔결이 있다" FAIL"""
 import bpy, os, sys, numpy as np
 from mathutils import Vector
 
@@ -29,6 +29,9 @@ def put(o, V):
     o.data.vertices.foreach_set("co", V.astype(np.float32).ravel()); o.data.update()
 
 bpy.ops.wm.open_mainfile(filepath=SRC)
+for m_ in bpy.data.materials:                     # 새 그물의 재질이 옛 이름(살·살_머리)을 그대로 쓴다 — 옛 것을 비켜 두지 않으면 '.001' 이 붙는다
+    if m_.name.startswith('살'):                   # 목_근육 은 그대로 (Unity 가 '목' 으로 찾는다)
+        m_.name = 'old_' + m_.name
 arm = bpy.data.objects["Miner_Rig"]
 arm.data.pose_position = "REST"
 W = lambda n: arm.matrix_world @ arm.data.bones["mixamorig:" + n].head_local
@@ -135,6 +138,79 @@ check(abs(wrist_hang - knee_z) <= 0.03, "손목이 무릎 높이: 늘어뜨린 �
 check(W("LeftFoot").z <= tip_hang <= knee_z, "발톱 끝이 정강이 안: %.3f m (발목 %.3f ~ 무릎 %.3f)" % (tip_hang, W("LeftFoot").z, knee_z))
 check(abs(hv[:, 0].min() - W("LeftHand").x) <= 0.08, "손 살이 손 뼈를 따라감: 손 살 시작 x %.3f · 손목 뼈 x %.3f (≤ 0.08)" % (hv[:, 0].min(), W("LeftHand").x))
 
+# ---- ④b 늘린 뒤의 겉에 잔금·잔결을 입히고 어둡게 (몸 그물만 굽고, 나머지는 색만 곱한다)
+# 까닭(사용자 09-20): 팔을 1.47배 늘리니 가슴·팔·전완의 그림이 늘어져 밋밋하다 + 비늘을 지우며 피부 잔금도 사라졌다(배포물 구조값 24.8 < 28) + 램프에 하얗게 탄다(4.84 %).
+# 무늬를 UV 가 아니라 **늘린 뒤의 3D 자리**(물체 좌표)에서 만들어 구우면 늘어나지 않는다.
+DARK = float(os.environ.get("DARK", "0.45")); DETAIL = os.environ.get("SABOTAGE") != "nodetail"
+def principled(m): return next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+sc = bpy.context.scene; sc.render.engine = "CYCLES"; sc.cycles.samples = 4
+try:
+    cp = bpy.context.preferences.addons["cycles"].preferences
+    for kind in ("OPTIX", "CUDA"):
+        cp.compute_device_type = kind; cp.get_devices()
+        if any(d.type == kind for d in cp.devices):
+            for d in cp.devices:
+                d.use = True
+            sc.cycles.device = "GPU"; break
+except Exception as e:
+    print("GPU 없음 — CPU 로 굽는다", e)
+for o in parts:
+    m = o.data.materials[0]; nt = m.node_tree; bs = principled(m)
+    base_link = bs.inputs["Base Color"].links[0] if bs.inputs["Base Color"].links else None
+    if want[o][0] != "Miner_Body" or base_link is None:
+        if base_link is not None:                 # 색만 곱한다 — glTF 내보내기가 baseColorFactor 로 옮긴다
+            mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MULTIPLY"; mix.inputs[0].default_value = 1.0
+            nt.links.new(base_link.from_socket, mix.inputs[6]); mix.inputs[7].default_value = (DARK, DARK, DARK, 1); nt.links.new(mix.outputs[2], bs.inputs["Base Color"])
+        continue
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    vor = nt.nodes.new("ShaderNodeTexVoronoi"); vor.feature = "DISTANCE_TO_EDGE"; vor.inputs["Scale"].default_value = 38.0      # 잔금 칸 2.6 cm 쯤 (모델 m)
+    noi = nt.nodes.new("ShaderNodeTexNoise"); noi.inputs["Scale"].default_value = 260.0; noi.inputs["Detail"].default_value = 4.0
+    warp = nt.nodes.new("ShaderNodeTexNoise"); warp.inputs["Scale"].default_value = 9.0
+    wmix = nt.nodes.new("ShaderNodeMix"); wmix.data_type = "VECTOR"; wmix.inputs[0].default_value = 0.06
+    nt.links.new(tc.outputs["Object"], wmix.inputs[4]); nt.links.new(warp.outputs["Color"], wmix.inputs[5]); nt.links.new(tc.outputs["Object"], warp.inputs["Vector"])
+    nt.links.new(wmix.outputs[1], vor.inputs["Vector"]); nt.links.new(tc.outputs["Object"], noi.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeMapRange"); ramp.inputs[1].default_value = 0.0; ramp.inputs[2].default_value = 0.035; ramp.clamp = True   # 0 = 금 속, 1 = 칸 안
+    nt.links.new(vor.outputs["Distance"], ramp.inputs[0])
+    h = nt.nodes.new("ShaderNodeMath"); h.operation = "ADD"; nt.links.new(ramp.outputs[0], h.inputs[0])
+    hn = nt.nodes.new("ShaderNodeMath"); hn.operation = "MULTIPLY"; hn.inputs[1].default_value = 0.35; nt.links.new(noi.outputs["Fac"], hn.inputs[0]); nt.links.new(hn.outputs[0], h.inputs[1])
+    bump = nt.nodes.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = 0.8 if DETAIL else 0.0; bump.inputs["Distance"].default_value = 0.004
+    nt.links.new(h.outputs[0], bump.inputs["Height"])
+    nmap = next((n for n in nt.nodes if n.type == "NORMAL_MAP"), None)
+    if nmap:
+        nt.links.new(nmap.outputs[0], bump.inputs["Normal"])
+    nt.links.new(bump.outputs[0], bs.inputs["Normal"])
+    dk = nt.nodes.new("ShaderNodeMapRange"); dk.inputs[3].default_value = DARK * (0.45 if DETAIL else 1.0); dk.inputs[4].default_value = DARK   # 금 속은 더 어둡게
+    nt.links.new(ramp.outputs[0], dk.inputs[0])
+    mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MULTIPLY"; mix.inputs[0].default_value = 1.0
+    nt.links.new(base_link.from_socket, mix.inputs[6]); nt.links.new(dk.outputs[0], mix.inputs[7]); nt.links.new(mix.outputs[2], bs.inputs["Base Color"])
+    bpy.ops.object.select_all(action="DESELECT"); o.select_set(True); bpy.context.view_layer.objects.active = o
+    baked = {}
+    for kind, cs in (("NORMAL", "Non-Color"), ("DIFFUSE", "sRGB")):
+        im = bpy.data.images.new("skin_body_%s_detail" % kind.lower(), 2048, 2048, alpha=False); im.colorspace_settings.name = cs
+        for n in nt.nodes:
+            n.select = False
+        node = nt.nodes.new("ShaderNodeTexImage"); node.image = im; node.select = True; nt.nodes.active = node   # 고른 뒤에 활성으로 — 순서가 바뀌면 "No active and selected image texture node"
+        if kind == "DIFFUSE":
+            bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, margin=16)
+        else:
+            bpy.ops.object.bake(type="NORMAL", margin=16)
+        px = np.empty(2048 * 2048 * 4, np.float32); im.pixels.foreach_get(px); px = px.reshape(-1, 4); print("baked", kind, "min", px.min(0).round(3), "max", px.max(0).round(3), "engine", sc.render.engine, "device", sc.cycles.device)
+        im.filepath_raw = os.path.join(MT, "mesh", "meshy_%s_body_%s_detail.png" % (BODY, kind.lower())); im.file_format = "PNG"; im.save(); im.pack()
+        baked[kind] = node
+    if nmap is None:
+        nmap = nt.nodes.new("ShaderNodeNormalMap")
+    nt.links.new(baked["NORMAL"].outputs["Color"], nmap.inputs["Color"]); nt.links.new(nmap.outputs[0], bs.inputs["Normal"])
+    nt.links.new(baked["DIFFUSE"].outputs["Color"], bs.inputs["Base Color"])
+    # 검사: 늘린 위팔 자리의 노멀맵에 잔결이 있는가 — 위팔 면들의 UV 가운데에서 노멀 픽셀을 뽑아 흩어짐을 잰다
+    a = np.empty(2048 * 2048 * 4, np.float32); baked["NORMAL"].image.pixels.foreach_get(a); a = a.reshape(2048, 2048, 4)
+    V0 = co(o); uvd = o.data.uv_layers.active.data; smp = []
+    for poly in o.data.polygons:
+        c = V0[list(poly.vertices)].mean(0)
+        if 0.55 < c[0] < 1.2:                     # 왼 위팔~전완 (늘린 자리)
+            u = np.mean([uvd[i].uv for i in poly.loop_indices], axis=0); smp.append(a[int(u[1] % 1 * 2047), int(u[0] % 1 * 2047), :2])
+    spread = float(np.std(np.array(smp), axis=0).mean())
+    check(spread >= 0.03, "늘린 팔 겉에 잔결이 있다: 팔 면 %d 개의 노멀 픽셀 흩어짐 %.3f (≥ 0.03)" % (len(smp), spread))
+
 # ---- ⑤ 옛 것 빼고 새 그물들을 제 이름으로
 for o in list(bpy.data.objects):
     if o not in parts and (o.name in ("Miner_Body", "Miner_Head") or o.name.split("_")[0] in ("Plank", "Nail", "Strap")):
@@ -145,6 +221,7 @@ for o in parts:
     if os.environ.get("SABOTAGE") != "noinv":
         o.matrix_parent_inverse = arm.matrix_world.inverted()      # 뼈대가 x 축으로 90° 돌아 있다 — 안 하면 살이 같이 돈다
     o.modifiers.new("Armature", "ARMATURE").object = arm
+    o.data.materials[0].use_backface_culling = True               # 한 면만 — 뒷면은 안감 그물이 맡는다
 arm.data.pose_position = "POSE"
 
 # 자세를 잡았을 때 살이 뼈를 따라가는가 (09-20: 부모 역행렬을 빼먹어 살이 산산이 흩어진 것을 위 검사들이 못 잡았다)
