@@ -12,7 +12,8 @@ if [ "${1:-}" = "body" ]; then
 fi
 SHOTS="$PWD/build/check_m3" "$BLENDER" -b --factory-startup -P blender/rig/m3_fingers.py || exit 1
 # CHORD_MAX: 새 손가락 뼈는 곧을 때 0.930 · 걷기 굽힘(10,15,10) 0.882 (09-20 실측) — 그 사이. 옛 손은 0.879 · 0.800 → 0.84
-CHORD_MAX=0.905 \
+# STRIP_FINGER_KEYS: 모션캡처 클립의 손가락 키를 지운다 (사용자 09-20 A안 — 옛 손용 주먹 키가 긴 발톱을 손목에 박는다)
+CHORD_MAX=0.905 STRIP_FINGER_KEYS=1 \
 SRC_BLEND="$MT/blender/miner_v5_stage18_m3_fingers.blend" \
 OUT_GLB="$PWD/Assets/Tunnel/Monster/miner_m3.glb" \
 OUT_BLEND="$MT/blender/walk_knuckle_m3.blend" \

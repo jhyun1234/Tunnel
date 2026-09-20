@@ -9,7 +9,7 @@
         ⑤ 자기 검사 PASS/FAIL + 옆·앞 연속 그림
 출력: Tunnel/unity/Assets/Tunnel/Monster/miner_rigged.glb (덮어쓰기, 사용자 허락 09-18) · blender/anim/walk_knuckle.blend(리그 + 동작만)
       Documents/MineTunnel/blender/anim_render/walk_knuckle_*.png (저장소 밖)
-사보타주: SABOTAGE=noplant -> 손이 바닥에 안 닿는다 (검사 "손 짚기" FAIL). SABOTAGE=straight -> 손가락을 안 굽힌다 (검사 "손가락 굽음" FAIL). SABOTAGE=bodyonly(Miner_Body 만 잰다 = 09-20 까지의 검사) · sinkhands(손을 8 cm 파묻는다) -> "손 살이 바닥을 안 뚫음" FAIL. 사보타주 실행은 GLB·blend 를 덮어쓰지 않는다"""
+사보타주: SABOTAGE=noplant -> 손이 바닥에 안 닿는다 (검사 "손 짚기" FAIL). SABOTAGE=straight -> 손가락을 안 굽힌다 (검사 "손가락 굽음" FAIL). SABOTAGE=bodyonly(Miner_Body 만 잰다 = 09-20 까지의 검사) · sinkhands(손을 8 cm 파묻는다) -> "손 살이 바닥을 안 뚫음" FAIL. STRIP_FINGER_KEYS=1 SABOTAGE=keepfingerkeys -> "손가락 키가 없다" FAIL. 사보타주 실행은 GLB·blend 를 덮어쓰지 않는다"""
 import bpy, os, sys, json, struct, math, hashlib
 import numpy as np
 from mathutils import Vector, Matrix, Quaternion
@@ -534,6 +534,22 @@ if os.environ.get("PREVIEW"):              # 영상 후보 (3D-④ MA 1단계): 
 if QUICK:
     print("walk_knuckle QUICK %s  fails=%d %s" % ("ALL PASS" if not fails else "FAIL", len(fails), fails))
     sys.exit(0 if not fails else 2)
+
+# ---- 6b. STRIP_FINGER_KEYS=1 (m3, 사용자 09-20 A안): 모션캡처 클립의 손가락 키를 지운다 — 옛 손(짧은 손가락)용 주먹 키가 m3 의 30 cm 발톱을 제 손목에 박는다(attack_swipe).
+# 걸음(GAITS — 여기서 구운 굽힘)은 그대로. 나머지 손가락은 Unity 가 얹는 굽힘(StalkerAnim.Fingers)만 움직인다. SABOTAGE=keepfingerkeys -> 아래 검사 FAIL
+if os.environ.get("STRIP_FINGER_KEYS") == "1":
+    import re
+    finger_path = re.compile(r'pose\.bones\["mixamorig:(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)\d"\]')
+    def finger_curves(a):
+        return [(cb, fc) for layer in a.layers for strip in layer.strips for cb in strip.channelbags for fc in cb.fcurves if finger_path.match(fc.data_path)]
+    mocap = [a for a in bpy.data.actions if a.name not in GAITS]
+    removed = 0
+    if SABOTAGE != "keepfingerkeys":
+        for a in mocap:
+            for cb, fc in finger_curves(a):
+                cb.fcurves.remove(fc); removed += 1
+    left = sum(len(finger_curves(a)) for a in mocap)
+    check(left == 0 and len(mocap) >= 14, "모션캡처 클립에 손가락 키가 없다: 남은 곡선 %d개 (지운 것 %d개, 클립 %d개)" % (left, removed, len(mocap)))
 
 # ---- 7. NLA 트랙으로 더하고 GLB 내보내기 (stage12 와 같은 설정)
 for tr in ad.nla_tracks:
