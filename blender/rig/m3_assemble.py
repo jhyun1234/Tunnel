@@ -1,9 +1,11 @@
 """m3 = Meshy 부위 조립 (2026-09-20): 몸 m2 + 따로 뽑은 머리 head1 + 따로 뽑은 손 hand1(좌우 거울). 옛 몸(4b·4c)과 같은 방식.
   blender -b --factory-startup -P blender/rig/m3_assemble.py
 까닭: 전신 그림에서는 머리가 60 픽셀쯤이라 어떤 생성기든 머리·손이 뭉개진다 — 클로즈업 그림으로 따로 뽑아 붙인다.
-입력: Documents/MineTunnel/mesh/meshy_{m2,head1,hand1}.glb (gen_meshy.py)   출력: mesh/meshy_m3.glb (m2 좌표 그대로, 그물 셋 — glTFast 는 스킨 그물 하나에 재질 둘을 못 읽는다)
+입력: Documents/MineTunnel/mesh/meshy_{m2,head1,hand1}.glb + meshy_torso1.glb (gen_meshy.py)   출력: mesh/meshy_m3.glb (m2 좌표 그대로, 그물 넷 — glTFast 는 스킨 그물 하나에 재질 둘을 못 읽는다)
 숫자는 probe 로 잰 것: 헬멧 챙 너비 m2 0.206 / head1 0.486, m2 손목 x 0.64 · 손끝 0.95, hand1 은 길이 축 y(손목 +0.70 → 발톱 끝 −0.95)
-사보타주: SABOTAGE=nohead -> "머리 그물이 몸 목 위에 얹힘" FAIL"""
+사보타주: SABOTAGE=nohead -> "머리 그물이 몸 목 위에 얹힘" FAIL · SABOTAGE=noholes -> "몸통 피부에 상처 구멍" FAIL
+SABOTAGE=scales -> "몸 색 그림에 자잘한 무늬 없음" FAIL
+(SABOTAGE=meshynormal 은 비교용 — Meshy 가 준 비늘 노멀맵을 그대로 둔다)"""
 import bpy, os, sys, math, numpy as np
 from mathutils import Vector, Matrix
 
@@ -78,6 +80,103 @@ cut(body, (WRIST_X, 0, 0), (1, 0, 0)); cut(body, (-WRIST_X, 0, 0), (-1, 0, 0))
 bpy.ops.object.select_all(action="DESELECT"); hand.select_set(True); right.select_set(True); bpy.context.view_layer.objects.active = hand
 bpy.ops.object.join()
 
+# ---- 몸통 속: 따로 뽑은 갈비·장기·골반(torso1)을 피부 안에 넣고, 피부는 상처 자리(그림에서 살·뼈 색인 면)만 뚫는다
+# torso1 표지(probe): 어깨선 z 0.47 · 골반 밑 −0.95 · 갈비 반폭 0.29 · 그 밖 |x| > 0.30 은 위팔뼈 밑동(T 포즈와 안 맞아 버림) · z > 0.50 은 지어낸 해골
+TORSO_F = (0.50 - -0.12) / (0.47 - -0.95)         # m2 어깨선 0.50 ~ 가랑이 −0.12
+torso = load("meshy_torso1", "Miner_Torso", "살_속")
+cut(torso, (0, 0, 0.50), (0, 0, 1)); cut(torso, (0.30, 0, 0), (1, 0, 0)); cut(torso, (-0.30, 0, 0), (-1, 0, 0))
+T = co(torso); T = np.c_[T[:, 0] * TORSO_F, T[:, 1] * TORSO_F + 0.02, (T[:, 2] - 0.47) * TORSO_F + 0.50]; put(torso, T)
+
+mat = body.data.materials[0]
+img = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].links[0].from_node.image
+w, h = img.size; px = np.empty(w * h * 4, np.float32); img.pixels.foreach_get(px); px = px.reshape(h, w, 4)
+uv = body.data.uv_layers.active.data; B = co(body); holes = []
+for poly in body.data.polygons:
+    c = B[list(poly.vertices)].mean(0)
+    if not (abs(c[0]) < 0.19 and -0.10 < c[2] < 0.47):
+        continue
+    u = np.mean([uv[i].uv for i in poly.loop_indices], axis=0)
+    r, g, b_ = px[int(u[1] % 1 * (h - 1)), int(u[0] % 1 * (w - 1)), :3]
+    mx = max(r, g, b_)
+    if SAB != "noholes" and mx - min(r, g, b_) > 0.10 and (mx - min(r, g, b_)) / mx > 0.25:   # 살·뼈 = 채도 0.25 위 + 색 차 0.10 위 (어두운 피부는 잡음만으로 채도가 높게 나온다 — 86 % 가 뚫렸었다)
+        holes.append(poly.index)
+torso_faces = sum(1 for poly in body.data.polygons if abs(B[list(poly.vertices)].mean(0)[0]) < 0.19 and -0.10 < B[list(poly.vertices)].mean(0)[2] < 0.47)
+bpy.ops.object.select_all(action="DESELECT"); body.select_set(True); bpy.context.view_layer.objects.active = body
+bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
+for i in holes:
+    body.data.polygons[i].select = True
+bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.delete(type="FACE"); bpy.ops.object.mode_set(mode="OBJECT")
+# 뚫고 남은 조각 부스러기(면 150개 아래로 따로 떨어진 섬)를 지운다 — 09-20 첫 렌더에서 갈비 앞에 색종이처럼 떠 있었다
+import bmesh
+bm = bmesh.new(); bm.from_mesh(body.data)
+bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)      # glTF 는 UV 솔기마다 점이 갈라져 있다 — 안 붙이면 면마다 섬이 된다(09-20 몸 전체가 지워졌다)
+bm.faces.ensure_lookup_table(); bm.faces.index_update(); seen = set(); crumbs = []
+for f0 in bm.faces:
+    if f0.index in seen:
+        continue
+    isl, stack = [], [f0]; seen.add(f0.index)
+    while stack:
+        f = stack.pop(); isl.append(f)
+        for e in f.edges:
+            for g in e.link_faces:
+                if g.index not in seen:
+                    seen.add(g.index); stack.append(g)
+    if len(isl) < 150:
+        crumbs += isl
+n_crumbs = len(crumbs)
+bmesh.ops.delete(bm, geom=crumbs, context="FACES"); bm.to_mesh(body.data); bm.free(); body.data.update()
+print("crumb faces removed", n_crumbs)
+check(0 < len(body.data.polygons) and n_crumbs < 3000, "부스러기만 지웠다: %d 면 지움 · 몸 %d 면 남음" % (n_crumbs, len(body.data.polygons)))
+mat.use_backface_culling = False                  # 구멍으로 등 안쪽이 보인다 — 양면으로 (glTF doubleSided)
+check(0.15 <= len(holes) / torso_faces <= 0.75, "몸통 피부에 상처 구멍: 몸통 면 %d 중 %d 뚫음 (%.0f %%, 15~75)" % (torso_faces, len(holes), 100 * len(holes) / torso_faces))
+B = co(body); T = co(torso); skin = B[(abs(B[:, 0]) < 0.19) & (B[:, 2] > -0.10) & (B[:, 2] < 0.47)]
+out_x = max(0.0, abs(T[:, 0]).max() - abs(skin[:, 0]).max()); out_y = max(0.0, skin[:, 1].min() - T[:, 1].min(), T[:, 1].max() - skin[:, 1].max())
+check(out_x <= 0.01 and out_y <= 0.015, "속 몸통이 피부 안에 든다: 옆으로 %.3f · 앞뒤로 %.3f m 삐져나옴 (≤ 0.01 · 0.015)" % (out_x, out_y))
+
+# ---- 몸 색 그림의 비늘 무늬 지우기: Meshy 가 만든 몸 색 그림에 주기 10 픽셀쯤의 자갈 무늬가 박혀 있다(노멀을 새로 구워도 남았다, 09-20).
+# 512 로 줄였다 2048 로 키워 무늬 주기보다 넓게 흐린다 — 색·상처 자리는 남고 무늬만 죽는다. 상처 속은 이제 진짜 형상(torso1)이라 흐려져도 된다
+def rough(im):                                    # 같은 물리 간격(4096 기준 8 픽셀)에서 본 밝기 차 — 자갈 무늬 주기가 10 픽셀쯤
+    n = im.size[0]; a = np.empty(n * n * 4, np.float32); im.pixels.foreach_get(a); a = a.reshape(n, n, 4)[:, :, :3].mean(2); k = max(1, n * 4 // 4096)
+    return float(np.abs(a[:, k:] - a[:, :-k]).mean())
+hf0 = rough(img)
+if SAB != "scales":
+    img.scale(512, 512); img.scale(2048, 2048); img.pack()
+hf = rough(img)
+check(hf < 0.6 * hf0, "몸 색 그림의 자잘한 무늬가 죽었다: 4 픽셀 간격 밝기 차 %.4f → %.4f (< 60 %%)" % (hf0, hf))
+
+# ---- 몸 노멀맵을 86만 면 원본(_pre)에서 다시 굽는다 — Meshy 가 준 몸 노멀맵에는 온몸을 덮는 비늘 무늬가 들어 있다(Blender 렌더에서도 보임, 09-20)
+if SAB != "meshynormal":
+    before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=os.path.join(MT, "meshy_m2_pre.glb"))
+    hi = next(o for o in bpy.data.objects if o not in before and o.type == "MESH")
+    bpy.ops.object.select_all(action="DESELECT"); hi.select_set(True); bpy.context.view_layer.objects.active = hi
+    bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM"); bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    sc = bpy.context.scene; sc.render.engine = "CYCLES"; sc.cycles.samples = 4
+    try:
+        cp = bpy.context.preferences.addons["cycles"].preferences
+        for kind in ("OPTIX", "CUDA"):
+            try:
+                cp.compute_device_type = kind; cp.get_devices()
+                if any(d.type == kind for d in cp.devices):
+                    for d in cp.devices:
+                        d.use = True
+                    sc.cycles.device = "GPU"; break
+            except Exception:
+                pass
+    except Exception as e:
+        print("GPU 없음 — CPU 로 굽는다", e)
+    nt = mat.node_tree
+    bake_img = bpy.data.images.new("skin_body_normal_baked", 4096, 4096, alpha=False, float_buffer=False); bake_img.colorspace_settings.name = "Non-Color"
+    node = nt.nodes.new("ShaderNodeTexImage"); node.image = bake_img; nt.nodes.active = node; node.select = True
+    bpy.ops.object.select_all(action="DESELECT"); hi.select_set(True); body.select_set(True); bpy.context.view_layer.objects.active = body
+    bpy.ops.object.bake(type="NORMAL", use_selected_to_active=True, cage_extrusion=0.006, max_ray_distance=0.02, margin=16)
+    bake_img.filepath_raw = os.path.join(MT, "meshy_m3_body_normal.png"); bake_img.file_format = "PNG"; bake_img.save()
+    nm = next(n for n in nt.nodes if n.type == "NORMAL_MAP")
+    nt.links.new(node.outputs["Color"], nm.inputs["Color"])
+    bpy.data.objects.remove(hi, do_unlink=True)
+    a = np.empty(4096 * 4096 * 4, np.float32); bake_img.pixels.foreach_get(a); a = a.reshape(-1, 4)[:, :3]
+    used = a[np.abs(a - [0.5, 0.5, 1.0]).sum(1) > 0.02]
+    check(len(used) > 0.05 * len(a) and used[:, 2].mean() > 0.8, "구운 몸 노멀맵: 평평하지 않은 픽셀 %.0f %% (> 5), 그 파랑 평균 %.2f (> 0.8 — 광선이 제 면을 맞혔다)" % (100 * len(used) / len(a), used[:, 2].mean() if len(used) else 0))
+
 # ---- 검사
 B, H, D = co(body), co(head), co(hand)
 check(B[:, 2].max() <= NECK_CUT + 0.005 and abs(H[:, 2].min() - (NECK_CUT - 0.02)) < 0.01 and abs(H[:, 2].max() - M2_TOP) < 0.005,
@@ -88,7 +187,7 @@ check(off <= 0.03, "목 이음매 가운데 어긋남 %.3f m (≤ 0.03)" % off)
 check(abs(B[:, 0]).max() <= WRIST_X + 0.005 and abs(D[:, 0]).min() >= WRIST_X - 0.02, "손 그물이 손목에서 이어짐: 몸 |x| 끝 %.3f · 손 시작 %.3f" % (abs(B[:, 0]).max(), abs(D[:, 0]).min()))
 tip = abs(D[:, 0]).max()
 check(0.90 <= tip <= 1.02, "손끝 |x| %.3f (m2 0.95 ± 0.06 — 손 크기가 맞다)" % tip)
-faces = {o.name: len(o.data.polygons) for o in (body, head, hand)}
+faces = {o.name: len(o.data.polygons) for o in (body, head, hand, torso)}
 print("faces", faces, "sum", sum(faces.values()))
 if fails:
     sys.exit("m3_assemble FAIL %d — 안 내보냄: %s" % (len(fails), fails))
