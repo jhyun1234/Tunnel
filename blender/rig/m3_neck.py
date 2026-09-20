@@ -4,9 +4,9 @@
 출력: Documents/MineTunnel/blender/miner_v5_stage19_m3_neck.blend → SRC_BLEND 로 walk_knuckle.py 에 (tools/bake_m3.sh)
 하는 일: ① 네 그물(머리·몸·안감·속 몸통)의 걸친 살 점을 한쪽으로, 머리↔몸 잇는 면은 지우지 않고 몸 쪽에 남김 (add_long_neck.py ①② 와 같은 식)
         ② Meshy 목: 밑동 나팔(아래 18 %) 자름 → 곧게 폄(Meshy 가 깊이 쪽으로 휘게 지어냈다) → 길이 83 cm(머리 속 3 + 80) → 등뼈 돌기가 등 쪽을 보게
-           목 마디 뼈 길(머리 속 → NeckExt_0~6)에서 새 목 가운데로 비켜 놓음 → 굵기 0.8(사용자 09-20) → 높이에 따라 마디 뼈에 나눠 붙임 + 머리 밑 마개
+           목 마디 뼈 길(머리 속 → NeckExt_0~6)에서 새 목 가운데로 비켜 놓음 → 굵기 0.8(사용자 09-20) → 높이에 따라 마디 뼈에 나눠 붙임 + 머리 밑 소매
         ③ 옛 관 Miner_Neck(셈으로 만든 관·소매·마개, m2_body.py 가 0.15배로 줄여 둔 것)은 뺀다. 새 그물이 이름(Miner_Neck)·재질 이름(목_근육)을 물려받는다 — Unity 가 그 이름으로 찾는다
-사보타주: SABOTAGE=blend(안 가름) -> 검사 1·2 FAIL · delstraddle(잇는 면 지움) -> 3 FAIL · nofit(굵기 1.0) -> 4 FAIL · bent(안 폄) -> 5 FAIL · flip(면 뒤집음) · nocap(머리 밑 마개 없음) -> 6 FAIL · loose(늘어진 가닥 안 누름) -> 4 FAIL"""
+사보타주: SABOTAGE=blend(안 가름) -> 검사 1·2 FAIL · delstraddle(잇는 면 지움) -> 3 FAIL · nofit(굵기 1.0) -> 4 FAIL · bent(안 폄) -> 5 FAIL · flip(면 뒤집음) · nocap(머리 밑 소매 없음) -> 6 FAIL · loose(늘어진 가닥 안 누름) -> 4 FAIL"""
 import bpy, bmesh, os, sys, math, numpy as np
 from mathutils import Vector, Matrix
 
@@ -208,9 +208,10 @@ def enclosed(dg, p):
         if not hit:
             return False
     return True
-def seen(Wd):
+def seen(Wd, which=None):
     bpy.context.view_layer.update(); dg = bpy.context.evaluated_depsgraph_get(); poke = peek = 0
-    for i in pick:
+    which = pick if which is None else which
+    for i in which:
         p = Vector(Wd[i])
         for c in cams:
             ok, loc, nor, idx, ob, mt = scene.ray_cast(dg, c, (p - c).normalized())
@@ -218,28 +219,37 @@ def seen(Wd):
                 if enclosed(dg, p): peek += 1
                 else: poke += 1
                 break
-    return poke / len(pick), peek / len(pick)
+    return poke / len(which), peek / len(which)
 # 굵기 0.8 · 삐져나옴 ≤ 1.5 % = 사용자 09-20 A안 (1.0 → 3.0 % · 0.8 → 1.3 % · 0.6 → 0.9 % · 0.4 → 0.5 %; 0.8 이면 속 목 반지름 3.2 cm 로 새 목 살 3.5~4.4 cm 안). 속 목이 새 목 살 안에 들어가는 굵기
 fit = 1.0 if SABOTAGE == "nofit" else float(os.environ.get("FIT", "0.8"))
 Wd = place(fit); vis, peek = seen(Wd)
 print("굵기 %.2f: 살 밖으로 삐져나온 속 목 점 %.2f %% · 살 구멍으로 비치는 점 %.2f %%" % (fit, vis * 100, peek * 100))
 
-# 머리 밑 마개: 목을 빼고 밑에서 올려다보면 머리 밑 구멍과 속 목 사이로 머리 속이 보인다(굵기 1.0 에서 광선 192 중 11) → 구멍 2 cm 위(머리 속)에 아래를 보는 원판, 머리 뼈에 붙음.
-# 그림은 속 목 그림의 한 점(어두운 근육색)을 쓴다 — 옛 관의 마개와 같은 구실
-n_col = len(L)
+# 머리 밑 소매: 목을 빼고 밑에서 올려다보면 머리 밑 구멍과 속 목 사이로 머리 속이 보인다(광선 192 중 173 만 막힘).
+# 1차는 구멍 위에 둥근 판을 댔다 → 사용자 09-20 "목 밑 둥근 판이 매우 거슬린다, 목과 머리 밑이 자연스럽게 이어지게" → 판을 버리고
+# **속 목 꼭대기 SLEEVE cm 의 겉면을 복사해 위로 갈수록 머리 밑 구멍 크기까지 벌린다**(근육이 두개골 밑으로 퍼지며 붙는 모양, 그림·UV 는 속 목 그대로). 머리 뼈에 붙어 머리와 같이 움직인다
+n_col = len(L); SLEEVE = 0.10
+rh = np.array(ring_head) if ring_head else np.array([rest_path()[1]]); hc = rh.mean(0)
+hr = float(np.percentile(np.linalg.norm((rh - hc)[:, :2], axis=1), float(os.environ.get("RIM_PCT", "75")))) if ring_head else 0.05      # 구멍 둘레는 들쭉날쭉 — 75 % 값 (가운데값 4.2 cm 는 속 목과 같아 안 벌어지고, 90 % 값 6.9 cm 로 벌리면 안 뺐을 때 소매 점 15 % 가 목 살 밖)
 if ring_head and SABOTAGE != "nocap":
-    rh = np.array(ring_head); hc = rh.mean(0); hr = float(np.percentile(np.linalg.norm((rh - hc)[:, :2], axis=1), 90))
-    bm = bmesh.new(); bm.from_mesh(neck.data); uvl = bm.loops.layers.uv.verify()
-    cv = bm.verts.new((hc[0], hc[1], hc[2] + 0.02)); rim = [bm.verts.new((hc[0] + hr * 1.3 * math.cos(a), hc[1] + hr * 1.3 * math.sin(a), hc[2] + 0.02)) for a in np.linspace(0, 2 * math.pi, 16, endpoint=False)]
-    for a_, b_ in zip(rim, rim[1:] + rim[:1]):
-        f_ = bm.faces.new((cv, b_, a_))                       # 아래(−z)를 본다
-        for lp in f_.loops:
-            lp[uvl].uv = (0.5, 0.5)
+    bm = bmesh.new(); bm.from_mesh(neck.data); bm.verts.ensure_lookup_table(); bm.faces.ensure_lookup_table()
+    src_f = [f for f in bm.faces if all(s_v[v.index] < SLEEVE for v in f.verts)]
+    ret = bmesh.ops.duplicate(bm, geom=src_f); vmap = ret["vert_map"]
+    dups = [(v, vmap[v]) for v in {v for f in src_f for v in f.verts}]
+    top_c = Wd[s_v < 0.01].mean(0); r_col = float(np.linalg.norm((Wd[s_v < SLEEVE] - at0(s_v[s_v < SLEEVE]))[:, :2], axis=1).mean())
+    sl_src, sl_t = [], []
+    for v, nv in dups:                                          # 아래 끝(SLEEVE) = 속 목 겉 × 1.04 (두 면이 겹쳐 번쩍이지 않게), 꼭대기 = 구멍 반지름 × 0.95 · 구멍 가운데 · 구멍 높이 + 1 cm
+        t = 1 - s_v[v.index] / SLEEVE; t = t * t * (3 - 2 * t)
+        p0 = np.array(v.co); cen_s = Wd[np.abs(s_v - s_v[v.index]) < 0.01].mean(0)
+        g = 1.04 + (max(hr * 0.95 / max(r_col, 1e-6), 1.04) - 1.04) * t
+        q = cen_s + (p0 - cen_s) * np.array([g, g, 1.0])
+        q[:2] += (hc[:2] - top_c[:2]) * t; q[2] += (hc[2] + 0.01 - top_c[2]) * t
+        nv.co = q; sl_src.append((nv, v.index)); sl_t.append(t)
+    bm.verts.index_update(); sl_map = {nv.index: (src, t) for (nv, src), t in zip(sl_src, sl_t)}
     bm.to_mesh(neck.data); bm.free(); neck.data.update()
-    print("머리 밑 마개: 구멍 가운데 %s · 반지름 %.3f m × 1.3" % (hc.round(3), hr))
-else:
-    hc = np.array(rest_path()[1]); hr = 0.05
+    print("머리 밑 소매: 속 목 꼭대기 %.0f cm 겉면 %d 개를 복사 · 구멍 가운데 %s 반지름 %.3f m · 속 목 반지름 %.3f m" % (SLEEVE * 100, len(src_f), hc.round(3), hr, r_col))
 n_all = len(neck.data.vertices)
+Ws = np.array([v.co[:] for v in neck.data.vertices]); sl_poke = seen(Ws, np.arange(n_col, n_all)[::3])[0] if n_all > n_col else 0.0   # 소매가 안 뺐을 때 목 살 밖으로 나오는가
 
 # 무게: 꼭대기 3 cm 는 머리 뼈, 그 아래는 이웃 두 마디 뼈 사이를 길이로 나눔
 for vg in list(neck.vertex_groups):
@@ -249,10 +259,14 @@ Wt = np.zeros((n_all, len(names))); Wt[n_col:, 0] = 1
 t = np.clip((s_v - TOP_IN) / LINK, 0, JOINTS - 1); i0 = np.floor(t).astype(int); i1 = np.minimum(i0 + 1, JOINTS - 1); f = t - i0
 Wt[np.arange(n_col), 1 + i0] += 1 - f; Wt[np.arange(n_col), 1 + i1] += f
 top = np.where(s_v < TOP_IN)[0]; Wt[top] = 0; Wt[top, 0] = 1
+for ni, (src, t) in (sl_map if ring_head and SABOTAGE != "nocap" else {}).items():      # 소매: 위는 머리 뼈, 아래 끝은 제가 복사해 온 속 목 점과 같은 무게 — 목이 휘어 나와도 아래 끝이 속 목에 붙어 있다
+    Wt[ni] = Wt[src] * (1 - t); Wt[ni, 0] += t
 for c_, n_ in enumerate(names):
     g = neck.vertex_groups.new(name=n_); w = Wt[:, c_].round(3)
     for val in np.unique(w[w > 0]):
         g.add([int(i) for i in np.where(w == val)[0]], float(val), "REPLACE")
+bpy.ops.object.select_all(action="DESELECT"); neck.select_set(True); bpy.context.view_layer.objects.active = neck
+bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)      # 셋으로 나뉜 소매 무게는 반올림으로 합이 0.998~1.002
 neck.parent = arm; neck.matrix_parent_inverse = M.inverted()
 neck.modifiers.new("Armature", "ARMATURE").object = arm
 bpy.context.view_layer.update()
@@ -288,7 +302,7 @@ after = {o.name: eval_co(o) for o in skins}
 d0 = max(float(np.abs(after[n][:len(before[n])] - before[n]).max()) for n in before)
 lost = {o.name: faces_before[o.name] - len(o.data.polygons) for o in skins if len(o.data.polygons) < faces_before[o.name]}
 check(d0 < 1e-4 and not lost, "쉬는 자세의 살 점이 그대로 (최대 차 %.6f m < 0.0001) · 없어진 면 %s" % (d0, lost or 0))
-check(vis <= 0.015 and fit >= 0.6, "안 뺐을 때 살 밖으로 삐져나온 속 목 점 %.2f %% (≤ 1.5) · 굵기 배율 %.2f (≥ 0.6) · 찢긴 살 구멍으로 비치는 점 %.2f %% (기록만 — 판정 몫)" % (vis * 100, fit, peek * 100))
+check(vis <= 0.015 and fit >= 0.6 and sl_poke <= 0.12, "안 뺐을 때 살 밖으로 삐져나온 속 목 점 %.2f %% (≤ 1.5) · 굵기 배율 %.2f (≥ 0.6) · 머리 밑 소매 점 %.2f %% (≤ 12 — 턱 밑은 살이 원래 열려 있어 0 이 안 된다: 구멍 둘레 75 %% 값 10.5 · 85 %% 값 13.2 · 90 %% 값 15.3, 쉬는 자세 그림에서는 안 보임) · 찢긴 살 구멍으로 비치는 점 %.2f %% (기록만 — 판정 몫)" % (vis * 100, fit, sl_poke * 100, peek * 100))
 reset_pose(); Wd = eval_co(neck)[:n_col]
 c, e_side, e_back, e_up = frames(at0, s_v)
 c = c + e_side * np.interp(s_v, s_k, off_k[:, 0])[:, None] + e_back * np.interp(s_v, s_k, off_k[:, 1])[:, None]; rel = Wd - c
@@ -340,8 +354,8 @@ if SHOTS:
     sh = scene.display.shading; sh.light = "STUDIO"; sh.color_type = "TEXTURE"; sh.show_cavity = True; sh.show_backface_culling = True
     for ext in (0.0, 0.15, 0.30):
         pose(ext)
-        for nm, loc, rot in (("side", (4, -0.15, 2.15), (math.pi / 2, 0, math.pi / 2)), ("front", (0, -4, 2.15), (math.pi / 2, 0, 0)), ("back", (0, 4, 2.15), (math.pi / 2, 0, math.pi))):
-            cam.location, cam.rotation_euler = loc, rot
+        for nm, loc, rot in (("side", (4, -0.15, 2.15), (math.pi / 2, 0, math.pi / 2)), ("front", (0, -4, 2.15), (math.pi / 2, 0, 0)), ("under", (0.9, -1.6, 1.2), None)):
+            cam.location = loc; cam.rotation_euler = rot if rot else (Vector((0, 0.05, 2.2)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
             scene.render.filepath = os.path.join(SHOTS, "12_neck_after%s_%02dcm_%s.png" % (os.environ.get("TAG", ""), round(ext * 100), nm)); bpy.ops.render.render(write_still=True)
     reset_pose(); scene.render.engine = eng
     bpy.data.objects.remove(cam, do_unlink=True)
