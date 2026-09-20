@@ -4,7 +4,7 @@
 입력: Documents/MineTunnel/mesh/meshy_{m2,head1,hand1}.glb + meshy_torso1.glb (gen_meshy.py)   출력: mesh/meshy_m3.glb (m2 좌표 그대로, 그물 넷 — glTFast 는 스킨 그물 하나에 재질 둘을 못 읽는다)
 숫자는 probe 로 잰 것: 헬멧 챙 너비 m2 0.206 / head1 0.486, m2 손목 x 0.64 · 손끝 0.95, hand1 은 길이 축 y(손목 +0.70 → 발톱 끝 −0.95)
 사보타주: SABOTAGE=nohead -> "머리 그물이 몸 목 위에 얹힘" FAIL · SABOTAGE=noholes -> "몸통 피부에 상처 구멍" FAIL
-SABOTAGE=blindholes -> "속이 없는 곳은 안 뚫었다" FAIL · SABOTAGE=scales -> "몸 색 그림에 자잘한 무늬 없음" FAIL
+SABOTAGE=blindholes -> "속이 없는 곳은 안 뚫었다" FAIL · ORGAN_SAT=1 -> "장기 색이 진해졌다" FAIL · SABOTAGE=scales -> "몸 색 그림에 자잘한 무늬 없음" FAIL
 (SABOTAGE=meshynormal 은 비교용 — Meshy 가 준 비늘 노멀맵을 그대로 둔다)"""
 import bpy, os, sys, math, numpy as np
 from mathutils import Vector, Matrix
@@ -161,6 +161,15 @@ if SAB != "scales":
 if SAB != "scales":                               # 속 몸통(갈비) 그림에도 같은 자갈 무늬가 있다 (09-20 목·가슴 확대 렌더) — 덜 흐리게(1024)
     timg = next(n for n in torso.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].links[0].from_node.image
     timg.scale(1024, 1024); timg.scale(2048, 2048); timg.pack()
+# 장기 색을 진하게 (사용자 09-20): 속 몸통 그림에서 붉은 픽셀(장기·살)만 채도 1.8배 · 밝기 0.8배. 뼈(베이지)는 그대로
+ORGAN_SAT = float(os.environ.get("ORGAN_SAT", "1.8"))
+n_ = timg.size[0]; tp = np.empty(n_ * n_ * 4, np.float32); timg.pixels.foreach_get(tp); tp = tp.reshape(-1, 4)
+rgb = tp[:, :3]; red = (rgb[:, 0] > rgb[:, 1] * 1.25) & (rgb[:, 0] > rgb[:, 2] * 1.25)
+sat0 = float((rgb[red].max(1) - rgb[red].min(1)).mean())
+lum = rgb[red].mean(1, keepdims=True); rgb[red] = np.clip((lum + (rgb[red] - lum) * ORGAN_SAT) * 0.8, 0, 1)
+sat1 = float((rgb[red].max(1) - rgb[red].min(1)).mean())
+timg.pixels.foreach_set(tp.ravel()); timg.pack()
+check(red.mean() > 0.05 and sat1 > sat0 * 1.25, "장기 색이 진해졌다: 붉은 픽셀 %.0f %% · 색 차 %.3f → %.3f (≥ 1.25배)" % (100 * red.mean(), sat0, sat1))
 hf = rough(img)
 check(hf < 0.6 * hf0, "몸 색 그림의 자잘한 무늬가 죽었다: 4 픽셀 간격 밝기 차 %.4f → %.4f (< 60 %%)" % (hf0, hf))
 

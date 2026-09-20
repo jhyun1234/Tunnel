@@ -124,7 +124,8 @@ for side in ("Left", "Right"):
             setattr(b, end, Vector((iw @ np.append(p[0], 1))[:3]))
 bpy.ops.object.mode_set(mode="OBJECT")
 # ---- ④a 팔 굵기 (사용자 09-20 "팔이 너무 앙상하다"): 팔 축에서 바깥으로 ARM_THICK 배. 어깨에서 서서히, 손목에서는 손 굵기에 맞춰 끝낸다(손목 턱 없애기)
-ARM_THICK = float(os.environ.get("ARM_THICK", "1.3"))
+ARM_THICK = float(os.environ.get("ARM_THICK", "2.6"))   # 1.3 → 사용자 09-20 "기존보다 2배 더" = 2.6
+WRIST_THICK = float(os.environ.get("WRIST_THICK", "1.7"))  # 손목까지 원래 굵기로 줄이면 2.6배 팔에서 너무 급하게 가늘어진다
 ss = lambda x: np.clip(x, 0, 1) ** 2 * (3 - 2 * np.clip(x, 0, 1))
 girth = {}
 for side in ("Left", "Right"):
@@ -142,18 +143,18 @@ for side in ("Left", "Right"):
             rf = radius(rad[(t_ > 0.95) & (t_ < 1.0)])
         if want[o][0] == "Miner_Hands" and ((t_ > 1.0) & (t_ < 1.0 + 0.03 / L)).sum() > 10:
             rh = radius(rad[(t_ > 1.0) & (t_ < 1.0 + 0.03 / L)])
-    g_end = 1.0                                  # 팔 끝은 원래 굵기로 (손목은 가늘어도 된다) — 손 쪽 손목을 거기에 맞춰 키운다
+    g_end = WRIST_THICK                          # 팔 끝 굵기 — 손 쪽 손목을 거기에 맞춰 키운다
     for o in parts:
         P = Vs[o]; m = P[:, 0] * sx > abs(S[0]); t_, rad = axial(P[m])
         if want[o][0] == "Miner_Hands":
             d = (t_ - 1.0) * L                   # 손목에서 손끝 쪽으로 간 거리 (m)
-            g = 1 + (rf / rh * 1.04 - 1) * (1 - ss(d / 0.10))      # 손목 10 cm 에 걸쳐 팔 끝 굵기(조금 더 굵게 — 팔 끝이 손 속에 묻힌다)에서 제 굵기로
+            g = 1 + (rf * g_end / rh * 1.04 - 1) * (1 - ss(d / 0.14))      # 손목 10 cm 에 걸쳐 팔 끝 굵기(조금 더 굵게 — 팔 끝이 손 속에 묻힌다)에서 제 굵기로
         else:
-            g = 1 + (ARM_THICK - 1) * ss(t_ / 0.12)
+            g = 1 + (ARM_THICK - 1) * ss(t_ / 0.22)       # 어깨에서 서서히 (굵기가 커서 0.12 로는 어깨에 턱이 진다)
             g = g + (g_end - g) * ss((t_ - 0.75) / 0.25)
         P[m] += rad * (g - 1)[:, None]
     girth[side] = (rf, rh, g_end)
-print("팔 굵기 %.2f배 · 손목 단면 반지름 팔 %.3f · 손 %.3f m → 손 손목을 %.2f배" % (ARM_THICK, girth["Left"][0], girth["Left"][1], girth["Left"][0] / girth["Left"][1] * 1.04))
+print("팔 굵기 %.2f배 · 손목 단면 반지름 팔 %.3f · 손 %.3f m → 손 손목을 %.2f배" % (ARM_THICK, girth["Left"][0], girth["Left"][1], girth["Left"][0] * WRIST_THICK / girth["Left"][1] * 1.04))
 for o in parts:
     put(o, Vs[o])
 # 옛 몸 속 긴 목 관(Miner_Neck)은 옛 목 굵기에 맞춘 것 — 새 목은 더 가늘어 관이 목 밖으로 삐져나왔다(사용자 09-20 캡처의 허연 원통). 축 둘레로 0.15배(0.55 로는 턱 밑에 줄무늬 판으로 보였다 — 새 머리의 목 살이 목 늘이기를 스스로 따라간다)
@@ -179,7 +180,7 @@ tip_hang = wrist_hang - (hv[:, 0].max() - W("LeftHand").x)
 print("ARM_K %.3f  팔 %.3f → %.3f m  늘어뜨리면 손목 %.2f m (무릎 %.2f) · 발톱 끝 %.2f m (발목 %.2f)" % (K, up + fo, up2 + fo2, wrist_hang, knee_z, tip_hang, W("LeftFoot").z))
 check(abs(wrist_hang - knee_z) <= 0.03, "손목이 무릎 높이: 늘어뜨린 손목 %.3f m = 무릎 %.3f ± 0.03" % (wrist_hang, knee_z))
 check(W("LeftFoot").z <= tip_hang <= knee_z, "발톱 끝이 정강이 안: %.3f m (발목 %.3f ~ 무릎 %.3f)" % (tip_hang, W("LeftFoot").z, knee_z))
-check(ARM_THICK >= 1.15, "팔이 굵어졌다: 위팔·전완 %.2f배 (≥ 1.15), 손목은 원래 굵기 · 손 손목을 거기에 맞춤" % ARM_THICK)
+check(ARM_THICK >= 2.0, "팔이 굵어졌다: 위팔·전완 %.2f배 (≥ 2.0) · 손목 %.2f배 · 손 손목을 거기에 맞춤" % (ARM_THICK, WRIST_THICK))
 check(abs(hv[:, 0].min() - W("LeftHand").x) <= 0.08, "손 살이 손 뼈를 따라감: 손 살 시작 x %.3f · 손목 뼈 x %.3f (≤ 0.08)" % (hv[:, 0].min(), W("LeftHand").x))
 
 # ---- ④b 늘린 뒤의 겉에 잔금·잔결을 입히고 어둡게 (몸 그물만 굽고, 나머지는 색만 곱한다)
@@ -207,22 +208,19 @@ for o in parts:
             nt.links.new(base_link.from_socket, mix.inputs[6]); mix.inputs[7].default_value = (DARK, DARK, DARK, 1); nt.links.new(mix.outputs[2], bs.inputs["Base Color"])
         continue
     tc = nt.nodes.new("ShaderNodeTexCoord")
-    vor = nt.nodes.new("ShaderNodeTexVoronoi"); vor.feature = "DISTANCE_TO_EDGE"; vor.inputs["Scale"].default_value = 38.0      # 잔금 칸 2.6 cm 쯤 (모델 m)
-    noi = nt.nodes.new("ShaderNodeTexNoise"); noi.inputs["Scale"].default_value = 260.0; noi.inputs["Detail"].default_value = 4.0
-    warp = nt.nodes.new("ShaderNodeTexNoise"); warp.inputs["Scale"].default_value = 9.0
-    wmix = nt.nodes.new("ShaderNodeMix"); wmix.data_type = "VECTOR"; wmix.inputs[0].default_value = 0.06
-    nt.links.new(tc.outputs["Object"], wmix.inputs[4]); nt.links.new(warp.outputs["Color"], wmix.inputs[5]); nt.links.new(tc.outputs["Object"], warp.inputs["Vector"])
-    nt.links.new(wmix.outputs[1], vor.inputs["Vector"]); nt.links.new(tc.outputs["Object"], noi.inputs["Vector"])
-    ramp = nt.nodes.new("ShaderNodeMapRange"); ramp.inputs[1].default_value = 0.0; ramp.inputs[2].default_value = 0.035; ramp.clamp = True   # 0 = 금 속, 1 = 칸 안
-    nt.links.new(vor.outputs["Distance"], ramp.inputs[0])
-    vor2 = nt.nodes.new("ShaderNodeTexVoronoi"); vor2.feature = "DISTANCE_TO_EDGE"; vor2.inputs["Scale"].default_value = 125.0   # 잔금 속의 더 잔 금 (8 mm 칸) — 사용자 09-20 "팔의 질감은 아직 부족"
-    nt.links.new(wmix.outputs[1], vor2.inputs["Vector"])
-    ramp2 = nt.nodes.new("ShaderNodeMapRange"); ramp2.inputs[1].default_value = 0.0; ramp2.inputs[2].default_value = 0.05; ramp2.clamp = True; nt.links.new(vor2.outputs["Distance"], ramp2.inputs[0])
-    both = nt.nodes.new("ShaderNodeMath"); both.operation = "MULTIPLY"; nt.links.new(ramp.outputs[0], both.inputs[0])
-    r2s = nt.nodes.new("ShaderNodeMapRange"); r2s.inputs[3].default_value = 0.6; r2s.inputs[4].default_value = 1.0; nt.links.new(ramp2.outputs[0], r2s.inputs[0]); nt.links.new(r2s.outputs[0], both.inputs[1])
-    blotch = nt.nodes.new("ShaderNodeTexNoise"); blotch.inputs["Scale"].default_value = 7.0; blotch.inputs["Detail"].default_value = 3.0; nt.links.new(tc.outputs["Object"], blotch.inputs["Vector"])
+    # 09-20 3차 판정 "아직 비늘 같다": 보로노이 칸(닫힌 다각형)이 비늘로 읽힌다 → 버림. 금 = 잡음의 등고선(|n − 0.5| 가 작은 곳) — 길고 구불구불하고 드물다. 두 크기
+    def crack(scale, width):
+        nz = nt.nodes.new("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = scale; nz.inputs["Detail"].default_value = 2.0; nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+        sub = nt.nodes.new("ShaderNodeMath"); sub.operation = "SUBTRACT"; sub.inputs[1].default_value = 0.5; nt.links.new(nz.outputs["Fac"], sub.inputs[0])
+        ab = nt.nodes.new("ShaderNodeMath"); ab.operation = "ABSOLUTE"; nt.links.new(sub.outputs[0], ab.inputs[0])
+        mr = nt.nodes.new("ShaderNodeMapRange"); mr.inputs[1].default_value = 0.0; mr.inputs[2].default_value = width; mr.clamp = True; nt.links.new(ab.outputs[0], mr.inputs[0])
+        return mr                                 # 0 = 금 속, 1 = 맨살
+    ramp, ramp2 = crack(7.0, 0.012), crack(19.0, 0.010)
+    both = nt.nodes.new("ShaderNodeMath"); both.operation = "MULTIPLY"; nt.links.new(ramp.outputs[0], both.inputs[0]); nt.links.new(ramp2.outputs[0], both.inputs[1])
+    noi = nt.nodes.new("ShaderNodeTexNoise"); noi.inputs["Scale"].default_value = 520.0; noi.inputs["Detail"].default_value = 3.0; nt.links.new(tc.outputs["Object"], noi.inputs["Vector"])
+    blotch = nt.nodes.new("ShaderNodeTexNoise"); blotch.inputs["Scale"].default_value = 5.0; blotch.inputs["Detail"].default_value = 3.0; nt.links.new(tc.outputs["Object"], blotch.inputs["Vector"])
     h = nt.nodes.new("ShaderNodeMath"); h.operation = "ADD"; nt.links.new(both.outputs[0], h.inputs[0])
-    hn = nt.nodes.new("ShaderNodeMath"); hn.operation = "MULTIPLY"; hn.inputs[1].default_value = 0.35; nt.links.new(noi.outputs["Fac"], hn.inputs[0]); nt.links.new(hn.outputs[0], h.inputs[1])
+    hn = nt.nodes.new("ShaderNodeMath"); hn.operation = "MULTIPLY"; hn.inputs[1].default_value = 0.12; nt.links.new(noi.outputs["Fac"], hn.inputs[0]); nt.links.new(hn.outputs[0], h.inputs[1])
     bump = nt.nodes.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = 1.0 if DETAIL else 0.0; bump.inputs["Distance"].default_value = 0.004
     nt.links.new(h.outputs[0], bump.inputs["Height"])
     nmap = next((n for n in nt.nodes if n.type == "NORMAL_MAP"), None)
