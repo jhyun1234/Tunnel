@@ -24,6 +24,7 @@ public class Stalker : MonoBehaviour
     // 실행 중 조정·검사용 (씬에 안 굽는다)
     [System.NonSerialized] public float earMul = Tuning.STALKER_EAR_MUL;
     [System.NonSerialized] public float eyeM = Tuning.STALKER_EYE_M;
+    [System.NonSerialized] public float lightM = Tuning.STALKER_LIGHT_M;   // 검사 사진: 램프를 켜고 찍으려고 잠시 0
     [System.NonSerialized] public float chaseSpeed = Tuning.STALKER_SPEED_CHASE;
     [System.NonSerialized] public float loseS = Tuning.STALKER_LOSE_S;
     [System.NonSerialized] public float hp = Tuning.STALKER_HP;
@@ -41,6 +42,19 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public int spotsVisited;  // 이번 수색에서 들여다본 곳 수
     [System.NonSerialized] public int catches, restarts;
     [System.NonSerialized] public Vector3 noisePos, lastSeen;
+    // 3D-④ MB 수색 더듬기 (영상 B4 통과 09-20): 첫 수색 자리(놓친 그 자리)에서만 STALKER_GROPE_S 동안 웅크려 가까운 면을 짚는다 — 몸짓은 StalkerAnim.
+    // "들었나?": 더듬는 중 소리를 들으면(또는 heardChance 로 한 번) 몸이 굳고 머리만 그쪽을 딱 본 채 STALKER_HEARD_S — 그동안 자리 시간은 안 흐른다. 소리였으면 그 뒤에 조사하러 간다
+    public bool Groping => state == State.Search && groping;
+    public bool Heard => Groping && heardLeft > 0f;
+    public Vector3 HeardPos { get; private set; }
+    [System.NonSerialized] public bool grope = true;                       // 사보타주 nogrope
+    [System.NonSerialized] public float heardChance = Tuning.STALKER_HEARD_CHANCE;
+    [System.NonSerialized] public bool heardPause = true;                  // 사보타주 nohear: 더듬다 소리를 들어도 안 굳고 바로 간다
+    [System.NonSerialized] public float foundM = Tuning.STALKER_FOUND_M;   // 사보타주 handfind: 손 닿는 데(2.6 m)까지 찾는다
+    [System.NonSerialized] public int heardCount;                          // 검사
+    bool groping, heardPending;
+    float heardLeft, heardAt;
+    Vector3 heardGo;
     public bool LightChase => lightChase;          // 조사가 빛(플레이어 자리)을 따라가는 중 — 머리가 플레이어를 본다 (StalkerAnim)
     [System.NonSerialized] public Vector3 retreatSpot, retreatFrom, retreatFwd;   // 철수 자리, 그때 플레이어 자리·방향 (검사용)
     [System.NonSerialized] public bool retreatInCone;
@@ -53,6 +67,7 @@ public class Stalker : MonoBehaviour
     float pause, dwell, vy, stuck, alertLeft, unseen, catchT, stunLeft, investigateSpeed, retreatSide, noiseTime = -99f;
     readonly List<Vector3> spots = new List<Vector3>();
     readonly System.Random rng = new System.Random(Tuning.MAP_SEED + 200);
+    readonly System.Random heardRng = new System.Random(Tuning.MAP_SEED + 201);   // "들었나?"는 제 난수로 — rng 를 같이 쓰면 수색 자리 차례가 바뀐다 (09-20: 옛 수색 검사가 램프에 들켜 빠졌다)
     static Texture2D blackTex;
     const int RayMask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));   // Ignore Raycast(자갈·광석)·곡괭이 뷰모델은 시선을 안 막는다
 
@@ -84,6 +99,12 @@ public class Stalker : MonoBehaviour
         Vector3 to = pos - transform.position;
         to.y = 0f;
         Vector3 t = hits >= 2 ? pos : transform.position + Vector3.ClampMagnitude(to, Tuning.STALKER_HEAR_SOFT_M);
+        if (Groping && heardPause)                 // 더듬다 들었다: 바로 안 간다 — 굳어서 그쪽을 본 뒤에
+        {
+            if (heardLeft <= 0f) { heardLeft = Tuning.STALKER_HEARD_S; heardCount++; }
+            HeardPos = pos; heardGo = t; heardPending = true;
+            return;
+        }
         StartInvestigate(t, Tuning.STALKER_SPEED_INVESTIGATE, false);
     }
 
@@ -148,9 +169,21 @@ public class Stalker : MonoBehaviour
                     BeginSearch();
                 break;
             case State.Search:
+                if (Heard)
+                {
+                    heardLeft -= dt;
+                    if (heardLeft <= 0f && heardPending) { heardPending = false; StartInvestigate(heardGo, Tuning.STALKER_SPEED_INVESTIGATE, false); }
+                    break;
+                }
+                if (groping && heardAt > 0f && dwell <= heardAt)           // 조용히 있어도 가끔: 내 쪽(±25° 빗나가게)을 본다
+                {
+                    heardAt = 0f; heardLeft = Tuning.STALKER_HEARD_S; heardCount++;
+                    HeardPos = transform.position + Quaternion.Euler(0f, ((float)heardRng.NextDouble() * 2f - 1f) * Tuning.STALKER_HEARD_MISS_DEG, 0f) * (player.position - transform.position);
+                    break;
+                }
                 if (!hasTarget)
                 {
-                    if (dwell > 0f) dwell -= dt;
+                    if (dwell > 0f) { dwell -= dt; if (dwell <= 0f) groping = false; }
                     else if (spots.Count > 0)
                     {
                         SetTarget(spots[0]);
@@ -295,9 +328,9 @@ public class Stalker : MonoBehaviour
         bool lit = lamp.lampOn;
         if (lit && d <= eyeM && Vector3.Angle(Flat3(transform.forward), Flat3(player.position - transform.position)) <= Tuning.STALKER_EYE_DEG && Clear())
             sense = "eye";
-        else if (state == State.Search && d <= Tuning.STALKER_FOUND_M)
+        else if (state == State.Search && d <= foundM)
             sense = "found";
-        else if (lit && d <= Tuning.STALKER_LIGHT_M && Clear())
+        else if (lit && d <= lightM && Clear())
             sense = "light";
 
         if (state == State.Alert || state == State.Chase)
@@ -343,7 +376,10 @@ public class Stalker : MonoBehaviour
     {
         hasTarget = false;
         lightChase = false;
-        dwell = Tuning.STALKER_DWELL_S;
+        groping = grope;                           // 첫 곳(놓친 그 자리)에서만 더듬는다 — 사용자 결정 09-20
+        dwell = groping ? Tuning.STALKER_GROPE_S : Tuning.STALKER_DWELL_S;
+        heardLeft = 0f; heardPending = false;
+        heardAt = groping && heardRng.NextDouble() < heardChance ? dwell * Mathf.Lerp(0.35f, 0.6f, (float)heardRng.NextDouble()) : 0f;
         spotsVisited = 1;                          // 도착 자리가 첫 곳
         spots.Clear();
         int n = rng.Next(Tuning.STALKER_SPOTS_MIN, Tuning.STALKER_SPOTS_MAX + 1) - 1;

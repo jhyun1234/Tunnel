@@ -208,6 +208,14 @@ public class M1Check : MonoBehaviour
             sanim.driveTorso = false;
         if (sabotage == "noimpact" && sanim != null)     // 발을 디뎌도 화면이 안 흔들린다
             sanim.stomp = false;
+        if (sabotage == "nogrope")                       // 3D-④ MB 전 상태: 수색 첫 자리에서도 서서 둘러보기만
+            stalker.grope = false;
+        if (sabotage == "clawhands" && sanim != null)    // 짚을 때 손가락을 안 편다 (영상 B2 판정 "전부 펴졌으면" 전)
+            sanim.flatHands = false;
+        if (sabotage == "nohear")                        // 더듬다 소리를 들어도 안 굳고 바로 간다 ("들었나?" 없음)
+            stalker.heardPause = false;
+        if (sabotage == "handfind")                      // 손 닿는 데까지 찾는다 — 사용자 결정(09-20) "손은 2.5 m, 찾는 규칙은 2 m"를 어긴 상태
+            stalker.foundM = 2.6f;
         if (sabotage == "stiffspine" && sanim != null)   // 배회가 허리가 옆으로 안 휘는 walk_knuckle
             sanim.stiffSpine = true;
         if (sabotage == "straightfingers" && sanim != null)   // 3D-③b M1b 전 상태: 손가락 곧음
@@ -249,6 +257,8 @@ public class M1Check : MonoBehaviour
             yield return RetreatStage(cc);
         if (only == "" || only == "anim")
             yield return AnimStage(cc);
+        if (only == "" || only == "anim" || only == "grope")
+            yield return GropeStage(cc);
         if (only == "" || only == "throw")
             yield return ThrowStage(cc);
         if (only == "" || only == "pick")
@@ -1195,6 +1205,139 @@ public class M1Check : MonoBehaviour
     }
 
     // 3D-③: 행동마다 맞는 동작 · 발 미끄러짐 · 벽타기 자세 · 손이 바닥·벽을 안 뚫음 · 포효 구간 · fps. 연속 사진 21_anim_*_sheet (4×3, 한 칸 480×270)
+    // 3D-④ MB 수색 더듬기 (영상 B4 통과 09-20). 램프 끈 나는 갱도 입구 쪽 멀리 — 괴물 앞에서 소리 둘 → 조사 → 그 자리에서 더듬기
+    IEnumerator GropeStage(CharacterController cc)
+    {
+        var st = stalker;
+        var model = st.transform.Find("Body/Model");
+        var anim = model.GetComponent<Animator>();
+        var sa = model.GetComponent<StalkerAnim>();
+        var bones = model.GetComponentsInChildren<Transform>().Where(b => b.name.StartsWith("mixamorig:")).ToArray();
+        Transform Bone(string n) => bones.FirstOrDefault(b => b.name == "mixamorig:" + n);
+        var feet = new[] { Bone("LeftFoot"), Bone("RightFoot") };
+        var body = new[] { Bone("Hips"), Bone("LeftHand"), Bone("RightHand"), Bone("LeftToeBase"), Bone("RightToeBase"), Bone("Spine2") };
+        if (sa == null || feet.Contains(null) || body.Contains(null)) { Check("anim_grope_bones_found", false, "model bones missing"); yield break; }
+        float chance0 = st.heardChance;
+        IEnumerator ToGrope(Vector3 S, float chance)
+        {
+            lamp.lampOn = false;
+            player.frozen = false;
+            Teleport(cc, new Vector3(0f, 0.1f, 3f), 0f);                 // 수색 자리(조사한 곳 둘레 ±3칸)가 내 2 m 안에 떨어지지 않게 멀리 — 14 m 였을 땐 전체 실행에서 나를 찾아 버렸다
+            st.Teleport(S, 180f);
+            st.hp = Tuning.STALKER_HP;
+            st.heardChance = chance;
+            yield return new WaitForSeconds(0.3f);
+            Vector3 N = S - Vector3.forward * 4f;
+            NoiseBus.Make(N, 30f, "test", this);
+            yield return new WaitForSeconds(0.2f);
+            NoiseBus.Make(N, 30f, "test", this);
+            float w = 0f;
+            while (st.state != Stalker.State.Search && w < 8f) { w += Time.deltaTime; yield return null; }
+        }
+
+        // ① 첫 자리에서만 더듬는다 · 손이 펴져 면에 닿는다 · 멀리 뻗는다 · 발은 제자리
+        yield return ToGrope(new Vector3(0f, 0.1f, 34f), 0f);
+        bool gropedFirst = st.Groping;
+        float gropeS = 0f, t = 0f;
+        int rest = 0, flat = 0, clipOk = 0, frames = 0, laterGrope = 0, laterFrames = 0;
+        float straight = 1f, low = 99f, reach = 0f, footMove = 0f;
+        var used = new bool[2];
+        Vector3[] foot0 = null;
+        int pats0 = sa.PatCount;
+        while (st.state == Stalker.State.Search && t < 25f)
+        {
+            yield return new WaitForEndOfFrame();
+            t += Time.deltaTime;
+            if (!st.Groping) { if (st.spotsVisited > 1) { laterFrames++; if (sa.Current == "up_grope" && sa.GropeW > 0.99f) laterGrope++; } continue; }
+            gropeS += Time.deltaTime;
+            if (sa.GropeW < 0.99f) continue;
+            frames++;
+            if (sa.Current == "up_grope") clipOk++;
+            if (foot0 == null) foot0 = feet.Select(f => f.position).ToArray();
+            for (int i = 0; i < 2; i++) footMove = Mathf.Max(footMove, (feet[i].position - foot0[i]).magnitude);
+            for (int h = 0; h < 2; h++)
+            {
+                if (!sa.PatResting[h]) continue;
+                rest++; used[h] = true;
+                if (sa.PatTipGap[h] <= 0.09f) flat++;
+                straight = Mathf.Min(straight, sa.PatStraight[h]); low = Mathf.Min(low, sa.PatLow[h]); reach = Mathf.Max(reach, sa.PatReach[h]);
+            }
+        }
+        int pats = sa.PatCount - pats0;
+        Check("anim_grope_first_spot_only", gropedFirst && clipOk >= 0.95f * frames && frames >= 60 && Mathf.Abs(gropeS - Tuning.STALKER_GROPE_S) <= 0.5f && laterFrames >= 20 && laterGrope == 0,
+            $"groping on arrival {gropedFirst} · up_grope in {clipOk}/{frames} crouched frames · groped {gropeS:F1} s (want {Tuning.STALKER_GROPE_S} ± 0.5) · at later spots {laterGrope}/{laterFrames} frames crouched (want 0) · left Search after {t:F1} s as {st.state}, sense {st.sense}, last heard {st.lastHeard}, {st.DistToPlayer:F1} m from me");
+        Check("anim_grope_hands_plant_flat", rest >= 60 && flat >= 0.85f * rest && straight >= 0.93f && low >= -0.03f && pats >= 3 && used[0] && used[1],
+            $"{rest} planted hand-frames, all four fingertips within 9 cm of the surface in {(rest > 0 ? 100f * flat / rest : 0f):F0} % (min 85) · fingers straight min {straight:F3} (min 0.93, claw ≈ 0.80) · deepest under surface {Mathf.Min(low, 0f):F3} m (max 0.03) · {pats} pats, left {used[0]} right {used[1]}, on upright surfaces {sa.PatOnWall}");
+        Check("anim_grope_reaches_far", reach >= 2.2f && reach <= 2.9f, $"planted fingertips reach {reach:F2} m ahead of the body (want 2.2–2.9; rule to be found stays {Tuning.STALKER_FOUND_M} m)");
+        Check("anim_grope_feet_stay", frames >= 60 && footMove <= 0.03f, $"ankles move at most {footMove * 100f:F1} cm while the hips shift toward the hands (max 3)");
+
+        // ② "들었나?": 더듬는 중 옆에서 소리 → 몸은 굳고 머리만 그쪽을 딱 → STALKER_HEARD_S 뒤에 조사하러 간다
+        yield return ToGrope(new Vector3(0f, 0.1f, 34f), 0f);
+        t = 0f;
+        while (sa.GropeW < 0.99f && t < 3f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(1.0f);
+        Vector3 H = st.transform.position + st.transform.right * 4f + st.transform.forward * 1f;
+        NoiseBus.Make(H, 30f, "test", this);
+        yield return null;
+        bool heard = st.Heard;
+        float heldS = 0f, move = 0f, faceAt = -1f, speedMax = 0f;
+        var prev = body.Select(b => model.InverseTransformPoint(b.position)).ToArray();
+        Transform headB = Bone("Head");
+        while (st.Heard && heldS < 5f)
+        {
+            yield return new WaitForEndOfFrame();
+            if (!st.Heard) break;                                       // 이 프레임에 풀렸다 — 풀린 뒤의 움직임을 재면 안 된다
+            heldS += Time.deltaTime;
+            if (heldS > 0.25f) speedMax = Mathf.Max(speedMax, anim.speed);    // 첫 0.25 s 는 뺀다: 소리가 난 프레임은 StalkerAnim.Update 가 이미 지나갔고, 머리를 딱 돌리는 동안 상체가 조금 딸려 간다
+            for (int i = 0; i < body.Length; i++) { Vector3 q = model.InverseTransformPoint(body[i].position); if (heldS > 0.25f) move = Mathf.Max(move, (q - prev[i]).magnitude); prev[i] = q; }
+            float err = Vector3.Angle(Flat3(sa.FaceDir), Flat3(H - headB.position));
+            if (faceAt < 0f && err <= 15f) faceAt = heldS;
+        }
+        yield return null;
+        Check("anim_heard_freezes_and_looks", heard && Mathf.Abs(heldS - Tuning.STALKER_HEARD_S) <= 0.25f && move <= 0.003f && speedMax == 0f && faceAt >= 0f && faceAt <= 0.35f && st.state == Stalker.State.Investigate,
+            $"froze on noise {heard} for {heldS:F2} s (want {Tuning.STALKER_HEARD_S} ± 0.25) · hips/hands/toes/chest move at most {move * 1000f:F1} mm per frame (max 3) · playback {speedMax:F1} (want 0) · face on the noise after {faceAt:F2} s (max 0.35, -1 = never) · then {st.state} (want Investigate)");
+
+        // ③ 조용히 있어도 가끔 (heardChance 1 로): 굳었다가 다시 더듬는다
+        int h0 = st.heardCount;
+        yield return ToGrope(new Vector3(0f, 0.1f, 34f), 1f);
+        t = 0f;
+        while (!st.Heard && st.state == Stalker.State.Search && t < 8f) { t += Time.deltaTime; yield return null; }
+        bool rnd = st.Heard;
+        while (st.Heard) yield return null;
+        yield return new WaitForSeconds(0.3f);
+        Check("anim_heard_sometimes_without_noise", rnd && st.heardCount == h0 + 1 && st.Groping, $"froze without any noise {rnd} (count +{st.heardCount - h0}) · afterwards still groping {st.Groping} ({st.state})");
+
+        // ④ 찾는 규칙은 2 m 그대로 — 손끝이 닿는 2.4 m 에 있어도 안 들키고, 1.9 m 면 들킨다
+        yield return ToGrope(new Vector3(0f, 0.1f, 34f), 0f);
+        yield return new WaitForSeconds(1.0f);
+        Teleport(cc, st.transform.position + st.transform.right * 2.4f, 0f);
+        player.frozen = true;
+        yield return new WaitForSeconds(1.5f);
+        var at24 = st.state;
+        Teleport(cc, st.transform.position + st.transform.right * 1.9f, 0f);
+        yield return new WaitForSeconds(0.5f);
+        var at19 = st.state;
+        Check("search_found_rule_still_2m", at24 == Stalker.State.Search && at19 != Stalker.State.Search && at19 != Stalker.State.Wander,
+            $"lamp off, 2.4 m beside the groping creature for 1.5 s: {at24} (want Search) · moved to 1.9 m: {at19} (want Alert/Chase)");
+        // ⑤ 사람이 볼 그림: 4 m 앞에서 램프를 켜고(눈·빛 감각은 잠시 0 — 게임에선 이러면 들킨다) 0.4 s 간격 12장
+        yield return ToGrope(new Vector3(0f, 0.1f, 34f), 0f);
+        st.eyeM = 0f; st.lightM = 0f;
+        Vector3 camAt = st.transform.position + st.transform.forward * 4f + st.transform.right * 1.2f, toIt = st.transform.position + st.transform.forward * 1f - camAt;
+        Teleport(cc, camAt, Mathf.Atan2(toIt.x, toIt.z) * Mathf.Rad2Deg);
+        player.frozen = true;
+        lamp.lampOn = true;
+        yield return new WaitForSeconds(0.8f);
+        yield return Sheet("22_grope_sheet", 12, i => Wait(0.4f));
+        lamp.lampOn = false;
+        st.eyeM = Tuning.STALKER_EYE_M; st.lightM = Tuning.STALKER_LIGHT_M;
+        player.frozen = false;
+        st.heardChance = chance0;
+        st.Teleport(new Vector3(0f, 0.1f, 38f), 180f);
+        Teleport(cc, new Vector3(0f, 0.1f, 4f), 0f);
+        t = 0f;
+        while (st.state != Stalker.State.Wander && t < 10f) { t += Time.deltaTime; yield return null; }   // 다음 구간은 배회에서 시작한다
+    }
+
     IEnumerator AnimStage(CharacterController cc)
     {
         var st = stalker;

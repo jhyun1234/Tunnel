@@ -314,7 +314,7 @@ public static class Tuning
     public const float STALKER_CLIP_SPEED_GLIDE_FAST = 5.0f / 1.5f;    // glide_fast: 조사 5.0 · 철수 4.0(배수 0.8)
     public const float STALKER_CLIP_SPEED_GLIDE_CHASE = 6.5f / 1.5f;   // glide_chase: 추격 6.5
     public const float STALKER_ANIM_CHASE_ABOVE = 5.75f;    // m/s, 이보다 빠르면 glide_chase (조사 5.0 과 추격 6.5 의 가운데)
-    public const int STALKER_CLIP_COUNT = 23;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋 + up 넷). BuildM1·검사가 대조한다
+    public const int STALKER_CLIP_COUNT = 24;               // GLB 동작 수 (14 + walk_knuckle + run_knuckle + glide 셋 + up 넷). BuildM1·검사가 대조한다
     public const int STALKER_GAIT_COUNT = 6;                // 걸음 안 A/B/C/D/E/F (U 키)
     // 턱 (3D-③b M1c, 제안서 docs/제안서_3D3b_M1c_턱_뼈.md, 승인 09-19). 각도는 제안값 — 판정 때 DevHud H/J 로 WIDE 를 찾는다.
     // 레퍼런스 공통점: 평소 조금 벌어져 늘어짐 + 숨 / 덮치는 순간 사람보다 크게(사람 최대 32~39°) 확 / 추격 중 벌어짐
@@ -377,6 +377,30 @@ public static class Tuning
     public const float STALKER_UP_TORSO_SHARE = 0.45f;      // 상체가 머리 각도의 이만큼 따라 돈다
     public const float STALKER_UP_TORSO_MAX = 25f;          // 도 (영상에서 본 가장 큰 값 55 × 0.45)
     public const float STALKER_UP_TORSO_FOLLOW = 2.2f;      // 1/s — 0.5 s 쯤 늦게 (영상: 프레임마다 남은 차이의 7 %)
+    // 3D-④ MB 수색 더듬기 (영상 B4 통과 09-20, blender/anim/preview_upright.py 의 값 — 길이는 게임 m = 모델 m × 1.5). Unity 전용
+    public const float STALKER_GROPE_S = 6.0f;              // s, 첫 수색 자리에서 웅크려 짚는 시간 (다른 자리는 STALKER_DWELL_S 2.0 그대로 — 사용자 결정 09-20)
+    public const float STALKER_HEARD_S = 2.0f;              // s, "들었나?" 몸이 굳고 머리만 돌아본 채 멈추는 시간 (영상 2.0)
+    public const float STALKER_HEARD_CHANCE = 0.34f;        // 소리가 없어도 더듬는 자리 셋 중 하나꼴로 한 번 (사용자 결정 09-20: 소음 + 가끔 무작위)
+    public const float STALKER_HEARD_MISS_DEG = 25f;        // 도, 무작위 "들었나?"가 나를 빗나가 보는 폭
+    public const float STALKER_HEARD_TILT_DEG = 18f;        // 도, 돌아볼 때 갸웃
+    public const float STALKER_GROPE_FADE_S = 0.6f;         // s, 웅크리는·일어서는 데 걸리는 시간 (클립 섞기)
+    public const float STALKER_GROPE_NECK_M = 0.25f;        // 모델 m, 더듬는 동안 내민 목 · 1.0 s 에 걸쳐
+    public const float STALKER_GROPE_NECK_S = 1.0f;
+    public const float STALKER_GROPE_LOOK_DPS = 75f;        // 도/s, 머리가 옮기는 손을 따라가는 빠르기 (딱 돌리는 것과 대비되게 느리게)
+    public const float STALKER_GROPE_NEAR_M = 0.85f;        // m, 짚는 자리: 몸 앞 이만큼 ~
+    public const float STALKER_GROPE_FAR_M = 1.95f;         // m, ~ 이만큼 (손끝은 손 길이 0.65 만큼 더 나가 2.5 m 쯤 — 찾는 거리 2 m 는 그대로, 사용자 결정 09-20)
+    public const float STALKER_GROPE_SIDE_M = 1.0f;         // m, 제 쪽 옆으로
+    public const float STALKER_GROPE_MOVE_MIN_S = 0.45f;    // s, 손을 들어서 옮기는 시간
+    public const float STALKER_GROPE_MOVE_MAX_S = 0.8f;
+    public const float STALKER_GROPE_REST_MIN_S = 0.35f;    // s, 짚고 문지르는 시간
+    public const float STALKER_GROPE_REST_MAX_S = 0.9f;
+    public const float STALKER_GROPE_LIFT_M = 0.26f;        // m, 옮길 때 드는 높이
+    public const float STALKER_GROPE_RUB_M = 0.18f;         // m, 짚은 채 문지르는 거리 (최대)
+    public const float STALKER_GROPE_WRIST_M = 0.05f;       // m, 손목 뼈가 면에서 뜬 높이 (손 두께)
+    public const float STALKER_GROPE_ARM_USE = 0.94f;       // 팔 길이의 이만큼까지만 편다 — 다 펴면 뻣뻣하다
+    public const float STALKER_GROPE_HIP_SHIFT_M = 0.65f;   // m, 두 손 가운데 쪽으로 엉덩이가 실리는 한도 (발은 제자리 — 다리 IK)
+    public const float STALKER_GROPE_ROLL_DEG = 16f;        // 도, 더 멀리 뻗는 쪽 어깨가 내려간다
+    public const float STALKER_GROPE_WALL_CHANCE = 0.35f;   // 짚을 자리를 고를 때 옆·앞의 세운 면(벽·갱목)을 먼저 찾아볼 몫
     public const float STALKER_UP_TOE_UP_M = 0.13f;         // 모델 m, 발끝이 이보다 높았다 낮아지는 순간 = 발 디딤 (bake_upright.py 와 같은 값)
     public const float STALKER_STOMP_WALK_M = 0.03f;        // m, 걷는 발 디딤에 화면이 눌리는 크기 (3.5 m 안에서 가장 셈). 곡괭이 타격이 0.02
     public const float STALKER_STOMP_RUN_M = 0.06f;
