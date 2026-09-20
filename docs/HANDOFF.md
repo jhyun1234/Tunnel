@@ -13,6 +13,13 @@
 - 남은 것(판정 뒤): ① 살 밝기(탄 픽셀) ② 갱목·못·가죽끈을 새 몸 겉에 다시 ③ 눈 발광(새 그림에 없음) ④ 네 발 걸음 5개에서 손 살이 바닥 아래 9.2 cm · `up_grope` 두 손 앞 0.035 m — 새 팔·발톱 길이에 맞춰 다시 ⑤ MR1(벽 틈) 손 자리 ⑥ 86만 면 원본에서 노멀 굽기 ⑦ `walk_knuckle.py` 가 `walk_knuckle.blend` 를 늘 덮어쓴다 — m2 로 구운 뒤 `git checkout --` 로 되돌릴 것 ⑧ 입력 그림이 Gemini(상업 문장 미확인) — 출시 전 정리.
 - 함정: 복사한 `Library` 로 첫 빌드한 exe 가 `level0 is corrupted` 로 죽었다 → `Library/Bee`·`PlayerDataCache`·`build/Tunnel` 지우고 다시 빌드하니 됨.
 
+**09-20 뒤이어 — m2 게임 판정: 불통과("텍스처는 나은데 모델링 디테일이 매우 떨어진다") → 사용자 B안(Meshy 로 계속 뽑고 원인 조사) → m3 = 부위 조립, 게임 판정 대기.**
+- 원인 조사(기록 원본 `MineTunnel/MINER_ASSET_PIPELINE.md` 끝): ① 전신 한 장으로 뽑으면 머리·손이 뭉개진다(그림에서 머리 60 픽셀) — 옛 몸도 머리·손은 클로즈업으로 따로 뽑은 것(4b·4c). Meshy 도 따로 뽑으면 해골 봉합선·이·발톱 마디까지 나온다 ② 비늘 무늬는 Meshy 몸 **색 그림**에 박혀 있다(노멀을 86만 면에서 새로 구워도 남음) → 512 로 줄였다 키워 흐림 ③ Meshy 리메시 API 로 면 수 올리기 = 더 나빠짐 ④ 글 프롬프트 다시 입히기 = 몸이 허옇게, 불통과 ⑤ main 의 살 값(노멀 1.56·거칠기 0.6)은 옛 살용 — 이 가지 `Tuning.cs` 는 1.0·1.0 에서 시작.
+- m3: `blender/rig/m3_assemble.py`(몸 m2 + 머리 `head1` + 손 `hand1` 좌우 거울 + 속 몸통 `torso1`, 피부는 색 그림에서 살·뼈 색인 면만 뚫음, 몸 노멀은 `_pre` 에서 구움) → `mesh/meshy_m3.glb` 135,914면 → `blender/rig/m2_body.py`(기본 `BODY=m3`, 그물 넷) → `miner_v5_stage17_m3.blend` → `walk_knuckle.py`(SRC_BLEND·OUT_GLB) → `Assets/Tunnel/Monster/miner_m3.glb` 128 MB. 사보타주 `nohead`·`noholes`·`ARM_K=1`·`noinv` FAIL 확인. 굽기 133 PASS · 3 FAIL(`up_grope` 두 손 앞 0.035 m, 살 그림 해시, 갱목 재질).
+- 배포물 `-check -only monster`(m3): 3 PASS · 3 FAIL — `monster_props_pbr`(갱목 뺌) · 탄 픽셀 2 m 정면 **4.84 %**(≤ 3, m2 는 8.70) · `monster_skin_has_relief` 구조값 **24.8**(≥ 28, 노멀 1.0 — 비늘 지우며 잔금도 사라져 피부가 매끈). 14 m 0.005 · 7 m 구조 차 6.4 · 얼룩 0.951.
+- 타협: 손 그물은 손 뼈에 통짜(옛 손가락 무게를 옮기면 굽힐 때 발톱이 리본처럼 찢긴다) → 손가락 굽힘이 안 먹는다. 발톱마다 뼈를 다시 맞추는 것이 다음 일.
+- 남은 것: 살·발톱 어둡게(탄 픽셀) · 피부 잔 요철(구조값) · 손가락 뼈 · 갱목·못·끈 · 눈 발광 · `up_grope`·MR1 손 자리 · 손목 굵기 턱 · GLB 128 MB 줄이기(그림 4K×4벌). Meshy 크레딧 남음 약 3,205.
+
 ## 1. 지금 어디까지 왔나
 
 | | 상태 |

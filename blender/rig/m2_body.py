@@ -1,17 +1,20 @@
-"""새 몸 m2 (Meshy, 2026-09-20) 를 지금 뼈대에 입히고 팔을 늘린다 — 손목이 무릎, 발톱이 정강이 (사용자 주문 09-20).
-  blender -b --factory-startup -P blender/rig/m2_body.py
-입력: Documents/MineTunnel/blender/miner_v4_stage16_neck.blend (안 고친다) + mesh/meshy_m2.glb (gen_meshy.py 산출, 기록은 MINER_ASSET_PIPELINE.md)
-출력: Documents/MineTunnel/blender/miner_v5_stage17_m2.blend (새로) → SRC_BLEND 로 walk_knuckle.py 에 넘겨 GLB 를 굽는다
-하는 일: ① m2 를 뼈대 크기로 맞춤(어깨 높이 기준) ② m2 팔을 뼈대 팔 자리에 맞춤 ③ 옛 몸·부위 그물에서 무게를 옮김(가까운 면 보간)
+"""Meshy 새 몸을 지금 뼈대에 입히고 팔을 늘린다 — 손목이 무릎, 발톱이 정강이 (사용자 주문 09-20).
+  blender -b --factory-startup -P blender/rig/m2_body.py                       # m3 (부위 조립, 기본)
+  BODY=m2 blender -b --factory-startup -P blender/rig/m2_body.py               # 전신 한 장으로 뽑은 m2 (09-20 게임에서 본 것 — 머리·손이 뭉개져 불통과)
+입력: Documents/MineTunnel/blender/miner_v4_stage16_neck.blend (안 고친다) + mesh/meshy_<BODY>.glb (m3 는 m3_assemble.py 산출, m2 좌표계 그대로)
+출력: Documents/MineTunnel/blender/miner_v5_stage17_<BODY>.blend (새로) → SRC_BLEND 로 walk_knuckle.py 에 넘겨 GLB 를 굽는다
+하는 일: ① 뼈대 크기로 맞춤(어깨 높이 기준) ② 팔을 뼈대 팔 자리에 맞춤 ③ 옛 몸·부위 그물에서 무게를 옮김(가까운 면 보간)
         ④ 어깨→손목을 ARM_K 배 — 살 점과 뼈에 같은 식 ⑤ 옛 몸·머리·갱목·못·끈을 뺌 (갱목은 새 몸 겉에 다시 맞춰야 한다 — 아직 안 함)
+그물이 여럿이어도(m3: 몸·머리·손·속 몸통) 하나씩 같은 식으로 — glTFast 는 스킨 그물 하나에 재질 둘을 못 읽어 합치지 않는다.
 사보타주: ARM_K=1 -> "손목이 무릎 높이" FAIL · SABOTAGE=noinv -> "자세 잡은 살이 제 뼈 곁에" FAIL"""
 import bpy, os, sys, numpy as np
 from mathutils import Vector
 
 MT = os.path.join(os.path.expanduser("~"), "Documents", "MineTunnel")
+BODY = os.environ.get("BODY", "m3")
 SRC = os.path.join(MT, "blender", "miner_v4_stage16_neck.blend")
-M2 = os.path.join(MT, "mesh", "meshy_m2.glb")
-OUT = os.environ.get("OUT_BLEND", os.path.join(MT, "blender", "miner_v5_stage17_m2.blend"))
+GLB = os.path.join(MT, "mesh", "meshy_%s.glb" % BODY)
+OUT = os.environ.get("OUT_BLEND", os.path.join(MT, "blender", "miner_v5_stage17_%s.blend" % BODY))
 ARM_K = float(os.environ.get("ARM_K", "0"))      # 0 = 손목이 무릎에 오는 값을 뼈 길이에서 계산
 M2_ARM_Z, M2_FLOOR, M2_WRIST_X, M2_SHOULDER_X = 0.415, -0.814, 0.64, 0.30 / 1.549   # m2 원본에서 잰 값 (팔 축 높이·발바닥·손목 x)
 
@@ -20,6 +23,10 @@ def check(ok, msg):
     print(("PASS  " if ok else "FAIL  ") + msg)
     if not ok:
         fails.append(msg)
+def co(o):
+    a = np.empty(len(o.data.vertices) * 3, np.float32); o.data.vertices.foreach_get("co", a); return a.reshape(-1, 3).astype(np.float64)
+def put(o, V):
+    o.data.vertices.foreach_set("co", V.astype(np.float32).ravel()); o.data.update()
 
 bpy.ops.wm.open_mainfile(filepath=SRC)
 arm = bpy.data.objects["Miner_Rig"]
@@ -27,35 +34,38 @@ arm.data.pose_position = "REST"
 W = lambda n: arm.matrix_world @ arm.data.bones["mixamorig:" + n].head_local
 knee_z = W("LeftLeg").z
 
-# ---- ① m2 들여와 크기 맞춤: 팔 축 높이 = 뼈대 어깨~손목 평균 높이가 아니라 어깨 높이 (팔은 ② 에서 기울인다)
+# ---- ① 들여와 크기 맞춤: 팔 축 높이 = 뼈대 어깨 높이 (팔은 ② 에서 기울인다)
 before = set(bpy.data.objects)
-bpy.ops.import_scene.gltf(filepath=M2)
+bpy.ops.import_scene.gltf(filepath=GLB)
 new = [o for o in bpy.data.objects if o not in before]
-m2 = next(o for o in new if o.type == "MESH")
-bpy.ops.object.select_all(action="DESELECT"); m2.select_set(True); bpy.context.view_layer.objects.active = m2
-bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM"); bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+parts = [o for o in new if o.type == "MESH"]
+for o in parts:
+    bpy.ops.object.select_all(action="DESELECT"); o.select_set(True); bpy.context.view_layer.objects.active = o
+    bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM"); bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 for o in new:
-    if o is not m2:
+    if o not in parts:
         bpy.data.objects.remove(o, do_unlink=True)
+want = {o: (o.name.split(".")[0] if BODY != "m2" else "Miner_Body", o.data.materials[0].name.split(".")[0] if BODY != "m2" else "살") for o in parts}
 s = W("LeftArm").z / (M2_ARM_Z - M2_FLOOR)
-V = np.array([v.co for v in m2.data.vertices]) * s
-V[:, 2] -= M2_FLOOR * s
-V[:, 1] += 0.04                                  # 뼈대 등뼈가 y +0.03~0.09 에 있다
-print("m2 scale %.3f  height %.2f m" % (s, V[:, 2].max()))
+print("scale %.3f  parts %s" % (s, [want[o][0] for o in parts]))
 
-# ---- ② 팔 맞춤 · ④ 팔 늘림: 어깨 S → 손목 Wr 선 위의 자리 t(0~1)만큼 밀기. 손은 t = 1 로 통째로
 def arm_shift(P, side, vec_of_t):
+    """어깨 S → 손목 Wr 선 위의 자리 t(0~1)만큼 밀기. 손은 t = 1 로 통째로"""
     sx = 1 if side == "Left" else -1
     m = P[:, 0] * sx > xs
     t = np.clip((P[m, 0] * sx - xs) / (xw - xs), 0, 1)
     P[m] += np.outer(t, vec_of_t)
-xs = M2_SHOULDER_X * s
-for side in ("Left", "Right"):
-    sx = 1 if side == "Left" else -1
-    S, Wr = W(side + "Arm"), W(side + "Hand")
-    xw = M2_WRIST_X * s
-    arm_shift(V, side, np.array(Wr - S) - np.array([sx * (xw - xs), 0, 0]))
-m2.data.vertices.foreach_set("co", V.ravel()); m2.data.update()
+
+# ---- ② 팔 맞춤
+for o in parts:
+    V = co(o) * s
+    V[:, 2] -= M2_FLOOR * s
+    V[:, 1] += 0.04                              # 뼈대 등뼈가 y +0.03~0.09 에 있다
+    xs, xw = M2_SHOULDER_X * s, M2_WRIST_X * s
+    for side in ("Left", "Right"):
+        sx = 1 if side == "Left" else -1
+        arm_shift(V, side, np.array(W(side + "Hand") - W(side + "Arm")) - np.array([sx * (xw - xs), 0, 0]))
+    put(o, V)
 
 # ---- ③ 무게 옮기기: 옛 몸 + 부위(머리·손) 그물을 합친 사본에서
 srcs = []
@@ -68,29 +78,40 @@ bpy.ops.object.select_all(action="DESELECT")
 for c in srcs:
     c.select_set(True)
 bpy.context.view_layer.objects.active = srcs[0]; bpy.ops.object.join(); src = bpy.context.active_object
-bpy.ops.object.select_all(action="DESELECT"); m2.select_set(True); bpy.context.view_layer.objects.active = m2
-dt = m2.modifiers.new("dt", "DATA_TRANSFER"); dt.object = src; dt.use_vert_data = True
-dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "POLYINTERP_NEAREST"
-dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
-bpy.ops.object.datalayout_transfer(modifier="dt"); bpy.ops.object.modifier_apply(modifier="dt")
-bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)      # Unity 는 점마다 뼈 4개
-bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
-bpy.data.objects.remove(src, do_unlink=True)
 bones = {b.name for b in arm.data.bones}
-unw = sum(1 for v in m2.data.vertices if sum(g.weight for g in v.groups if m2.vertex_groups[g.group].name in bones) < 0.99)
-check(unw == 0, "모든 살 점의 뼈 무게 합 1 (모자란 점 %d / %d)" % (unw, len(m2.data.vertices)))
+unw = total = 0
+for o in parts:
+    bpy.ops.object.select_all(action="DESELECT"); o.select_set(True); bpy.context.view_layer.objects.active = o
+    dt = o.modifiers.new("dt", "DATA_TRANSFER"); dt.object = src; dt.use_vert_data = True
+    dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "POLYINTERP_NEAREST"
+    dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
+    bpy.ops.object.datalayout_transfer(modifier="dt"); bpy.ops.object.modifier_apply(modifier="dt")
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)      # Unity 는 점마다 뼈 4개
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+    if want[o][0] == "Miner_Hands":
+        # 손은 통짜로 손 뼈에만: 옛 손가락 무게를 가까운 면으로 옮기면 새 발톱 다섯과 어긋나 굽힐 때 발톱이 리본처럼 찢긴다(09-20 자세 렌더).
+        # 값: 발톱 모양이 산다. 잃는 것: 손가락 굽힘(Unity 가 얹는 것 포함)이 안 먹는다 — 발톱마다 뼈를 다시 맞추는 것은 다음 일
+        o.vertex_groups.clear()
+        X = co(o)[:, 0]
+        for side, idx in (("Left", np.where(X > 0)[0]), ("Right", np.where(X <= 0)[0])):
+            o.vertex_groups.new(name="mixamorig:%sHand" % side).add([int(i) for i in idx], 1.0, "REPLACE")
+    unw += sum(1 for v in o.data.vertices if sum(g.weight for g in v.groups if o.vertex_groups[g.group].name in bones) < 0.99)
+    total += len(o.data.vertices)
+bpy.data.objects.remove(src, do_unlink=True)
+check(unw == 0, "모든 살 점의 뼈 무게 합 1 (모자란 점 %d / %d)" % (unw, total))
 
 # ---- ④ 팔 늘림: 살 점과 뼈에 같은 식
 up, fo = arm.data.bones["mixamorig:LeftArm"].length, arm.data.bones["mixamorig:LeftForeArm"].length
 K = ARM_K or (W("LeftArm").z - knee_z) / (up + fo)
-V = np.array([v.co for v in m2.data.vertices])
+Vs = {o: co(o) for o in parts}
 iw = np.array(arm.matrix_world.inverted())
 bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode="EDIT")
 for side in ("Left", "Right"):
     S, Wr = W(side + "Arm"), W(side + "Hand")
     xs, xw = abs(S.x), abs(Wr.x)
     add = np.array(Wr - S) * (K - 1)
-    arm_shift(V, side, add)
+    for o in parts:
+        arm_shift(Vs[o], side, add)
     eb = [b for b in arm.data.edit_bones if b.name.startswith("mixamorig:" + side) and any(k in b.name for k in ("Arm", "Hand"))]
     for b in eb:
         b.use_connect = False
@@ -99,26 +120,31 @@ for side in ("Left", "Right"):
             p = np.array([arm.matrix_world @ getattr(b, end)]); arm_shift(p, side, add)
             setattr(b, end, Vector((iw @ np.append(p[0], 1))[:3]))
 bpy.ops.object.mode_set(mode="OBJECT")
-m2.data.vertices.foreach_set("co", V.ravel()); m2.data.update()
+for o in parts:
+    put(o, Vs[o])
 up2, fo2 = arm.data.bones["mixamorig:LeftArm"].length, arm.data.bones["mixamorig:LeftForeArm"].length
 wrist_hang = W("LeftArm").z - (up2 + fo2)
-hand_g = [g.index for g in m2.vertex_groups if g.name.startswith("mixamorig:LeftHand")]
-hv = np.array([V[v.index] for v in m2.data.vertices if any(g.group in hand_g and g.weight > 0.5 for g in v.groups)])
+hv = []
+for o in parts:
+    hand_g = [g.index for g in o.vertex_groups if g.name.startswith("mixamorig:LeftHand")]
+    hv += [Vs[o][v.index] for v in o.data.vertices if any(g.group in hand_g and g.weight > 0.5 for g in v.groups)]
+hv = np.array(hv)
 tip_hang = wrist_hang - (hv[:, 0].max() - W("LeftHand").x)
 print("ARM_K %.3f  팔 %.3f → %.3f m  늘어뜨리면 손목 %.2f m (무릎 %.2f) · 발톱 끝 %.2f m (발목 %.2f)" % (K, up + fo, up2 + fo2, wrist_hang, knee_z, tip_hang, W("LeftFoot").z))
 check(abs(wrist_hang - knee_z) <= 0.03, "손목이 무릎 높이: 늘어뜨린 손목 %.3f m = 무릎 %.3f ± 0.03" % (wrist_hang, knee_z))
 check(W("LeftFoot").z <= tip_hang <= knee_z, "발톱 끝이 정강이 안: %.3f m (발목 %.3f ~ 무릎 %.3f)" % (tip_hang, W("LeftFoot").z, knee_z))
 check(abs(hv[:, 0].min() - W("LeftHand").x) <= 0.08, "손 살이 손 뼈를 따라감: 손 살 시작 x %.3f · 손목 뼈 x %.3f (≤ 0.08)" % (hv[:, 0].min(), W("LeftHand").x))
 
-# ---- ⑤ 옛 것 빼고 새 몸을 Miner_Body 로
+# ---- ⑤ 옛 것 빼고 새 그물들을 제 이름으로
 for o in list(bpy.data.objects):
-    if o.name in ("Miner_Body", "Miner_Head") or o.name.split("_")[0] in ("Plank", "Nail", "Strap"):
+    if o not in parts and (o.name in ("Miner_Body", "Miner_Head") or o.name.split("_")[0] in ("Plank", "Nail", "Strap")):
         bpy.data.objects.remove(o, do_unlink=True)
-m2.name = "Miner_Body"; m2.data.name = "Miner_Body_m2"; m2.data.materials[0].name = "살"
-m2.parent = arm
-if os.environ.get("SABOTAGE") != "noinv":
-    m2.matrix_parent_inverse = arm.matrix_world.inverted()      # 뼈대가 x 축으로 90° 돌아 있다 — 안 하면 살이 같이 돈다
-m2.modifiers.new("Armature", "ARMATURE").object = arm
+for o in parts:
+    o.name, o.data.materials[0].name = want[o]; o.data.name = o.name + "_" + BODY
+    o.parent = arm
+    if os.environ.get("SABOTAGE") != "noinv":
+        o.matrix_parent_inverse = arm.matrix_world.inverted()      # 뼈대가 x 축으로 90° 돌아 있다 — 안 하면 살이 같이 돈다
+    o.modifiers.new("Armature", "ARMATURE").object = arm
 arm.data.pose_position = "POSE"
 
 # 자세를 잡았을 때 살이 뼈를 따라가는가 (09-20: 부모 역행렬을 빼먹어 살이 산산이 흩어진 것을 위 검사들이 못 잡았다)
@@ -129,15 +155,16 @@ act = bpy.data.actions["idle_crouch"]; ad.action = act
 if hasattr(ad, "action_slot") and act.slots:
     ad.action_slot = act.slots[0]
 bpy.context.scene.frame_set(30)
-dg = bpy.context.evaluated_depsgraph_get(); ev = m2.evaluated_get(dg); me = ev.to_mesh()
-P = np.array([m2.matrix_world @ v.co for v in me.vertices]); ev.to_mesh_clear()
-gname = [g.name for g in m2.vertex_groups]
-far = 0.0
-for i in range(0, len(P), 37):
-    v = m2.data.vertices[i]; g = max(v.groups, key=lambda g: g.weight); pb = arm.pose.bones[gname[g.group]]
-    a, b = arm.matrix_world @ pb.head, arm.matrix_world @ pb.tail; p = Vector(P[i])
-    t = max(0.0, min(1.0, (p - a).dot(b - a) / max((b - a).length_squared, 1e-9)))
-    far = max(far, (p - (a + (b - a) * t)).length)
+dg = bpy.context.evaluated_depsgraph_get(); far = 0.0
+for o in parts:
+    ev = o.evaluated_get(dg); me = ev.to_mesh()
+    P = np.array([o.matrix_world @ v.co for v in me.vertices]); ev.to_mesh_clear()
+    gname = [g.name for g in o.vertex_groups]
+    for i in range(0, len(P), 37):
+        v = o.data.vertices[i]; g = max(v.groups, key=lambda g: g.weight); pb = arm.pose.bones[gname[g.group]]
+        a, b = arm.matrix_world @ pb.head, arm.matrix_world @ pb.tail; p = Vector(P[i])
+        t = max(0.0, min(1.0, (p - a).dot(b - a) / max((b - a).length_squared, 1e-9)))
+        far = max(far, (p - (a + (b - a) * t)).length)
 check(far <= 0.45, "자세 잡은 살이 제 뼈 곁에 있다: idle_crouch 30프레임, 가장 먼 점 %.2f m (≤ 0.45)" % far)
 ad.action = None
 for tr in ad.nla_tracks:
