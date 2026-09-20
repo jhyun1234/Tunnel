@@ -53,7 +53,7 @@
 - 굽기는 `bash tools/bake_m3.sh`(`CHORD_MAX=0.905`: 새 뼈는 곧을 때 0.930 · 걷기 굽힘 0.882. 걷기 값 `HAND_DOWN`·`CURL` 은 옛 기본값 그대로 통과). 굽기 FAIL 은 알려진 3개뿐(`up_grope` 0.035 · 살 그림 해시 · 갱목 재질).
 - 배포물 `-check -only monster` 6차: 4 PASS · 2 FAIL(5차와 같은 둘 — 구조값 27.0 · 갱목 0). 탄 픽셀 2.83 → **1.87 %**(손가락이 굽어 발톱이 화면을 덜 차지). 7 m 구조 차 4.1 · 얼룩 0.924 · 클립 24. 그림 `build/check_m3/`.
 - **남은 문제**: 모션캡처 `attack_swipe` 는 주먹을 쥔다 → 긴 발톱이 제 손목을 뚫는다(`05_clip_attack_swipe_side.png`; `roar` 는 괜찮음). 주먹 쥐는 클립의 손가락 키를 약하게/지우는 안 — 사용자에게 물음, 답 대기. Unity 가 얹는 주먹(곧게 선 걸음)도 게임에서 같은지 아직 안 봤다.
-- 미룬 것(승인): `-only anim` 손가락 문턱(`STALKER_FINGER_CHORD_MAX` 등 — 뼈 길이 비가 바뀜)은 ⑤ 전체 `tools/build.sh` 때. **이번에 `-only anim` 은 안 돌렸다.**
+- 미룬 것(승인): `-only anim` 손가락 문턱(`STALKER_FINGER_CHORD_MAX` 등 — 뼈 길이 비가 바뀜)은 ⑤ 전체 `tools/build.sh` 때. 배포물 `-check -only anim` 을 m3 로 처음 돌려 숫자만 기록: **30 PASS · 5 FAIL** — 손가락 둘(`anim_knuckle_walk_fingers` 0.882 > 0.84 — Blender 와 같은 값, 문턱을 0.905 로 · `anim_up_fingers_move` 주먹 0.51 · 폭 0.37, 문턱 0.45 · 0.4)은 뼈 길이 비 탓으로 예상한 것. 나머지 셋은 **원인 미확인**(손가락 뼈 전 m3 로는 anim 을 돌린 적이 없어 전부터였는지 모른다): `anim_up_run_reaches` 배회 중 팔 들기 419번(0 이어야) · `anim_climb_on_wall` 왼 전완이 벽 속 0.13 m · `anim_head_search_in_behavior` 머리 튐 1번(≥ 4). 긴 팔·발톱(1.47배) 탓일 가능성 — ⑤ 에서 본다.
 
 ## 1. 지금 어디까지 왔나
 
