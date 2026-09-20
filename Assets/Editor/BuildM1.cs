@@ -247,6 +247,9 @@ public static class BuildM1
         model.AddComponent<StalkerAnim>();                           // 3D-③: 행동에 맞는 동작을 튼다 (Stalker 는 부모에서 찾는다)
         var look = model.AddComponent<StalkerLook>();
         look.scaleShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/ScaleNormal.shader");   // 요철 세기용 (glTFast 의 normalTexture_scale 이 URP 에서 안 먹는다)
+        look.glowShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/LureGlow.shader");     // 램프 미끼 빛무리 (빌드에 들어가게 참조로)
+        if (look.glowShader == null)
+            Debug.LogError("Assets/Shaders/LureGlow.shader 를 못 읽었다");
         if (look.scaleShader == null)
         {
             Debug.LogError("Assets/Shaders/ScaleNormal.shader 를 못 읽었다");

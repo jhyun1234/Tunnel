@@ -12,7 +12,7 @@ using UnityEngine.Rendering.Universal;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|alwayslamp|nolamp|nogap 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -238,6 +238,11 @@ public class M1Check : MonoBehaviour
             sanim.driveNeck = false;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
+        if (sabotage == "alwayslamp" || sabotage == "nolamp" || sabotage == "nogap")   // m3-③ M1 램프 미끼: 안 꺼짐 · 안 켜짐 · 어둠 없이 바로 눈
+        {
+            var lk = stalker.GetComponentInChildren<StalkerLook>();
+            lk.sabAlwaysLamp = sabotage == "alwayslamp"; lk.sabNoLamp = sabotage == "nolamp"; lk.sabNoGap = sabotage == "nogap";
+        }
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
         {
             var lk = stalker.GetComponentInChildren<StalkerLook>(); lk.eyeEmission = 0f; lk.Apply();
@@ -262,6 +267,8 @@ public class M1Check : MonoBehaviour
             yield return MonsterStage(cc);
         if (only == "" || only == "stalker")
             yield return StalkerStage(cc);
+        if (only == "" || only == "lure")
+            yield return LureStage(cc);
         if (only == "" || only == "chase")
             yield return ChaseStage(cc);
         if (only == "" || only == "retreat")
@@ -2143,6 +2150,108 @@ public class M1Check : MonoBehaviour
     }
 
     // M4: 눈·빛·추격·잡기. 플레이어는 z 10 에서 +Z 를 본다. 괴물은 앞(+Z)이나 뒤(-Z)에 놓고 플레이어 쪽을 보게 한다
+    // m3-③ M1 램프 미끼 (제안서 docs/제안서_m3_눈_발광_램프_미끼_갱목.md): 멀면 안전모 램프, 가까우면 램프가 꺼지고 → 어둠 → 눈.
+    // 괴물 행동은 끄고(거리 규칙만 잰다) 내 램프도 끈다 — 화면에서 0.1 을 넘는 것은 괴물의 발광뿐이다. 상태 규칙(추격 중엔 꺼짐)은 ⑤ 에서 행동을 켜고 잰다.
+    IEnumerator LureStage(CharacterController cc)
+    {
+        var st = stalker;
+        var look = st.GetComponentInChildren<StalkerLook>();
+        var camMain = pickaxe.cam.GetComponent<Camera>();
+        Vector3 P = new Vector3(0f, 0.1f, 4f), fwd = Vector3.forward;
+        if (look == null || !look.HasLamp)
+        {
+            Check("lure_lamp_visible_far", false, "this body has no lamp glass material ('램프_유리') — lure cannot run");
+            yield break;
+        }
+        st.enabled = false;
+        lamp.lampOn = false;
+        Teleport(cc, P, 0f);
+        float off = look.lureOffM, on = off + (Tuning.STALKER_LURE_ON_M - Tuning.STALKER_LURE_OFF_M);
+        Vector3 v = default;
+
+        // ① 멀리서 불빛이 보인다 (30 · 25 · 20 · 15 m 기록, 25 m 로 판정) — 눈은 꺼져 있다
+        var far = new List<string>(); int bright25 = 0; float eye25 = 1f, lamp25 = 0f;
+        foreach (float d in new[] { 30f, 25f, 20f, 15f })
+        {
+            st.Teleport(P + fwd * d, 180f);
+            yield return new WaitForSeconds(1.2f);
+            yield return Capture($"40_lure_{d:0}m", x => v = x, ScreenRect(camMain, look.Renderers));
+            far.Add($"{d:0} m: {lastBright} px lum {v.x:F4}");
+            if (d == 25f) { bright25 = lastBright; eye25 = look.EyeNow; lamp25 = look.LampNow; }
+        }
+        lamp.lampOn = true;                      // 내 램프를 켠 채로도 (평소 안개 0.03 · 램프 사거리 14 m 밖이라 괴물 몸은 안 보인다)
+        st.Teleport(P + fwd * 25f, 180f);
+        yield return new WaitForSeconds(1.2f);
+        yield return Capture("40_lure_25m_mylamp_on", x => v = x, ScreenRect(camMain, look.Renderers));
+        far.Add($"25 m with my lamp on: {lastBright} px");
+        int bright25On = lastBright;
+        lamp.lampOn = false;
+        yield return new WaitForSeconds(0.3f);
+        Check("lure_lamp_visible_far", bright25 >= Tuning.STALKER_LURE_BRIGHT_MIN_25M && bright25On >= Tuning.STALKER_LURE_BRIGHT_MIN_25M && lamp25 >= 0.99f && eye25 <= 0.01f,
+            $"my lamp off, bright samples in the model region — {string.Join(" · ", far)} (25 m min {Tuning.STALKER_LURE_BRIGHT_MIN_25M}); at 25 m lamp {lamp25:F2} eyes {eye25:F2}");
+
+        // ② 꺼지는 거리: off + 0.6 m 에서는 켜진 채, off − 0.6 m 에서 꺼진다 → 어둠 → 눈. 프레임마다 잰다
+        st.Teleport(P + fwd * (off + 0.6f), 180f);
+        yield return new WaitForSeconds(1.2f);
+        bool stillOn = look.LampNow >= 0.99f;
+        st.Teleport(P + fwd * (off - 0.6f), 180f);
+        float t = 0f, tLampOff = -1f, tEyeStart = -1f, tEyeFull = -1f, dark = 0f;
+        while (t < 3f)
+        {
+            yield return null; t += Time.deltaTime;
+            if (tLampOff < 0f && look.LampNow <= 0f) tLampOff = t;
+            if (look.LampNow <= 0f && look.EyeNow <= 0f) dark += Time.deltaTime;
+            if (tLampOff >= 0f && tEyeStart < 0f && look.EyeNow > 0f) tEyeStart = t;
+            if (tEyeFull < 0f && look.EyeNow >= 1f) tEyeFull = t;
+        }
+        Check("lure_lamp_dies_then_eyes", stillOn && tLampOff >= 0f && tLampOff <= Tuning.STALKER_LURE_FLICKER_S + 0.1f && Mathf.Abs(dark - Tuning.STALKER_LURE_GAP_S) <= 0.12f && tEyeFull > tLampOff && tEyeFull <= 2f,
+            $"at {off + 0.6f:F1} m lamp still on {stillOn}; stepped to {off - 0.6f:F1} m: lamp out after {tLampOff:F2} s (max {Tuning.STALKER_LURE_FLICKER_S + 0.1f:F2}), total darkness {dark:F2} s (want {Tuning.STALKER_LURE_GAP_S} ± 0.12), eyes start {tEyeStart:F2} s · full {tEyeFull:F2} s");
+        yield return Sheet("41_lure_switch_sheet", 8, i => i == 0 ? Relight(st, look, P + fwd * (off + 3f), P + fwd * (off - 0.6f)) : Wait(0.18f));
+
+        // ③ 경계에서 안 깜빡인다: 꺼진 뒤 off + 2 m 로 물러나도 꺼진 채, on + 0.6 m 에서 다시 켜진다
+        st.Teleport(P + fwd * (off - 0.6f), 180f);
+        yield return new WaitForSeconds(1.6f);
+        st.Teleport(P + fwd * (off + 2f), 180f);
+        yield return new WaitForSeconds(1.5f);
+        float lampMid = look.LampNow, eyeMid = look.EyeNow;
+        st.Teleport(P + fwd * (on + 0.6f), 180f);
+        yield return new WaitForSeconds(1.5f);
+        Check("lure_no_flicker_at_edge", lampMid <= 0.01f && eyeMid >= 0.99f && look.LampNow >= 0.99f && look.EyeNow <= 0.01f,
+            $"after going dark, back at {off + 2f:F0} m: lamp {lampMid:F2} eyes {eyeMid:F2} (want 0 / 1); at {on + 0.6f:F1} m: lamp {look.LampNow:F2} eyes {look.EyeNow:F2} (want 1 / 0)");
+
+        // ④ 눈이 어둠 속에서 보인다 (5 m) — 기존 stalker_eyes_glow_in_dark 와 같은 잣대
+        st.Teleport(P + fwd * 5f, 180f);
+        yield return new WaitForSeconds(2f);
+        yield return Capture("42_lure_eyes_5m", x => v = x, ScreenRect(camMain, look.Renderers));
+        Check("lure_eyes_glow_near", lastBright >= Tuning.STALKER_EYE_BRIGHT_MIN && look.LampNow <= 0f, $"5 m, my lamp off: bright samples {lastBright} (min {Tuning.STALKER_EYE_BRIGHT_MIN}), lamp {look.LampNow:F2} eyes {look.EyeNow:F2}");
+
+        // ⑤ 추격 중에는 멀어도 램프가 꺼져 있다: 갱도 끝에서 내 램프를 켜고 8 m 로 추격을 건 뒤, 내가 반대 끝(26 m 밖)으로 옮겨 간다 — 추격은 놓칠 때까지 3 s 남는다
+        Vector3 P2 = new Vector3(0f, 0.1f, 34f);
+        st.enabled = true;
+        lamp.lampOn = true;
+        Teleport(cc, P2, 180f);
+        st.Teleport(P2 - fwd * 8f, 0f);
+        t = 0f;
+        while (st.state != Stalker.State.Chase && t < 4f) { t += Time.deltaTime; yield return null; }
+        bool chasing = st.state == Stalker.State.Chase;
+        lamp.lampOn = false;
+        Teleport(cc, new Vector3(0f, 0.1f, 0f), 0f);
+        float lampMaxChase = 0f, farMin = 99f; t = 0f;
+        while (st.state == Stalker.State.Chase && t < 2f) { t += Time.deltaTime; lampMaxChase = Mathf.Max(lampMaxChase, look.LampNow); farMin = Mathf.Min(farMin, st.DistToPlayer); yield return null; }
+        Check("lure_lamp_off_in_chase", chasing && t >= 1f && farMin > look.lureOffM + 5f && lampMaxChase <= 0f, $"chase started {chasing}; I moved {farMin:F0} m away, still chasing for {t:F1} s: brightest lamp {lampMaxChase:F2} (want 0)");
+        st.enabled = false;
+        lamp.lampOn = true;
+        st.Teleport(st.homePos);
+    }
+
+    // 연속 사진 첫 장 앞: 먼 데서 램프를 켜 두었다가 꺼지는 거리 안으로 옮긴다
+    IEnumerator Relight(Stalker st, StalkerLook look, Vector3 farPos, Vector3 nearPos)
+    {
+        st.Teleport(farPos + Vector3.forward * 6f, 180f);
+        yield return new WaitForSeconds(1.5f);
+        st.Teleport(nearPos, 180f);
+    }
+
     IEnumerator ChaseStage(CharacterController cc)
     {
         var st = stalker;
@@ -2254,6 +2363,7 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.2f);
         lamp.lampOn = false;
         st.Teleport(P + fwd * 5f, 180f);
+        yield return new WaitForSeconds(Tuning.STALKER_LURE_FLICKER_S + Tuning.STALKER_LURE_GAP_S + Tuning.STALKER_LURE_FADE_S + 0.4f);   // m3-③: 먼 데서 옮겨 오면 램프가 꺼지고 → 어둠 → 눈이 켜질 때까지
         // 3D-②b: 눈 구체가 없다 — 몸 화면 영역에서 밝기 0.1 넘는 표본 픽셀 수(발광 눈구멍)를 센다
         var look = st.GetComponentInChildren<StalkerLook>();
         var camMain = pickaxe.cam.GetComponent<Camera>();
@@ -2272,6 +2382,8 @@ public class M1Check : MonoBehaviour
     {
         var st = stalker;
         st.enabled = false;
+        var lureLook = st.GetComponentInChildren<StalkerLook>();
+        if (lureLook != null) lureLook.lure = false;      // 이 절은 살 모습만 잰다(14 m 에서 어두운가 등) — 램프 미끼가 켜져 있으면 14 m 에서 빛난다. 미끼는 LureStage 가 사람 경로로 잰다
         lamp.lampOn = true;
         var mainCam = pickaxe.cam.GetComponent<Camera>();
         var model = st.transform.Find("Body/Model");
@@ -2389,6 +2501,7 @@ public class M1Check : MonoBehaviour
         // 09-17 실측: 노멀 있음 29.8/27.7 · flatskin 29.7/27.7 — 차이가 잡음 이하라 문턱을 못 세운다 (베이크한 노멀은 12만 면 몸이 이미 가진 요철이라 거의 안 보인다). 값만 남긴다
         Debug.Log($"MONSTER_SHADE structure lamp left {shade[0]:F2} · right {shade[1]:F2}");
 
+        if (lureLook != null) lureLook.lure = true;
         st.Teleport(st.homePos);
         Teleport(cc, P, 0f);
         st.enabled = true;

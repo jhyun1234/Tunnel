@@ -108,6 +108,10 @@ public class DevHud : MonoBehaviour
             else if (kb.mKey.wasPressedThisFrame) look.neckRed = Mathf.Min(1f, look.neckRed + 0.1f);
             else if (kb.qKey.wasPressedThisFrame) look.neckBright = Mathf.Max(0.2f, look.neckBright / 1.15f);   // 목 밝기
             else if (kb.rKey.wasPressedThisFrame) look.neckBright = Mathf.Min(4f, look.neckBright * 1.15f);
+            else if (kb.semicolonKey.wasPressedThisFrame) look.lureOffM = Mathf.Max(4f, look.lureOffM - 1f);   // m3-③ M1 램프 미끼: 램프가 꺼지는 거리
+            else if (kb.quoteKey.wasPressedThisFrame) look.lureOffM = Mathf.Min(40f, look.lureOffM + 1f);
+            else if (kb.slashKey.wasPressedThisFrame) look.lampEmission /= 1.25f;                               // 램프 유리 밝기
+            else if (kb.backslashKey.wasPressedThisFrame) look.lampEmission *= 1.25f;
             else if (kb.kKey.wasPressedThisFrame) look.eyeEmission *= 0.8f;
             else if (kb.lKey.wasPressedThisFrame) look.eyeEmission /= 0.8f;
             else changed = false;
@@ -125,6 +129,9 @@ public class DevHud : MonoBehaviour
         stalker.Teleport(player.transform.position + f * m, player.transform.eulerAngles.y + 180f);
     }
 
+    static string LureLine(StalkerLook lk) =>        // m3-③ M1 램프 미끼
+        lk.HasLamp ? $"lure lamp {lk.LampNow:0.0} eyes {lk.EyeNow:0.0}  lamp goes out under {lk.lureOffM:0} m [; ']  lamp glow x{lk.lampEmission:0.00} [/ \\]" : "lure: no lamp glass on this body";
+
     void OnGUI()
     {
         if (!show || fog == null)
@@ -132,8 +139,8 @@ public class DevHud : MonoBehaviour
         string monster = stalker == null ? "" :
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
             (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J])\nhead test {StalkerAnim.HeadTestName(an.headTest)} [G]  face {an.HeadYaw:0}° (max {an.headYawMax:0}° [T Y])  tilt {an.HeadTiltNow:0}° (listen {an.headTilt:0}° [O P])\nneck out {an.NeckOutNow * 100f * Tuning.STALKER_MODEL_SCALE:0} cm in game (model {an.NeckOutNow * 100f:0} of {an.neckWant * 100f:0} cm [Z X], max {Tuning.STALKER_NECK_OUT_MAX_M * 100f:0})  full out in {an.neckOutS:0.00} s [C B]{(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
-            (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   neck red {lk.neckRed:0.0} [I M] bright x{lk.neckBright:0.00} [Q R]   [9] freeze monster in front of me · [0] on/off" : "");
-        GUI.Label(new Rect(10, 10, 900, 160),
+            (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   neck red {lk.neckRed:0.0} [I M] bright x{lk.neckBright:0.00} [Q R]\n{LureLine(lk)}   [9] freeze monster in front of me · [0] on/off" : "");
+        GUI.Label(new Rect(10, 10, 900, 176),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +

@@ -303,6 +303,19 @@ public static class Tuning
     public const float STALKER_SKIN_ROUGH_MUL = 1.0f;       // m2-body 가지: 새 몸 시작값 (main 은 0.6 — 새 살 그림이 밝아 0.6 이면 번들거리고 탄다)
     // (옛 값 0.6)       // 사용자가 ,/. 키로 찾은 값 (09-18). 시작값 1.0
     public const float STALKER_EYE_EMISSION = 0.31f;        // 사용자가 k/l 키로 찾은 값 (09-18 재판정, 눈구멍 자리 고친 뒤). 0.08 은 발광이 광대뼈 넓은 얼룩일 때 값. 시작값 0.6
+    // m3-③ M1 램프 미끼 (사용자 아이디어 09-20, 제안서 docs/제안서_m3_눈_발광_램프_미끼_갱목.md): 멀리서는 안전모 램프가 켜져 전등·사람 램프처럼 보이고,
+    // 다가오면 램프가 꺼지고 잠깐 캄캄한 뒤 눈이 켜진다. 전부 제안값 — 사용자가 DevHud ; ' (거리) · / \ (밝기) 로 찾는다. 램프 유리 재질('램프_유리')이 없는 몸(옛 몸)은 눈이 늘 켜져 있다
+    public const float STALKER_LURE_OFF_M = 13f;            // m, 이보다 가까우면 램프가 꺼진다 — 괴물 눈 사거리(STALKER_EYE_M 12) 바로 밖: 불이 꺼지는 순간 = 나를 볼 수 있게 되는 순간
+    public const float STALKER_LURE_ON_M = 17f;             // m, 이보다 멀어지면 다시 켜진다 (13~17 사이에선 안 바뀐다 — 경계에서 깜빡이지 않게)
+    public const float STALKER_LURE_FLICKER_S = 0.25f;      // 꺼지기 전 두 번 떠는 시간
+    public const float STALKER_LURE_GAP_S = 0.6f;           // 램프도 눈도 꺼진 완전한 어둠
+    public const float STALKER_LURE_FADE_S = 0.4f;          // 눈이 밝아지는 · 램프가 다시 켜지는 시간
+    public const float STALKER_LURE_EMISSION = 3.0f;        // 램프 유리 발광 세기 (LAMP_COLOR 에 곱한다)
+    public const float STALKER_LURE_LIGHT = 1.2f;           // 램프 앞 점광 세기 — 보이기만 하고 몸을 비추지는 않게 약하게, 그림자 없음
+    public const float STALKER_LURE_LIGHT_RANGE = 3.0f;     // m
+    public const float STALKER_LURE_HALO_M = 0.5f;          // m, 빛무리 판 크기 (가까울 때)
+    public const float STALKER_LURE_HALO_ANGLE = 0.03f;     // 멀 때: 거리 × 이 값 (약 1.7° — 1080p 에서 40 픽셀쯤)
+    public const int STALKER_LURE_BRIGHT_MIN_25M = 4;       // 25 m · 내 램프 끔: 몸 화면 영역에서 밝기 0.1 넘는 표본 픽셀 수 하한
     public const float STALKER_RELIEF_MIN = 28f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 실측(09-17): 점토 상태 24.6 · flatskin 26.1 · 요철 그림 30.7 → 그 사이
     public const int STALKER_EYE_BRIGHT_MIN = 1;            // 램프 끄고 5 m 몸 영역에서 밝기 0.1 넘는 표본 픽셀(3픽셀 간격) 수 하한. 사용자 값 발광 0.08 은 어둡다(0.2 문턱에선 1개) → 문턱 0.1 · 1개. dimeyes 0
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
