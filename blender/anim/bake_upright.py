@@ -162,6 +162,58 @@ up_bake(NAME, up_run_src, up_mean_run, UP_JOG_N, lambda k: up_run_src.frame_rang
 jog = up_measure(acts[NAME][0], UP_JOG_N)
 check(jog[2] <= got[2] - 0.3, "달음질: 두 손이 가슴보다 앞 %.3f m — 질주 %.3f 보다 0.3 넘게 뒤" % (jog[2], got[2]))
 check(jog[3] < 2.0, "되풀이 이음매 %.2f° (< 2)" % jog[3])
+# ---- up_grope (3D-④ MB, 영상 B4 통과 2026-09-20): 수색 자리에서 깊이 웅크려 바닥·벽을 짚을 때의 몸. 다리 = 걷다 만 선 자세, 허리 위 = 모션캡처 "Creeping Zombie Walk"(두 팔을 앞으로 뻗고 더듬듯 걷는 연기)를
+# 0.4배쯤으로·빠르기를 고르지 않게. 값은 preview_upright.py 의 통과값(LOW: 숙임 +52° · 웅크림 0.70 · 우리 숙임 35 % 덜기 · 고개 22°). 손 짚기·엉덩이 실기·"들었나?"는 클립이 아니라 Unity 가 얹는다.
+NAME = "up_grope"
+UP_GROPE_N, UP_G_LEAN, UP_G_SQUAT, UP_G_CUT, UP_G_PITCH = 300, 52.0, 0.70, 0.35, 22.0
+up_grope_src, _, _ = up_load("Creeping Zombie Walk")
+g0 = up_grope_src.frame_range[0]; gl = up_grope_src.frame_range[1] - g0
+up_upper = set(pb("Spine").children_recursive) | {pb("Spine")}
+def up_bake_grope(name, N):
+    out = bpy.data.actions.new(name); out.use_fake_user = True
+    hunch = (UP_HUNCH * (1 - UP_G_CUT) + UP_G_LEAN) if UP_LAYER else 0.0
+    for i in range(N + 1):
+        u = (i % N) / N; t = u * N / FPS; w = 2 * math.pi / (N / FPS)
+        up_legs(False); up_use(up_walk_src, stand_f)
+        A = {b.name: (b.rotation_quaternion.copy(), b.location.copy()) for b in up_order}
+        for s_ in ("Left", "Right"):
+            W = wmat(s_ + "Foot"); up_tg[s_].location = W.translation; up_tg[s_].rotation_quaternion = W.to_quaternion()
+        up_use(up_grope_src, g0 + gl * (u + 0.55 * math.sin(6 * math.pi * u) / (6 * math.pi) + 0.25 * math.sin(14 * math.pi * u) / (14 * math.pi)))    # 빠르기 0.2~1.8배를 오가되 되풀이가 이어지게 (한 바퀴에 3번·7번)
+        for b in up_order:
+            if b not in up_upper: b.rotation_quaternion, b.location = A[b.name]
+        upd()
+        if UP_LAYER:
+            up_legs(True)
+            pb("Hips").location = pb("Hips").location + up_hips_axes @ Vector((0.015 * math.sin(2 * w * t), 0.35 * UP_G_SQUAT, -(UP_CROUCH + UP_G_SQUAT + 0.010 * math.sin(3 * w * t))))
+            upd()
+            for nm in ("Spine", "Spine1", "Spine2"):
+                rotate_world(nm, Matrix.Rotation(math.radians(hunch / 3), 4, "X"))
+            rotate_world("Neck", Matrix.Rotation(math.radians(-hunch * 0.45 + UP_G_PITCH * 0.4), 4, "X"))
+            rotate_world("Head", Matrix.Rotation(math.radians(-hunch * 0.45 + UP_G_PITCH * 0.6), 4, "X"))
+        upd()
+        mats = {b.name: b.matrix.copy() for b in up_order}
+        ad.action = out
+        if hasattr(ad, "action_slot") and out.slots:
+            ad.action_slot = out.slots[0]
+        up_legs(False)
+        for b in up_order:
+            rest = (mats[b.parent.name] @ b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local) if b.parent else b.bone.matrix_local
+            b.matrix_basis = rest.inverted() @ mats[b.name]
+            if b.name != P + "Hips": b.location = (0, 0, 0)
+            b.scale = (1, 1, 1)
+            b.keyframe_insert("rotation_quaternion", frame=i)
+        pb("Hips").keyframe_insert("location", frame=i)
+    acts[name] = (out, N)
+    print("baked", name, N)
+up_bake_grope(NAME, UP_GROPE_N)
+got = up_measure(acts[NAME][0], UP_GROPE_N)
+sh_z = []
+for i in range(0, UP_GROPE_N, 10):
+    up_use(acts[NAME][0], i); sh_z.append(max(whead("LeftArm").z, whead("RightArm").z))
+check(max(sh_z) <= 0.80, "웅크림: 높은 쪽 어깨 %.3f m ≤ 0.80 (팔 0.86 m 로 바닥에 닿으려면 — 서 있을 땐 1.5 쯤)" % max(sh_z))
+check(got[2] >= 0.05, "웅크림: 두 손이 가슴보다 앞 %.3f m (≥ 0.05 — 가슴이 깊이 숙어 앞에 있다, 09-20 실측 0.115)" % got[2])
+check(got[3] < 2.0, "되풀이 이음매 %.2f° (< 2)" % got[3])
+bpy.data.actions.remove(up_grope_src)
 NAME = ""
 
 for s_ in ("Left", "Right"):

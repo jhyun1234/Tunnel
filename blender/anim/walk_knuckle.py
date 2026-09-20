@@ -59,7 +59,7 @@ def glide(n, v, dh, df, yaw, hz, lift):
 GAITS["glide_walk"] = dict(glide(19, 2.5, 0.58, 0.62, 18.0, 0.90, 0.16), TOUCH=DIAG_WALK)   # 배회·수색 2.5 m/s · 1.58 Hz · 게임 보폭 1.58 m
 GAITS["glide_fast"] = glide(18, 5.0, float(os.environ.get("FAST_DUTY_HAND", "0.42")), 0.48, 14.0, float(os.environ.get("FAST_HIP_Z", "0.85")), 0.22)   # 조사 5.0 · 철수 4.0(×0.8) · 1.67 Hz · 3.0 m
 GAITS["glide_chase"] = glide(17, 6.5, 0.40, 0.40, 10.0, 0.82, 0.25)                         # 추격 6.5 · 1.76 Hz · 3.7 m
-CLIPS = 14 + len(GAITS) + 4          # + 서서 오는 것 넷(up_walk · up_stand · up_run · up_jog) — bake_upright.py 가 굽는다 (3D-④ 5b)
+CLIPS = 14 + len(GAITS) + 5          # + 서서 오는 것 넷(up_walk · up_stand · up_run · up_jog) + 수색 웅크림 up_grope (MB) — bake_upright.py 가 굽는다 (3D-④ 5b)
 
 # ---- 3D-④ MA (제안서 docs/제안서_3D4_괴물_행동과_동작_전부_새로.md): "지켜보는 큰 짐승". 1단계는 영상 후보만 — 아래 줄들은 PREVIEW/ONLY 로만 굽고 GLB 에는 아직 안 들어간다(MA_EXPORT 로 묶어 둠)
 # charge = 큰 짐승 갤럽. 조사 실측(다리 길이가 같은 기린 6.5 m/s · 개): 주기 0.75 s · 두 손 시차 0.25 · 두 발 0.17 · 발 → 손 사이는 땅에 붙어 있고 손을 뗀 뒤에만 한 번 뜬다 ·
