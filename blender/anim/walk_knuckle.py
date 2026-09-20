@@ -9,7 +9,7 @@
         ⑤ 자기 검사 PASS/FAIL + 옆·앞 연속 그림
 출력: Tunnel/unity/Assets/Tunnel/Monster/miner_rigged.glb (덮어쓰기, 사용자 허락 09-18) · blender/anim/walk_knuckle.blend(리그 + 동작만)
       Documents/MineTunnel/blender/anim_render/walk_knuckle_*.png (저장소 밖)
-사보타주: SABOTAGE=noplant -> 손이 바닥에 안 닿는다 (검사 "손 짚기" FAIL). SABOTAGE=straight -> 손가락을 안 굽힌다 (검사 "손가락 굽음" FAIL). 사보타주 실행은 GLB·blend 를 덮어쓰지 않는다"""
+사보타주: SABOTAGE=noplant -> 손이 바닥에 안 닿는다 (검사 "손 짚기" FAIL). SABOTAGE=straight -> 손가락을 안 굽힌다 (검사 "손가락 굽음" FAIL). SABOTAGE=bodyonly(Miner_Body 만 잰다 = 09-20 까지의 검사) · sinkhands(손을 8 cm 파묻는다) -> "손 살이 바닥을 안 뚫음" FAIL. 사보타주 실행은 GLB·blend 를 덮어쓰지 않는다"""
 import bpy, os, sys, json, struct, math, hashlib
 import numpy as np
 from mathutils import Vector, Matrix, Quaternion
@@ -21,7 +21,7 @@ SABOTAGE = os.environ.get("SABOTAGE", "")
 SFX = "_" + SABOTAGE if SABOTAGE else ""
 OUT_GLB = os.environ.get("OUT_GLB", os.path.join(MT, "mesh", "miner_rigged_unity%s.glb" % SFX) if SABOTAGE
           else r"C:\Users\anjyo\Tunnel\unity\Assets\Tunnel\Monster\miner_rigged.glb")
-OUT_BLEND = os.path.join(HERE, "walk_knuckle%s.blend" % SFX)
+OUT_BLEND = os.environ.get("OUT_BLEND", os.path.join(HERE, "walk_knuckle%s.blend" % SFX))   # 다른 몸(m3)을 구울 땐 밖으로 돌린다 — 안 그러면 옛 몸의 동작 파일을 덮어쓴다
 RENDER = os.path.join(MT, "blender", "anim_render" + SFX); os.makedirs(RENDER, exist_ok=True)
 
 # ---- 걸음 값 (모델 크기 1 기준 m · s). 게임 괴물은 Tuning.STALKER_MODEL_SCALE 1.5 배
@@ -135,7 +135,7 @@ HAND_DIR = Vector((0.15, -math.cos(math.radians(HAND_DOWN)), -math.sin(math.radi
 # 발톱 끝(끝뼈 머리)이 짚는 높이. Unity 팔 들기 안전망(StalkerAnim.LateUpdate)은 손끝이 발바닥 면 위 STALKER_ARM_FLOOR_MARGIN 0.02 m(게임)
 # 밑이면 팔을 든다 — 0 에 짚으면 걷는 내내 팔을 들어 올렸다(09-18 Unity 실측 1499 프레임), 0.02 는 Unity 에서 0.020 m 로 문턱에 붙어 11 프레임. 0.03 에 짚는다
 CLAW_Z = 0.03
-HAND_LIFT_ALL = 0.30 if SABOTAGE == "noplant" else CLAW_Z    # noplant: 손을 바닥에서 30 cm 띄운다
+HAND_LIFT_ALL = {"noplant": 0.30, "sinkhands": -0.08}.get(SABOTAGE, CLAW_Z)    # noplant: 손을 바닥에서 30 cm 띄운다 · sinkhands: 8 cm 파묻는다 ("손 살이 바닥을 안 뚫음" FAIL)
 # 손가락 마디 굽힘(도, 첫·둘째·셋째 마디). 09-18 판정 "손가락이 일직선으로 오는 게 어색하다" → 09-19 발톱이 갈고리처럼 바닥을 찍게.
 # 엄지는 반만. 굽는 쪽 = 쉬는 자세(T포즈)에서 손가락 끝이 내려가는 쪽(손바닥 쪽) — 뼈마다 재서 고른다
 CURL = [0.0, 0.0, 0.0] if SABOTAGE == "straight" else [float(x) for x in os.environ.get("CURL", "10,15,10").split(",")]
@@ -459,18 +459,28 @@ for NAME, G in GAITS.items():
     check(cmax <= CHORD_MAX, "손가락 굽음: 뿌리 → 끝 곧은 거리 ÷ 마디 길이 합 가장 클 때 %.3f (≤ %.2f, 곧으면 1 에 가깝다)" % (cmax, CHORD_MAX))
 
     # 살이 바닥을 뚫는지: 손·손가락 뼈에 붙은 살 점 중 가장 낮은 것 (뼈 끝 점만 재는 위 검사로는 굽은 손가락 등이 안 잡힌다)
-    body = bpy.data.objects["Miner_Body"]
-    hand_g = {g.index for g in body.vertex_groups if "Hand" in g.name}
-    hand_v = np.array([v.index for v in body.data.vertices if any(g.group in hand_g and g.weight > 0.3 for g in v.groups)])
-    mesh_low = 9.9
-    for f in range(0, N, 2):
-        scene.frame_set(f); upd()
-        ev = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
-        me = ev.to_mesh(); co = np.empty(len(me.vertices) * 3, np.float32); me.vertices.foreach_get("co", co); ev.to_mesh_clear()
-        co = co.reshape(-1, 3)[hand_v]
-        wz = (np.array(body.matrix_world) @ np.c_[co, np.ones(len(co))].T)[2]
-        mesh_low = min(mesh_low, float(wz.min()))
-    check(mesh_low >= -0.01, "손 살이 바닥을 안 뚫음: 손·손가락 살 점 가장 낮은 %.3f m ≥ −0.01 (점 %d개, 2 프레임마다)" % (mesh_low, len(hand_v)))
+    # 뼈대에 붙은 **모든 그물**을 잰다 — 09-20 까지는 Miner_Body 만 봐서, 손이 따로 그물(Miner_Hands)인 m3 는 손목 자투리 몇 점만 재고 PASS 였다.
+    # 그래서 손마다 잰 점 수도 검사한다: 안 잰 PASS 를 막는다. SABOTAGE=bodyonly = 옛 검사 그대로
+    mesh_low = 9.9; n_hand = {"Left": 0, "Right": 0}
+    for body in [o for o in bpy.data.objects if o.type == "MESH" and any(md.type == "ARMATURE" and md.object == arm for md in o.modifiers)
+                 and (SABOTAGE != "bodyonly" or o.name == "Miner_Body")]:
+        hand_g = {g.index: ("Left" if "Left" in g.name else "Right") for g in body.vertex_groups if "Hand" in g.name}
+        side_of = {v.index: next(hand_g[g.group] for g in v.groups if g.group in hand_g and g.weight > 0.3)
+                   for v in body.data.vertices if any(g.group in hand_g and g.weight > 0.3 for g in v.groups)}
+        if not side_of:
+            continue
+        for sd_ in side_of.values():
+            n_hand[sd_] += 1
+        hand_v = np.array(sorted(side_of))
+        for f in range(0, N, 2):
+            scene.frame_set(f); upd()
+            ev = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            me = ev.to_mesh(); co = np.empty(len(me.vertices) * 3, np.float32); me.vertices.foreach_get("co", co); ev.to_mesh_clear()
+            co = co.reshape(-1, 3)[hand_v]
+            wz = (np.array(body.matrix_world) @ np.c_[co, np.ones(len(co))].T)[2]
+            mesh_low = min(mesh_low, float(wz.min()))
+    check(mesh_low >= -0.01 and min(n_hand.values()) >= 1000,
+          "손 살이 바닥을 안 뚫음: 손·손가락 살 점 가장 낮은 %.3f m ≥ −0.01 (잰 점 왼손 %d · 오른손 %d개, 손마다 ≥ 1000, 2 프레임마다)" % (mesh_low, n_hand["Left"], n_hand["Right"]))
 
     if QUICK and not SHOTS:
         continue
