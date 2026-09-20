@@ -52,6 +52,10 @@ public static class Tuning
     public const float BREATH_SOON_MUL = 0.3f;       // 곧 단계(≤ STAMINA_SOON)에도 숨 들썩임을 이 배율로 (2차 판정: "작게 넣어라")
 
     public const float GRID_CELL = 7.0f;           // m, 조각 한 칸
+    // 3D-④ MR1 맵 (사용자 결정 09-20): 큰 벽 틈 = 괴물 굴(폭 1.35 · 높이 2.6 · 깊이 3.5 m, 숨을 수 있으나 위험) · 작은 벽 틈 = 플레이어 전용(폭 0.9 · 높이 1.3 — 숙여야 들어감 · 깊이 3.0 m). 크기는 blender/map/make_gaps.py
+    public static readonly int[] MAP_GAP_BIG_PIECES = { 1, 5 };     // 복도 조각 번호 (0 = 시작 칸)
+    public static readonly int[] MAP_GAP_SMALL_PIECES = { 3 };
+    public const float MAP_GAP_ENTER_M = 2.0f;     // m, 검사: 벽면에서 이만큼은 걸어 들어갈 수 있어야 한다
     public const float CAMERA_FOV = 80.0f;         // Godot Player.tscn Camera3D (세로 fov)
 
     // 헤드램프

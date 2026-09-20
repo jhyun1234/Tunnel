@@ -208,6 +208,13 @@ public class M1Check : MonoBehaviour
             sanim.driveTorso = false;
         if (sabotage == "noimpact" && sanim != null)     // 발을 디뎌도 화면이 안 흔들린다
             sanim.stomp = false;
+        if (sabotage == "solidgap")                      // 3D-④ MR1 맵: 벽 틈 입구가 막혀 있다 (충돌 벽을 안 판 조각과 같다)
+            foreach (var back in pieces.GetComponentsInChildren<MeshCollider>().Where(c => c.name.StartsWith("COL_gap_back")))
+            {
+                var plug = new GameObject("SabotagePlug").AddComponent<BoxCollider>();
+                plug.transform.position = new Vector3(Mathf.Sign(back.bounds.center.x) * (Tuning.TUNNEL_WALL_X + 0.5f), 1.5f, back.bounds.center.z);
+                plug.size = new Vector3(0.6f, 3f, 2f);
+            }
         if (sabotage == "nogrope")                       // 3D-④ MB 전 상태: 수색 첫 자리에서도 서서 둘러보기만
             stalker.grope = false;
         if (sabotage == "clawhands" && sanim != null)    // 짚을 때 손가락을 안 편다 (영상 B2 판정 "전부 펴졌으면" 전)
@@ -248,6 +255,8 @@ public class M1Check : MonoBehaviour
             yield return M1(cc, fog);
         if (only == "" || only == "mining")
             yield return Mining(cc);
+        if (only == "" || only == "map")
+            yield return MapStage(cc);
         stalker.enabled = true;
         if (only == "" || only == "monster")
             yield return MonsterStage(cc);
@@ -976,6 +985,43 @@ public class M1Check : MonoBehaviour
     }
 
     // 8. 채굴 (M2): 포켓 24자리 · 묻힘 · 곡괭이 오버레이·밝기 · 조준 보정 · 채굴 거리 눈부심 · 두 번에 캐짐 · 소음 · 타격음 · 광석 구르기 · 줍기 · 휘두르기 간격
+    // 3D-④ MR1 맵: 벽 틈에 사람이 지나는 길로(W 키로 걸어서) 들어가 본다. 틈 자리는 조각의 COL_gap_back 에서 읽는다 — 어느 벽인지 검사가 미리 알지 않는다
+    IEnumerator MapStage(CharacterController cc)
+    {
+        var kb = InputSystem.AddDevice<Keyboard>("MapKeyboard");
+        var backs = pieces.GetComponentsInChildren<MeshCollider>().Where(c => c.name.StartsWith("COL_gap_back")).OrderBy(c => c.bounds.center.z).ToArray();
+        int big = 0, small = 0;
+        var notes = new List<string>();
+        bool bigOk = true, smallOk = true;
+        foreach (var back in backs)
+        {
+            var roof = back.transform.parent.GetComponentsInChildren<MeshCollider>().First(c => c.name.StartsWith("COL_gap_roof"));
+            bool isSmall = roof.bounds.min.y < Tuning.BODY_HEIGHT;           // 서서는 못 들어가는 높이
+            if (isSmall) small++; else big++;
+            float side = Mathf.Sign(back.bounds.center.x), z = back.bounds.center.z;
+            foreach (bool crouch in isSmall ? new[] { false, true } : new[] { false })
+            {
+                Teleport(cc, new Vector3(side * 1.5f, 0.1f, z), side > 0f ? 90f : -90f);
+                yield return new WaitForSeconds(0.3f);
+                InputSystem.QueueStateEvent(kb, crouch ? new KeyboardState(Key.W, Key.LeftCtrl) : new KeyboardState(Key.W));
+                yield return new WaitForSeconds(crouch ? 2.6f : 1.6f);
+                float inM = Mathf.Abs(player.transform.position.x) - Tuning.TUNNEL_WALL_X;      // 벽면에서 안으로 들어간 거리
+                InputSystem.QueueStateEvent(kb, new KeyboardState());
+                yield return new WaitForSeconds(0.3f);
+                bool want = !isSmall || crouch;
+                bool ok = want ? inM >= Tuning.MAP_GAP_ENTER_M : inM < 0.3f;
+                if (isSmall) smallOk &= ok; else bigOk &= ok;
+                notes.Add($"{(isSmall ? "small" : "big")} gap z {z:F0} {(crouch ? "crouched" : "standing")}: {inM:F2} m past the wall (want {(want ? "≥ " + Tuning.MAP_GAP_ENTER_M : "< 0.3")})");
+            }
+        }
+        Teleport(cc, new Vector3(0f, 0.1f, 3f), 0f);
+        yield return new WaitForSeconds(0.2f);
+        Check("map_gaps_placed", big == Tuning.MAP_GAP_BIG_PIECES.Length && small == Tuning.MAP_GAP_SMALL_PIECES.Length, $"big gaps {big} (want {Tuning.MAP_GAP_BIG_PIECES.Length}) · small gaps {small} (want {Tuning.MAP_GAP_SMALL_PIECES.Length})");
+        Check("map_big_gap_walk_in", big > 0 && bigOk, string.Join(" · ", notes.Where(n => n.StartsWith("big"))));
+        Check("map_small_gap_crouch_only", small > 0 && smallOk, string.Join(" · ", notes.Where(n => n.StartsWith("small"))));
+        InputSystem.RemoveDevice(kb);
+    }
+
     IEnumerator Mining(CharacterController cc)
     {
         var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));

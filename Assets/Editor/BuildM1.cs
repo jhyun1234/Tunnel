@@ -13,6 +13,8 @@ public static class BuildM1
 {
     const string ScenePath = "Assets/Scenes/M1_Tunnel.unity";
     const string PiecePath = "Assets/Tunnel/Pieces/piece_straight.gltf";
+    const string GapBigPath = "Assets/Tunnel/Pieces/piece_gap_big.gltf";      // 3D-④ MR1 맵: 큰 벽 틈(괴물 굴) · 작은 벽 틈(플레이어 전용) — blender/map/make_gaps.py
+    const string GapSmallPath = "Assets/Tunnel/Pieces/piece_gap_small.gltf";
     const string ProfilePath = "Assets/Settings/M1_Volume.asset";
     const string RendererPath = "Assets/Settings/PC_Renderer.asset";
     const string ExePath = "build/Tunnel/Tunnel.exe";
@@ -37,11 +39,13 @@ public static class BuildM1
             return;
         }
         var piece = AssetDatabase.LoadAssetAtPath<GameObject>(PiecePath);
+        var gapBig = AssetDatabase.LoadAssetAtPath<GameObject>(GapBigPath);
+        var gapSmall = AssetDatabase.LoadAssetAtPath<GameObject>(GapSmallPath);
         var pick = AssetDatabase.LoadAssetAtPath<GameObject>(PickPath);
         var ore = AssetDatabase.LoadAssetAtPath<GameObject>(OrePath);
         var chips = AssetDatabase.LoadAssetAtPath<GameObject>(ChipsPath);
         var monster = AssetDatabase.LoadAssetAtPath<GameObject>(MonsterPath);
-        if (piece == null || pick == null || ore == null || chips == null || monster == null)
+        if (piece == null || gapBig == null || gapSmall == null || pick == null || ore == null || chips == null || monster == null)
         {
             Debug.LogError("piece_straight / pick / ore / mine_chips / miner_rigged glTF 를 못 읽었다 (glTFast 임포트 확인)");
             EditorApplication.Exit(3);
@@ -85,8 +89,9 @@ public static class BuildM1
         var pieces = new GameObject("Pieces").transform;
         for (int i = 0; i < PieceCount; i++)
         {
-            var go = Instance(piece, pieces);
-            go.name = $"piece_straight_{i}";
+            var kind = Tuning.MAP_GAP_BIG_PIECES.Contains(i) ? gapBig : Tuning.MAP_GAP_SMALL_PIECES.Contains(i) ? gapSmall : piece;
+            var go = Instance(kind, pieces);
+            go.name = $"{kind.name}_{i}";
             go.transform.position = new Vector3(0f, 0f, i * Tuning.GRID_CELL);
             foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
             {
