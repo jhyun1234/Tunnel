@@ -27,6 +27,11 @@ U1 판정(09-19): 방향은 맞다 / 두 다리 걸음이 안 무섭다 · 무�
   · 더 멀리 = 짚는 두 손의 가운데 쪽으로 엉덩이가 0.4 m 까지 실린다(발은 제자리). 다양하게 = 바닥·벽·탁자 위, 짚는 자리는 짜 둔 차례(길이만 난수)
   자기 검사: 얹은 머리·손이 렌더 재계산에 살아남나 · 짚는 동안 네 손가락 끝이 다 바닥에 닿나 · 손가락이 곧게 펴졌나 · 손끝이 몸 앞으로 나가나 · 손이 바닥·벽을 안 뚫나 · 머리가 0.2 s 에 40° 넘게 도나 · 긴 정지 동안 뼈 움직임 0.
   사보타주: SABOTAGE=nofreeze(U2 버그) · nogrope(모션캡처 안 섞음) · nohold(정지 중에도 시간이 흐름) · curled(짚을 때 손가락을 안 편다) → 저마다 FAIL 로 죽는다.
+도망 장면 (3D-④ MR1 R1, 제안서 docs/제안서_3D4_MR1_도망_구멍.md 승인 2026-09-20 — 벽 틈 먼저 · 새 클립 없이): UP_NAME 이 R 로 시작하면(UP_NAME=R1) —
+  램프 켠 내 눈높이. 2.5 m 앞의 괴물을 내가 쳤다(덜컥) → 0.2 s 에 1 m 밀려 굳어서 나를 본다 0.5 s → 나를 본 채 뒷걸음 3 m(걷기 거꾸로) → 돌아서 4.0 m/s 로 9 m 앞 오른쪽 벽의 **큰 벽 틈**(게임 폭 1.2 · 높이 2.2 · 깊이 2.5 m, 안으로 0.5 m 까지 좁아짐)으로
+  → 틈 앞에서 멈칫, 머리만 나를 딱 돌아봄 → 몸을 낮춰 걸어 들어가며 왼손이 틈 가장자리 벽을 쥔다 → 몸이 다 들어간 뒤에도 **손 하나가 0.45 s 남았다가** 끌려 들어감 → 빈 틈 1.5 s
+  → 나오기: 손가락이 먼저 가장자리를 쥠(0.8 s 손만) → 목을 빼 머리가 나와 딱 — 딱 → 걸어 나와 서서 나를 딱 보고 굳음.
+  자기 검사: 뼈가 틈 밖의 바위 속에 들어간 프레임 0 · 머리가 틈 천장 밑 · 남은 손이 과녁(가장자리)에서 0.15 m 안. 사보타주: SABOTAGE=miss(길이 틈을 0.6 m 빗나감) → FAIL.
 출력: build/check_3d4/UP_<이름>.mp4. GLB·게임은 안 건드린다. 고르기용 영상이다 — 통과 판정은 배포 실행 파일에서."""
 import bpy, os, sys, math, shutil, subprocess
 from mathutils import Vector, Quaternion, Matrix
@@ -37,6 +42,7 @@ MT = r"C:\Users\anjyo\Documents\MineTunnel"
 MIX = os.path.join(MT, "blender", "mixamo")
 NAME = E("UP_NAME", "U4")
 SEARCH = NAME.startswith("B")             # 수색 장면 (MB)
+RETREAT = NAME.startswith("R")            # 도망 장면 (MR1 R1)
 SAB = E("SABOTAGE", "")
 CLOSE = E("UP_CAM") == "close"           # 손가락·팔을 보려고: 괴물 2 m 앞에서 뒷걸음치며 따라가는 카메라 (게임 시점 아님)
 STEP = int(E("UP_STEP", "1"))             # 빠른 확인: N 프레임마다 한 장만 굽고 영상은 안 만든다
@@ -217,7 +223,17 @@ def quad(loc, rot, sx, sy):
     o = bpy.context.active_object; o.scale = (sx, sy, 1); o.data.materials.append(rock)
 L = 40.0
 quad((0, -L / 2 + 4, 0), (0, 0, 0), WALL_X * 2, L); quad((0, -L / 2 + 4, CEIL), (math.pi, 0, 0), WALL_X * 2, L)
-quad((WALL_X, -L / 2 + 4, CEIL / 2), (0, -math.pi / 2, 0), CEIL, L); quad((-WALL_X, -L / 2 + 4, CEIL / 2), (0, math.pi / 2, 0), CEIL, L)
+if not RETREAT: quad((WALL_X, -L / 2 + 4, CEIL / 2), (0, -math.pi / 2, 0), CEIL, L)
+quad((-WALL_X, -L / 2 + 4, CEIL / 2), (0, math.pi / 2, 0), CEIL, L)
+GAP_Y, GAP_HW, GAP_H, GAP_D, GAP_BACK = -START + float(E("UP_GAP_M", "7")) / S, float(E("UP_GAP_W", "1.5")) / 2 / S, float(E("UP_GAP_H", "3.0")) / S, 2.5 / S, float(E("UP_GAP_BACK", "1.2")) / 2 / S      # 벽 틈: 나에게서 9 m · 입구 반폭 · 높이 · 깊이 · 안쪽 끝 반폭 (모델 m)
+if RETREAT:
+    def poly(*vs):
+        me = bpy.data.meshes.new("pv_poly"); me.from_pydata([Vector(v) for v in vs], [], [list(range(len(vs)))]); me.update(); me.materials.append(rock)
+        scene.collection.objects.link(bpy.data.objects.new("pv_poly", me))
+    W_, g0, g1, b0, b1, D_, Y0, Y1 = WALL_X, GAP_Y - GAP_HW, GAP_Y + GAP_HW, GAP_Y - GAP_BACK, GAP_Y + GAP_BACK, WALL_X + GAP_D, -L + 4, 4
+    poly((W_, Y0, 0), (W_, g0, 0), (W_, g0, CEIL), (W_, Y0, CEIL)); poly((W_, g1, 0), (W_, Y1, 0), (W_, Y1, CEIL), (W_, g1, CEIL)); poly((W_, g0, GAP_H), (W_, g1, GAP_H), (W_, g1, CEIL), (W_, g0, CEIL))
+    poly((W_, g0, 0), (D_, b0, 0), (D_, b0, GAP_H), (W_, g0, GAP_H)); poly((W_, g1, 0), (D_, b1, 0), (D_, b1, GAP_H), (W_, g1, GAP_H)); poly((D_, b0, 0), (D_, b1, 0), (D_, b1, GAP_H), (D_, b0, GAP_H))
+    poly((W_, g0, GAP_H), (W_, g1, GAP_H), (D_, b1, GAP_H), (D_, b0, GAP_H)); poly((W_, g0, 0), (W_, g1, 0), (D_, b1, 0), (D_, b0, 0))
 cam = bpy.data.objects.new("pv_cam", bpy.data.cameras.new("pv_cam")); scene.collection.objects.link(cam); scene.camera = cam
 cam.data.sensor_fit = "VERTICAL"; cam.data.angle_y = math.radians(42 if CLOSE else 80); cam.data.clip_start = 0.05
 if SEARCH: EYE = 0.9 / S                  # 탁자 밑에 앉아 숨은 눈높이
@@ -343,6 +359,62 @@ if SEARCH:
     do_grope(1.0, g=1.0, mix=1.0, rise=True, yaw=TY)                                 # 손을 짚은 채 몸부터 일으키고
     do_grope(0.8)                           # 일어선다
     do_stand([(45, 1.2)])                   # 못 찾았다 — 고개를 딴 데로 돌린다
+elif RETREAT:
+    pos, ph = Vector((0.0, -START + 2.0 / S)), {"w": 0.0, "r": 0.0}       # 괴물 자리(세상 x, y) · 걷기·달리기 클립의 흐른 프레임
+    def put(act, mean, f, **kw): plan.append({**dict(act=act, f=f, d=-pos.y, x=pos.x, mean=mean, look=0.0), **kw})
+    def wf(): f0, f1 = walk.frame_range; return f0 + ph["w"] % (f1 - f0)
+    def stay(sec, **kw):
+        for _ in range(int(sec * FPS)): put(walk, mean_walk, wf(), **{**dict(stand=True), **kw})
+    def move(pts, speed, back=False, near_kw=None, **kw):
+        """pts(세상 x, y 꺾은선)를 speed(남은 거리) 모델 m/s 로 간다. 2.4 m/s(게임) 넘으면 달리기 클립. 몸은 가는 쪽을 본다(back = 뒷걸음: 보는 쪽 그대로, 걷기 거꾸로). grip 이 함수면 간 몫(0~1)으로 부른다"""
+        pts = [Vector(p_) for p_ in pts]; cum = [0.0]
+        for a, b_ in zip(pts, pts[1:]): cum.append(cum[-1] + (b_ - a).length)
+        s_ = 0.0
+        while True:
+            v = speed(cum[-1] - s_); s_ += v / FPS
+            if s_ >= cum[-1]: break
+            k = max(i for i in range(len(cum) - 1) if cum[i] <= s_); h = pts[k + 1] - pts[k]
+            pos.x, pos.y = pts[k].lerp(pts[k + 1], (s_ - cum[k]) / h.length)
+            kk = {**kw, **(near_kw if near_kw and cum[-1] - s_ < 1.4 else {})}
+            if callable(kk.get("grip")): kk["grip"] = kk["grip"](s_ / cum[-1])
+            if not back: kk["yaw"] = math.degrees(math.atan2(h.x, -h.y))
+            if v * S > 2.4:
+                ph["r"] += v / v_run; f0, f1 = run.frame_range; put(run, mean_run, f0 + ph["r"] % (f1 - f0), **kk)
+            else:
+                ph["w"] += (-1 if back else 1) * v / v_walk; put(walk, mean_walk, wf(), **kk)
+    PY = GAP_Y + (0.6 if SAB == "miss" else 0.0)                    # 사보타주: 길이 틈을 빗나간다 → 바위 속 검사가 죽어야 한다
+    EDGE, JAMB = Vector((WALL_X + 0.06, GAP_Y + GAP_HW - 0.04, 0.95)), Vector((0, -1, 0))      # 쥐는 자리: 틈의 먼 쪽 옆면, 입구 바로 안 — 손바닥은 옆면에, 손가락이 모서리를 돌아 갱도 쪽으로 나온다 (갱도 쪽 벽면을 짚게 했더니 팔이 모서리 바위를 뚫었다)
+    LOW = dict(crouch=float(E("UP_R_SQUAT", "0.30")), lean=float(E("UP_R_LEAN", "22")))
+    stay(0.4, jaw=JAW_RUN); plan[-1]["jolt"] = True                                       # 코앞 2.5 m — 내가 곡괭이로 쳤다
+    for i in range(6): pos.y += (1.0 / S) / 6; put(walk, mean_walk, wf(), still=True, jaw=JAW_FREEZE)      # 0.2 s 에 1.0 m 밀린다
+    for i in range(int(0.5 * FPS)): put(walk, mean_walk, wf(), still=True, jaw=JAW_FREEZE)                # 굳어서 나를 본다 (스턴 0.5 s)
+    move([pos, (0, pos.y + 3.0 / S)], lambda r: 1.85 / S, back=True, yaw=0.0)                             # 나를 본 채 뒷걸음 3 m
+    stay(0.7, yaw=159.0)                                                                                  # 돌아선다
+    P0, P1, P2 = pos.copy(), Vector((0.1, PY)), Vector((WALL_X - 0.95, PY))
+    move([(1 - u) ** 2 * P0 + 2 * u * (1 - u) * P1 + u * u * P2 for u in (k / 40 for k in range(41))],
+         lambda r: (1.85 + (4.0 - 1.85) * min(1.0, r)) / S, near_kw=dict(tuck=1.0, **LOW))                                  # 4.0 m/s 로 틈까지, 마지막 1 m 에 걸음으로
+    def me_from(yaw_):                      # 몸이 yaw_ 를 볼 때 나를 보려면 머리를 몇 도 (왼쪽 +)
+        f, t_ = Vector((math.sin(math.radians(yaw_)), -math.cos(math.radians(yaw_)))), Vector((0, -START)) - pos
+        return math.degrees(math.atan2(f.x * t_.y - f.y * t_.x, f.dot(t_)))
+    stay(0.55, look=me_from(90.0), lr=12.0, tuck=1.0, **LOW)                                                            # 틈 앞에서 멈칫 — 머리만 나를 딱 돌아본다
+    G = dict(g=1.0, ghand="Left", twist=float(E("UP_R_TWIST", "65")), tuck=1.0, **LOW)
+    move([pos, (WALL_X + 0.1, PY)], lambda r: 1.0, **{**G, "g": 0.0})                                     # 걸어 들어간다 — 어깨가 입구를 지난 뒤에
+    move([pos, (WALL_X + 0.5, PY)], lambda r: 1.0, grip=(EDGE, JAMB, 0.8), **G)                           # 뒤에 남은 왼손이 가장자리를 쥔다                          # 걸어 들어가며 왼손이 가장자리를 쥔다
+    n_linger = len(plan); stay(0.6, grip=(EDGE, JAMB, 0.8), linger=True, **G)                           # 몸은 다 들어갔다 — 손 하나만 남는다
+    IN = Vector((WALL_X + 0.45, GAP_Y + 0.15, 0.85))
+    move([pos, (WALL_X + 0.6, PY - 0.06)], lambda r: 1.2, grip=lambda u: (EDGE.lerp(IN, smooth(u / 0.5)) + Vector((0, -0.12 * math.sin(math.pi * min(1.0, u / 0.5)), 0)), JAMB, 0.8), **G)    # 끌려 들어간다 (모서리를 돌아서)
+    for _ in range(int(float(E("UP_R_EMPTY_S", "1.5")) * FPS)): put(walk, mean_walk, wf(), hidden=True, tuck=1.0, twist=-float(E("UP_R_TWIST", "65")), **LOW)   # 빈 틈 (안에서 나올 자세를 잡는다)
+    G = dict(g=1.0, ghand="Right", grip=(EDGE, JAMB, 0.8), twist=-float(E("UP_R_TWIST", "65")), tuck=1.0, **LOW)
+    put(walk, mean_walk, wf(), hidden=True, yaw_now=-90.0)
+    move([pos, (WALL_X + 0.55, PY - 0.06)], lambda r: 0.9, **G)                                                  # 나오기: 어둠 속에서 손가락이 먼저 가장자리를 쥔다
+    stay(0.8, **G)
+    OUT = dict(neck=NECK_OUT, **{**G, "lean": 24})
+    move([pos, (WALL_X + 0.08, PY - 0.03)], lambda r: 0.45, **OUT)                                               # 목을 빼 머리가 나온다
+    stay(0.6, look=-60, **OUT); stay(0.9, look=40, **OUT)                                                 # 저쪽을 딱 — 이쪽을 딱 (아직 나를 못 봤다)
+    move([pos, (WALL_X - 1.1, PY - 0.25)], lambda r: 1.85 / S, ghand="Right")                                            # 걸어 나온다
+    yaw_end = plan[-1]["yaw"]
+    stay(0.5, look=-25); stay(1.0, look=me_from(yaw_end), still=True, stand=False, jaw=JAW_FREEZE)     # 나를 딱 — 굳는다
+    rate_note = "retreat"
 else:
     do_walk(1.5)
     do_stand([(-55, 0.7), (35, 1.1)])           # 서서 왼쪽을 딱 — 머물고 — 오른쪽을 딱 — 더 오래 머문다 (간격이 고르지 않게)
@@ -374,6 +446,8 @@ def freeze():
 upper = set(pb("Spine").children_recursive) | {pb("Spine")}      # 더듬기는 허리 위만 모션캡처 — 다리는 선 자세 그대로 (zombie attack 온몸 섞기는 몸이 150° 돌아가 버렸다)
 shake = dip = dip_to = 0.0; look = body_look = life = ft = 0.0; was_up = [True, True]; checked = set()
 held = lean = squat = pitch = neck = yaw = yaw_to = tilt = mixw = f2 = 0.0; a2 = None       # 수색: 멈춘 시간 · 자세 열쇠를 따라가는 값 · 모션캡처 섞는 몫
+twist = tuck = 0.0                          # 도망: 좁은 틈에 어깨를 비껴 넣는 상체 비틀기° · 안 쥐는 팔을 몸 앞으로 모으기 0~1
+grip, in_rock, head_top, grip_err = None, 0, 0.0, 0.0   # 도망: 쥐는 자리 · 바위 속에 든 뼈-프레임 · 틈 안에서 머리 꼭대기 · 남은 손이 과녁에서 뜬 거리
 roll = 0.0; hshift, face_pre = Vector((0, 0, 0)), None  # 짚는 손 쪽으로 실리는 엉덩이 · 들었을 때 머리가 얼마나 돌았나 재는 기준
 gw, gi_now, focus = {"Left": 0.0, "Right": 0.0}, 0, Vector((0, -1, 0))      # 팔 IK 영향 · 짚기 시간표의 지금 칸 · 머리가 따라가는 손 자리
 by = {}; slid = 0.0; pat_n = pat_ok = clipped = in_slab = 0; straight_min, pat_low, pat_reach = 9.0, 9.0, 0.0
@@ -414,7 +488,7 @@ for n, st in enumerate(plan):
         if not st.get("still"): ft += 1.0 / FPS               # 손가락 시계 — 굳으면 같이 멈춘다
         lean += (st.get("lean", 0.0) - lean) * 0.07; squat += (st.get("crouch", 0.0) - squat) * 0.07; pitch += (st.get("pitch", 0.0) - pitch) * 0.07
         neck += max(-NECK_OUT / NECK_S / FPS, min(NECK_OUT / NECK_S / FPS, st.get("neck", 0.0) - neck))     # 목은 고른 빠르기로 천천히 (Unity MoveTowards 와 같다)
-        for s_ in gw: gw[s_] += ((st.get("g", 0.0) if SAB != "nogrope" else 0.0) - gw[s_]) * 0.22      # 몸이 접히는 것(0.07)보다 팔이 먼저 자리를 잡아야 손이 바닥 밑으로 안 들어간다
+        for s_ in gw: gw[s_] += ((st.get("g", 0.0) if SAB != "nogrope" and st.get("ghand", s_) == s_ else 0.0) - gw[s_]) * 0.22      # 몸이 접히는 것(0.07)보다 팔이 먼저 자리를 잡아야 손이 바닥 밑으로 안 들어간다
         gi_now = st.get("gi", gi_now)
         if SEARCH and gw["Left"] > 0.5:     # 더 멀리: 두 손 가운데 쪽으로 엉덩이가 실린다 (발은 제자리 — 다리 IK)
             mid = Matrix.Rotation(math.radians(-yaw), 3, "Z") @ ((PAT["Left"][gi_now][0] + PAT["Right"][gi_now][0]) / 2) - Vector((0, -0.75, 0)); mid.z = 0
@@ -424,6 +498,8 @@ for n, st in enumerate(plan):
             roll += (max(-16.0, min(16.0, (far["Left"] - far["Right"]) * 40)) - roll) * 0.06      # 더 멀리 뻗는 쪽 어깨가 내려간다 (몸통이 그쪽으로 기운다)
         else: hshift *= 0.9; roll *= 0.9
         if "yaw" in st: yaw_to = st["yaw"]
+        twist += (st.get("twist", 0.0) - twist) * 0.10; tuck += (st.get("tuck", 0.0) - tuck) * 0.12
+        if "yaw_now" in st: yaw = yaw_to = st["yaw_now"]
         yaw += (yaw_to - yaw) * 0.08
     pb("Hips").location = pb("Hips").location + hips_axes @ Vector((0.015 * life * math.sin(2 * math.pi * 0.21 * t) + hshift.x, 0.35 * squat + hshift.y,
                                                                     -(CROUCH + squat + dip + 0.010 * life * math.sin(2 * math.pi * 0.30 * t))))
@@ -445,8 +521,9 @@ for n, st in enumerate(plan):
     if not hold: body_look += lag * 0.07                                   # 상체: 머리를 뒤늦게(0.5 s 쯤) 천천히 따라간다 — 머리 각도의 45 % 까지
     for nm in ("Spine", "Spine1", "Spine2"):
         rotate_world(nm, Matrix.Rotation(math.radians(body_look / 3), 4, "Z"))
-    rotate_world("Neck", Matrix.Rotation(math.radians((look - body_look) * 0.4), 4, "Z"))
-    rotate_world("Head", Matrix.Rotation(math.radians((look - body_look) * 0.6), 4, "Z"))
+        if abs(twist) > 0.01: rotate_world(nm, Matrix.Rotation(math.radians(twist / 3), 4, (M @ pb(nm).matrix).to_3x3().col[1]))      # 숙인 몸통을 세로축으로 돌리면 머리가 옆으로 0.5 m 휘둘린다 — 등뼈 제 축으로 비튼다
+    rotate_world("Neck", Matrix.Rotation(math.radians((look - body_look - twist) * 0.4), 4, "Z"))
+    rotate_world("Head", Matrix.Rotation(math.radians((look - body_look - twist) * 0.6), 4, "Z"))
     if abs(tilt) > 0.01: rotate_world("Head", Matrix.Rotation(math.radians(tilt), 4, (M @ pb("Head").matrix).to_3x3() @ face_l))      # 갸웃
     for k, s_ in enumerate(("Left", "Right")):
         if st.get("run"):                                     # U3 판정: 두 팔로 잡겠다는 듯 앞으로 뻗고 벌려서 — 모션캡처의 팔 펌프질은 20 % 만 남긴다
@@ -457,13 +534,18 @@ for n, st in enumerate(plan):
             sw = life * (1 - mixw) * (7.0 * math.sin(2 * math.pi * 0.33 * t + k * 2.1) + lag * 0.5)
             rotate_world(s_ + "Arm", Matrix.Rotation(math.radians(sw), 4, "X"))
             rotate_world(s_ + "ForeArm", Matrix.Rotation(math.radians(life * (1 - mixw) * 5.0 * math.sin(2 * math.pi * 0.33 * t + k * 2.1 - 0.9)), 4, "X"))
+        if tuck > 0.01 and st.get("ghand") != s_:             # 안 쥐는 팔: 팔꿈치를 몸에 붙이고 손을 가슴 앞·아래로
+            aim(s_ + "Arm", (0, -0.35, -1), tuck * 0.9); aim(s_ + "ForeArm", (0, -1, -0.25), tuck * 0.9)
         g = gw[s_]; arm_ik(s_, g); c_ = 0.0
         if g > 0.001:                                         # 짚는 팔: 손목 과녁(팔 길이 94 % 안으로 당김) + 손 방향(손가락은 어깨에서 뻗는 쪽, 손바닥은 바닥 쪽, 떠 있을 땐 끝을 조금 든다)
             Rzi = Matrix.Rotation(math.radians(-yaw), 3, "Z")
-            p_, nrm, c_ = PAT[s_][gi_now]; p_, nrm = Rzi @ p_, Rzi @ nrm
-            if c_ < 1.0: focus = p_
+            if RETREAT:                                       # 쥐는 자리는 세상에 박혀 있고 몸이 움직인다
+                grip = st.get("grip", grip); p_, nrm, c_ = grip; p_, nrm = Rzi @ (p_ - Vector((st["x"], -st["d"], 0))), Rzi @ nrm
+            else:
+                p_, nrm, c_ = PAT[s_][gi_now]; p_, nrm = Rzi @ p_, Rzi @ nrm
+            if c_ < 1.0 and not RETREAT: focus = p_
             sh = wpos(s_ + "Arm")
-            p_ = p_ + nrm * (0.035 + 0.05 * (1 - c_)) + Vector((0, 0, 0.5 * max(0.0, 1 - squat / 0.3)))      # 몸이 덜 접힌 동안은 손도 그만큼 떠 있다 (접고 펼 때 손이 몸과 같이 내려가고 올라온다)
+            p_ = p_ + nrm * (0.035 + 0.05 * (1 - c_)) + Vector((0, 0, 0.0 if RETREAT else 0.5 * max(0.0, 1 - squat / 0.3)))      # 몸이 덜 접힌 동안은 손도 그만큼 떠 있다 (접고 펼 때 손이 몸과 같이 내려가고 올라온다)
             off = (sh - p_).dot(nrm); s0 = sh - nrm * off; r_ = math.sqrt(max(0.01, 0.80 ** 2 - off ** 2))      # 팔 길이 94 % 밖이면 면을 따라 어깨 쪽으로 당긴다
             if (p_ - s0).length > r_: p_ = s0 + (p_ - s0).normalized() * r_; clipped += 1
             yv = ((p_ - s0).normalized() + nrm * 0.30 * (1 - c_)).normalized(); dn = -nrm
@@ -485,6 +567,9 @@ for n, st in enumerate(plan):
     if P + "Jaw" in pbs:
         pb("Jaw").rotation_quaternion = Quaternion(jaw_axis, math.radians(st.get("jaw", 0.0)))
     upd()
+    if RETREAT:
+        neck_place(neck)
+        if st.get("linger"): grip_err = max(grip_err, (wpos("LeftHand") - tg["hand_Left"].location).length)
     if SEARCH:
         neck_place(neck); neck_max = max(neck_max, (wpos("Head") - wpos("Neck")).length)
         for s_ in ("Left", "Right"):        # 짚은 손: 가장 낮은 손끝(과 손목 밑)이 바닥에 딱 닿게 과녁을 위아래로 한 번 바로잡는다 + 자기 검사 기록
@@ -519,7 +604,19 @@ for n, st in enumerate(plan):
             w_ = max(zip(order, snap, hold_prev), key=lambda z: max(abs(x) for row in (z[1] - z[2]) for x in row))
             print("HOLDDBG", n, w_[0].name, max(abs(x) for row in (w_[1] - w_[2]) for x in row))
         hold_prev = snap if still_ else None
-    X = Matrix.Translation((CX, -st["d"], 0)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
+    X = Matrix.Translation((st.get("x", CX) + (50.0 if st.get("hidden") else 0.0), -st["d"], 0)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
+    if RETREAT and not st.get("hidden"):    # 자기 검사: 벽 너머(x > 벽)에 있는 뼈는 전부 틈 안(안으로 좁아지는 폭 · 천장 밑)이어야 한다
+        bad = 0
+        for b_ in order:
+            w_ = X @ (M @ b_.matrix).translation
+            grip_f = st.get("ghand", "-") + "Hand" in b_.name       # 쥐는 손의 손가락은 바위에 닿는 게 일이다 — 모서리에서 0.16 m 까지 봐준다 (손끝이 모서리를 스칠 때 0.15 m 까지 든다)
+            if w_.x <= WALL_X + (0.08 if grip_f else 0.03): continue
+            hw = GAP_HW - (GAP_HW - GAP_BACK) * min(1.0, (w_.x - WALL_X) / GAP_D)
+            out_ = abs(w_.y - GAP_Y) > hw + (0.16 if grip_f else 0.05) or w_.z > GAP_H or w_.x > WALL_X + GAP_D; bad += out_
+            if out_ and E("UP_DEBUG") : print("ROCKBONE", n, b_.name, "%.2f %.2f %.2f" % tuple(w_), "halfwidth %.2f" % hw)
+            if "Head" in b_.name: head_top = max(head_top, w_.z)
+        in_rock += bad > 0
+        if bad and E("UP_DEBUG"): print("ROCKDBG frame", n, "bones", bad)
     for o in roots:
         o.matrix_world = X @ base_mw[o.name]
     for e in tg.values():
@@ -532,17 +629,22 @@ for n, st in enumerate(plan):
     # U2 판정 "영상이 끊긴다": 발 디딜 때 화면을 프레임마다 무작위로 튀게 한 것이 빠진 프레임처럼 보였다 → 무작위 없이 아래로 눌렸다 돌아오기만
     cam.location = CAM0 + sway + Vector((0, 0, -shake))
     cam.rotation_euler = (math.radians(90) + 0.004 * math.sin(2 * math.pi * 0.27 * tc) - shake * 0.3 - (0.04 if SEARCH else 0.0),
-                          0.003 * math.sin(2 * math.pi * 0.19 * tc), -0.15 if SEARCH else 0.0)       # 수색: 바닥을 쓰는 손이 보이게 살짝 아래·괴물 쪽을 본다
+                          0.003 * math.sin(2 * math.pi * 0.19 * tc), -0.15 if SEARCH else (-0.20 if RETREAT else 0.0))       # 수색: 바닥을 쓰는 손이 보이게 살짝 아래·괴물 쪽을 본다
     shake *= 0.7
     if CLOSE:
         cam.location = Vector((0.6, -st["d"] - 2.6, 1.3))
         cam.rotation_euler = (Vector((0, -st["d"], 1.15)) - cam.location).to_track_quat("-Z", "Y").to_euler()
+    if CLOSE and RETREAT:                   # 틈 가장자리의 손이 보이게: 갱도 가운데, 틈 2.4 m 앞 (게임 시점 아님)
+        cam.location = Vector((0.2, GAP_Y - 2.4, 1.25)) + sway
+        cam.rotation_euler = (Vector((WALL_X, GAP_Y + 0.2, 1.0)) - cam.location).to_track_quat("-Z", "Y").to_euler()
+        cam.data.angle_y = math.radians(55)
     if CLOSE and SEARCH:                    # 팔·손가락이 보이게: 괴물 오른쪽 앞 낮은 곳에서 (게임 시점 아님)
         cam.location = Vector((-1.85, -st["d"] - 0.5, 1.45)) + sway          # 몸을 따라 돌리면 카메라가 벽 밖으로 나간다(시험 프레임이 새까맸다) — 갱도 기준 자리
         cam.rotation_euler = (Vector((CX - 0.5, -st["d"] - 0.95, 0.55)) - cam.location).to_track_quat("-Z", "Y").to_euler()
         cam.data.angle_y = math.radians(55)
     near = max(START - st["d"] - 0.4, 0.2)
     if CLOSE: near = 2.6
+    if CLOSE and RETREAT: near = 9.0
     lamp.data.energy = WATTS * max(0.3, min(1.0, (near / (4.0 / S)) ** 1.4)) * (1.0 + 0.03 * math.sin(2 * math.pi * 1.7 * tc))
     mats = freeze()                         # 안 굽는 프레임도 뜬다 — 뜨고 난 다음 프레임은 팔 IK 가 조금 다르게 풀려서, 빠른 확인(UP_STEP)의 검사 숫자가 본 렌더와 달랐다
     # 자기 검사: 프레임을 다시 계산해도(렌더가 하는 일) 돌린 머리·뻗은 손이 그대로인가. SABOTAGE=nofreeze 로 U2 버그를 되살리면 여기서 죽는다
@@ -571,6 +673,11 @@ if SEARCH:
     assert snap_deg >= 25, "FAIL: 들었을 때 머리가 0.2 s 에 25° 를 못 돈다"
     assert any(st.get("hold") for st in plan) and hold_move < 1e-4, "FAIL: 긴 정지 동안 뼈가 움직인다"
     assert in_slab == 0, "FAIL: 손끝이 탁자 상판 속에 들어갔다 (%d)" % in_slab
+if RETREAT:
+    print("CHECK retreat: frames with a bone inside rock %d · head top inside the gap %.2f m (gap ceiling %.2f) · lingering hand off its grip by %.3f m (%d linger frames)" % (in_rock, head_top, GAP_H, grip_err, sum(1 for st in plan if st.get("linger"))))
+    assert in_rock == 0, "FAIL: 뼈가 틈 밖의 바위 속에 들어갔다"
+    assert 0.5 < head_top < GAP_H, "FAIL: 머리가 틈 천장을 뚫는다 (또는 틈에 안 들어갔다)"
+    assert grip_err < 0.15, "FAIL: 남은 손이 가장자리를 못 쥐고 있다"
 if STEP > 1: sys.exit(0)
 
 out = os.path.join(OUT_DIR, "UP_%s.mp4" % NAME)
