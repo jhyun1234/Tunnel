@@ -40,11 +40,11 @@ def co(o):
     a = np.empty(len(o.data.vertices) * 3, np.float32); o.data.vertices.foreach_get("co", a); return a.reshape(-1, 3).astype(np.float64)
 def put(o, V):
     o.data.vertices.foreach_set("co", V.astype(np.float32).ravel()); o.data.update()
-def cut(o, point, normal):
-    """normal 쪽을 버린다"""
+def cut(o, point, normal, fill=False):
+    """normal 쪽을 버린다. fill = 자른 자리를 막는다(손목: 팔 끝이 빈 대롱으로 보였다, 사용자 09-20)"""
     bpy.ops.object.select_all(action="DESELECT"); o.select_set(True); bpy.context.view_layer.objects.active = o
     bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.bisect(plane_co=point, plane_no=normal, clear_outer=True, use_fill=False)
+    bpy.ops.mesh.bisect(plane_co=point, plane_no=normal, clear_outer=True, use_fill=fill)
     bpy.ops.object.mode_set(mode="OBJECT")
 
 body = load("meshy_m2", "Miner_Body", "살")
@@ -76,7 +76,7 @@ cut(hand, (WRIST_X - 0.015, 0, 0), (-1, 0, 0))   # 손: 손목 안쪽(뼈 밑동
 right = hand.copy(); right.data = hand.data.copy(); bpy.context.scene.collection.objects.link(right)
 R = co(right); R[:, 0] *= -1; put(right, R)
 right.data.flip_normals()
-cut(body, (WRIST_X, 0, 0), (1, 0, 0)); cut(body, (-WRIST_X, 0, 0), (-1, 0, 0))
+cut(body, (WRIST_X, 0, 0), (1, 0, 0), fill=True); cut(body, (-WRIST_X, 0, 0), (-1, 0, 0), fill=True)
 bpy.ops.object.select_all(action="DESELECT"); hand.select_set(True); right.select_set(True); bpy.context.view_layer.objects.active = hand
 bpy.ops.object.join()
 
@@ -158,6 +158,9 @@ def rough(im):                                    # 같은 물리 간격(4096 �
 hf0 = rough(img)
 if SAB != "scales":
     img.scale(512, 512); img.scale(2048, 2048); img.pack()
+if SAB != "scales":                               # 속 몸통(갈비) 그림에도 같은 자갈 무늬가 있다 (09-20 목·가슴 확대 렌더) — 덜 흐리게(1024)
+    timg = next(n for n in torso.data.materials[0].node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].links[0].from_node.image
+    timg.scale(1024, 1024); timg.scale(2048, 2048); timg.pack()
 hf = rough(img)
 check(hf < 0.6 * hf0, "몸 색 그림의 자잘한 무늬가 죽었다: 4 픽셀 간격 밝기 차 %.4f → %.4f (< 60 %%)" % (hf0, hf))
 
