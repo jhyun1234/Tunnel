@@ -17,13 +17,13 @@ public static class BuildM1
     const string FontPath = "Assets/Fonts/Pretendard-Regular.otf"; // 한글 글꼴 (OFL, 같은 폴더 LICENSE_Pretendard_OFL.txt)
     const string LogoUnivPath = "Assets/UI/logo_university.png";   // 회색 자리표시 — 센터가 주는 원본으로 바꾼다 (임의 변형 금지)
     const string LogoCenterPath = "Assets/UI/logo_center.png";
-    const string PiecePath = "Assets/Tunnel/Pieces/piece_straight.gltf";
-    const string GapBigPath = "Assets/Tunnel/Pieces/piece_gap_big.gltf";      // 3D-④ MR1 맵: 큰 벽 틈(괴물 굴) · 작은 벽 틈(플레이어 전용) — blender/map/make_gaps.py
-    const string GapSmallPath = "Assets/Tunnel/Pieces/piece_gap_small.gltf";
+    const string PiecePath = "Assets/Tunnel/Pieces/piece_straight" + Tuning.PIECE_SUFFIX + ".gltf";      // A1: _v2 = Meshy 갱목·갓등 (blender/map/piece_v2.py)
+    const string GapBigPath = "Assets/Tunnel/Pieces/piece_gap_big" + Tuning.PIECE_SUFFIX + ".gltf";      // 3D-④ MR1 맵: 큰 벽 틈(괴물 굴) · 작은 벽 틈(플레이어 전용) — blender/map/make_gaps.py
+    const string GapSmallPath = "Assets/Tunnel/Pieces/piece_gap_small" + Tuning.PIECE_SUFFIX + ".gltf";
     const string ProfilePath = "Assets/Settings/M1_Volume.asset";
     const string RendererPath = "Assets/Settings/PC_Renderer.asset";
     const string ExePath = "build/Tunnel/Tunnel.exe";
-    const string PickPath = "Assets/Tunnel/Pieces/pick.gltf";
+    const string PickPath = Tuning.PICK_MODEL;          // A1: Assets/Tunnel/Props/pickaxe.glb (blender/props/fit_prop.py)
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";

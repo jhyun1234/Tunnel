@@ -56,6 +56,15 @@ public static class Tuning
     public static readonly int[] MAP_GAP_BIG_PIECES = { 1, 5 };     // 복도 조각 번호 (0 = 시작 칸)
     public static readonly int[] MAP_GAP_SMALL_PIECES = { 3 };
     public const float MAP_GAP_ENTER_M = 2.0f;     // m, 검사: 벽면에서 이만큼은 걸어 들어갈 수 있어야 한다
+    // A1 Meshy 소품 1차 (승인 09-23): 조각의 갱목·전등을 Meshy 통나무·갓등으로 바꾼 piece_straight_v2 (blender/map/piece_v2.py) + 틈 조각 _v2 (make_gaps.py PIECE_SRC/PIECE_SUFFIX).
+    // "" 로 두면 옛 조각(네모 기둥·죽은 전구)으로 돌아간다. 곡괭이는 Assets/Tunnel/Props/pickaxe.glb (fit_prop.py, 자루 +Y · 머리 위 · 원점 = 쥐는 곳, pick.gltf 와 같은 틀)
+    public const string PIECE_SUFFIX = "_v2";
+    public const string PICK_MODEL = "Assets/Tunnel/Props/pickaxe.glb";   // 옛것: Assets/Tunnel/Pieces/pick.gltf
+    public const float PICK_LENGTH_M = 0.88f;      // 검사: 곡괭이 자루 끝~머리 위 (fit_prop.py 표와 같다)
+    public const float TIMBER_POST_M = 4.8f;       // 검사: 기둥 높이 (piece_straight TMB_*_post_*)
+    public const float LAMP_FIXTURE_M = 0.30f;     // 검사: 갓등 높이 (fit_prop.py 표)
+    public const int PROPS_TRIS_MAX = 400000;      // 검사: 소품(갱목·갓등·곡괭이) 삼각형 합 상한 — 조각 6개 × 통나무 토막 40 × 1.2k + 갓등 + 곡괭이 ≈ 310k (09-23)
+    public const int PROPS_TEX_MAX = 1024;         // 검사: 소품 그림 한 변 상한 (shrink_glb.py 1024)
     public const float CAMERA_FOV = 80.0f;         // Godot Player.tscn Camera3D (세로 fov)
 
     // 헤드램프

@@ -17,6 +17,7 @@ fi
 
 echo "== check (exe)"
 rm -rf build/Tunnel/check
+rm -f "$LOCALAPPDATA/Temp/jhyun1234/Tunnel/dx12_pso_cache_lib.bin"   # D3D12 파이프라인 캐시 — 재질·셰이더가 바뀐 빌드에서 묵은 캐시가 CHECK ALL PASS 뒤 종료 때 D3D12Core.dll 0xc0000005 (exit 139) 를 냈다 (09-23). 지우면 다시 만든다
 ./build/Tunnel/Tunnel.exe -check "$@" -screen-width 1920 -screen-height 1080 -screen-fullscreen 0 -logFile "$ROOT/build/check.log"
 code=$?
 grep "CHECK " build/check.log

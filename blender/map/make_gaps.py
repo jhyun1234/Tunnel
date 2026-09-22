@@ -16,7 +16,9 @@ from mathutils.bvhtree import BVHTree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PIECES = os.path.join(os.path.dirname(os.path.dirname(HERE)), "Assets", "Tunnel", "Pieces")
-SRC = os.path.join(PIECES, "piece_straight.gltf")
+PIECE_SRC = os.environ.get("PIECE_SRC", "piece_straight")     # A1: PIECE_SRC=piece_straight_v2 PIECE_SUFFIX=_v2 → Meshy 갱목·갓등 조각에서 틈 조각 _v2 를 만든다
+SUFFIX = os.environ.get("PIECE_SUFFIX", "")
+SRC = os.path.join(PIECES, PIECE_SRC + ".gltf")
 SAB = os.environ.get("SABOTAGE", "")
 WALL_X, COL_X0, COL_X1, CEIL = -3.16, -3.2, -3.5, 5.6           # 보이는 벽이 시작하는 곳 · 충돌 벽 상자의 두 면 · 천장 (piece_straight 에서 잰 값)
 GAPS = {
@@ -24,7 +26,7 @@ GAPS = {
     "piece_gap_small": dict(y=-0.01, w=0.9, h=1.3, d=3.0, back=0.9, lintel=False),
 }
 def md5(path): return hashlib.md5(open(path, "rb").read()).hexdigest()
-src_md5 = {f: md5(os.path.join(PIECES, f)) for f in ("piece_straight.gltf", "piece_straight.bin")}
+src_md5 = {f: md5(os.path.join(PIECES, f)) for f in (PIECE_SRC + ".gltf", PIECE_SRC + ".bin")}
 
 def convex(name, pts):
     """볼록한 충돌 덩어리 (꼭짓점 8개의 볼록 껍질)"""
@@ -164,7 +166,7 @@ def build(name, g):
     assert holes == 0, "FAIL: 틈 안에 면이 빠진 데가 있다"
 
     # ---- 내보내기: 그림은 원래 파일을 그대로 가리킨다
-    out = os.path.join(PIECES, name + ".gltf")
+    out = os.path.join(PIECES, name + SUFFIX + ".gltf")
     bpy.ops.export_scene.gltf(filepath=out, export_format="GLTF_SEPARATE", export_keep_originals=True, export_apply=True, export_yup=True, export_extras=True)
     doc = json.load(open(out, encoding="utf-8"))
     uris = [im["uri"] for im in doc.get("images", [])]

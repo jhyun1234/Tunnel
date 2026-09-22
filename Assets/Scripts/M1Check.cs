@@ -12,8 +12,8 @@ using UnityEngine.SceneManagement;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -217,6 +217,7 @@ public class M1Check : MonoBehaviour
                 plug.transform.position = new Vector3(Mathf.Sign(back.bounds.center.x) * (Tuning.TUNNEL_WALL_X + 0.5f), 1.5f, back.bounds.center.z);
                 plug.size = new Vector3(0.6f, 3f, 2f);
             }
+        propsSabotage = sabotage;                        // A1 소품: bigprop(기둥·곡괭이 2배) · nomat(소품 재질 없음 → 분홍) · renametmb(기둥 이름 바꿈) — PropsStage 가 건다
         if (sabotage == "nogrope")                       // 3D-④ MB 전 상태: 수색 첫 자리에서도 서서 둘러보기만
             stalker.grope = false;
         if (sabotage == "clawhands" && sanim != null)    // 짚을 때 손가락을 안 편다 (영상 B2 판정 "전부 펴졌으면" 전)
@@ -266,6 +267,8 @@ public class M1Check : MonoBehaviour
             yield return Mining(cc);
         if (only == "" || only == "map")
             yield return MapStage(cc);
+        if (only == "" || only == "props")
+            yield return PropsStage(cc);
         stalker.enabled = true;
         if (only == "" || only == "monster")
             yield return MonsterStage(cc);
@@ -1291,6 +1294,98 @@ public class M1Check : MonoBehaviour
         Check("reappears_at_far_crack_full_hp", st.state == Stalker.State.Wander && st.hp == Tuning.STALKER_HP && shown && d2 > 15f && Mathf.Abs(d2 - far) < 1.5f,
             $"state {st.state}, hp {st.hp:0}, visible {shown}, {d2:F1} m from player (far crack {far:F1} m)");
         lamp.lampOn = true;
+    }
+
+    // A1 Meshy 소품 1차 (승인 09-23): 조각 _v2 의 갱목(통나무)·갓등, 곡괭이 pickaxe.glb — 실제 크기 · 바닥 붙음 · 면·그림 예산 · 재질 빠짐(분홍) 0 · 갱목 이름 그대로.
+    // 그림 24_prop_timber(기둥 2 m 정면) · 24_prop_lamp(갓등 6 m 앞) · 24_prop_pick(곡괭이 뷰모델) — 사람 판정용
+    string propsSabotage = "";
+    IEnumerator PropsStage(CharacterController cc)
+    {
+        var mainCam = player.GetComponentInChildren<Camera>();
+        var posts = pieces.GetComponentsInChildren<Renderer>().Where(r => r.name.StartsWith("TMB_straight_") && r.name.Contains("_post_")).OrderBy(r => r.bounds.center.z).ToArray();
+        var lamps = pieces.GetComponentsInChildren<Renderer>().Where(r => r.name == "PRP_straight_bulb").OrderBy(r => r.bounds.center.z).ToArray();
+        var pickRs = pickaxe.mesh.GetComponentsInChildren<Renderer>(true);
+        if (propsSabotage == "bigprop") { pickaxe.mesh.localScale *= 2f; foreach (var r in posts) r.transform.localScale *= 2f; }
+        if (propsSabotage == "nomat") { foreach (var r in posts.Concat(lamps).Concat(pickRs)) r.sharedMaterial = null; }
+        if (propsSabotage == "renametmb") { foreach (var r in posts) if (r.name.EndsWith("_post_R")) r.name = "TMB_x_post_R"; }
+        yield return null;
+        // ① 실제 크기: 곡괭이 = 그물 경계(제 좌표) × (지금 배율 ÷ PICK_SCALE) · 기둥·갓등 = 세상 경계 상자 높이
+        var pb = new Bounds(); bool first = true;
+        foreach (var mf in pickaxe.mesh.GetComponentsInChildren<MeshFilter>(true))
+        {
+            var b = mf.sharedMesh.bounds; b.center = mf.transform.localPosition + b.center;
+            if (first) { pb = b; first = false; } else pb.Encapsulate(b);
+        }
+        float pickLen = pb.size.y * pickaxe.mesh.localScale.y / Tuning.PICK_SCALE;
+        float postH = posts.Length > 0 ? posts[0].bounds.size.y : 0f, lampH = lamps.Length > 0 ? lamps[0].bounds.size.y : 0f;
+        bool sizeOk = Mathf.Abs(pickLen - Tuning.PICK_LENGTH_M) <= Tuning.PICK_LENGTH_M * 0.1f && Mathf.Abs(postH - Tuning.TIMBER_POST_M) <= Tuning.TIMBER_POST_M * 0.1f && Mathf.Abs(lampH - Tuning.LAMP_FIXTURE_M) <= Tuning.LAMP_FIXTURE_M * 0.1f;
+        Check("props_real_size", posts.Length > 0 && lamps.Length > 0 && sizeOk, $"pick {pickLen:F2} m (want {Tuning.PICK_LENGTH_M} ±10 %) · post {postH:F2} (want {Tuning.TIMBER_POST_M}) · lamp {lampH:F2} (want {Tuning.LAMP_FIXTURE_M}) · posts {posts.Length} lamps {lamps.Length}");
+        // ② 바닥·천장: 기둥 밑이 바닥(원본 −0.05) ±10 cm, 갓등 위 끝이 전선 밑(4.55) ±5 cm
+        float postBottom = posts.Length > 0 ? posts[0].bounds.min.y : 99f, lampTop = lamps.Length > 0 ? lamps[0].bounds.max.y : 0f;
+        Check("props_on_floor", Mathf.Abs(postBottom + 0.05f) < 0.1f && Mathf.Abs(lampTop - 4.55f) < 0.05f, $"post bottom y {postBottom:F2} (want -0.05 ±0.1) · lamp top y {lampTop:F2} (want 4.55 ±0.05)");
+        // ③ 예산: 갱목(기둥·가로대·널)·갓등·곡괭이 삼각형 합, 소품 그림(prop_*·곡괭이) 한 변
+        long tris = 0;
+        foreach (var mf in pieces.GetComponentsInChildren<MeshFilter>().Where(m => m.name.StartsWith("TMB_") || m.name == "PRP_straight_bulb").Concat(pickaxe.mesh.GetComponentsInChildren<MeshFilter>(true)))
+            tris += mf.sharedMesh.triangles.Length / 3;
+        int texMax = 0; var texNames = new List<string>();
+        foreach (var r in posts.Concat(lamps).Concat(pickRs))
+            foreach (var m in r.sharedMaterials)
+            {
+                if (m == null) continue;
+                foreach (var id in m.GetTexturePropertyNameIDs())
+                {
+                    var t = m.GetTexture(id);
+                    if (t == null || !(r.name.StartsWith("PICK_") || t.name.StartsWith("prop_"))) continue;
+                    texMax = Mathf.Max(texMax, Mathf.Max(t.width, t.height)); if (!texNames.Contains(t.name)) texNames.Add(t.name);
+                }
+            }
+        Check("props_budget", tris <= Tuning.PROPS_TRIS_MAX && texMax > 0 && texMax <= Tuning.PROPS_TEX_MAX, $"prop triangles {tris} (max {Tuning.PROPS_TRIS_MAX}) · prop textures {texNames.Count}, max side {texMax} (max {Tuning.PROPS_TEX_MAX})");
+        // ④ 재질 빠짐: 기둥 2 m 정면 · 갓등 6 m 앞(눈 1.6 → 4.4 높이는 25° 위, 세로 시야 80° 안) · 곡괭이 뷰모델 — 각 영역에서 분홍 픽셀 0
+        int magentaSum = 0; string where = ""; float timberLum = 0f, pickLum = 0f;
+        if (posts.Length > 2)
+        {
+            var post = posts[2];                                     // 조각 0 의 세 번째 기둥
+            Vector3 c = post.bounds.center; float side = Mathf.Sign(c.x);
+            Teleport(cc, new Vector3(c.x - side * 2f, 0.1f, c.z), side > 0f ? 90f : -90f);
+            yield return Capture("24_prop_timber", v => timberLum = v.x, regionAt: () => ScreenRect(mainCam, new[] { post }));
+            magentaSum += lastMagenta; where += $"timber {lastMagenta}";
+        }
+        if (lamps.Length > 0)
+        {
+            var lamp = lamps[1 < lamps.Length ? 1 : 0];
+            Vector3 c = lamp.bounds.center;
+            Teleport(cc, new Vector3(Mathf.Sign(c.x) * 1.5f, 0.1f, c.z - 6f), 0f);
+            yield return Capture("24_prop_lamp", _ => { }, regionAt: () => ScreenRect(mainCam, new[] { lamp }));
+            magentaSum += lastMagenta; where += $" · lamp {lastMagenta}";
+        }
+        Teleport(cc, new Vector3(0f, 0.1f, 17.5f), 0f);
+        yield return Capture("24_prop_pick", v => pickLum = v.x, regionAt: () => ScreenRect(mainCam, pickRs));
+        magentaSum += lastMagenta; where += $" · pick {lastMagenta}";
+        Check("props_no_magenta", magentaSum == 0, $"magenta pixels {where}");
+        // ⑥ 법선이 면 감기(winding)와 같은 쪽: fit_prop 의 축 행렬이 거울이면(09-23 실제 사고) 면이 뒤집혀 램프 앞에서 새까맣다 — 화면 밝기(평균 0.15)로는 안 잡혔다.
+        //    삼각형마다 꼭짓점 순서로 구한 기하 법선과 저장된 법선의 내적 > 0 인 몫 ≥ 0.9 (곡괭이 · 기둥 · 갓등)
+        var agree = new List<string>(); bool windOk = true;
+        foreach (var mf in new[] { posts[0].GetComponent<MeshFilter>(), lamps[0].GetComponent<MeshFilter>() }.Concat(pickaxe.mesh.GetComponentsInChildren<MeshFilter>(true)))
+        {
+            var m = mf.sharedMesh; var v = m.vertices; var nn = m.normals; var tri = m.triangles; int ok = 0, all = tri.Length / 3;
+            for (int i = 0; i + 2 < tri.Length; i += 3)
+            {
+                Vector3 g = Vector3.Cross(v[tri[i + 1]] - v[tri[i]], v[tri[i + 2]] - v[tri[i]]);
+                if (Vector3.Dot(g, nn[tri[i]] + nn[tri[i + 1]] + nn[tri[i + 2]]) > 0f) ok++;
+            }
+            float f = all > 0 ? (float)ok / all : 0f; windOk &= f >= 0.9f; agree.Add($"{mf.name} {f:F2}");
+        }
+        Check("props_normals_match_winding", windOk, $"triangles whose stored normal faces the winding side (min 0.90): {string.Join(" · ", agree)} · timber 2 m lum {timberLum:F3} · pick lum {pickLum:F3}");
+        // ⑤ 갱목 이름 그대로: 조각마다 post_L·post_R·cap × 4벌 (고장 지지목 코드가 이름으로 찾는다)
+        int named = 0;
+        foreach (Transform piece in pieces)
+            for (int n = 0; n < 4; n++)
+                foreach (var suffix in new[] { "_post_L", "_post_R", "_cap" })
+                    if (piece.GetComponentsInChildren<Transform>().Any(t => t.name == $"TMB_straight_{n}{suffix}")) named++;
+        int wantNamed = pieces.GetComponentsInChildren<MeshFilter>().Count(m => m.name.StartsWith("SHL_")) * 12;
+        Check("timber_names_kept", named == wantNamed && wantNamed > 0, $"TMB_straight_<n>_{{post_L,post_R,cap}} found {named} (want {wantNamed})");
+        Teleport(cc, new Vector3(0f, 0.1f, 3f), 0f);
+        yield return null;
     }
 
     // 3D-③: 행동마다 맞는 동작 · 발 미끄러짐 · 벽타기 자세 · 손이 바닥·벽을 안 뚫음 · 포효 구간 · fps. 연속 사진 21_anim_*_sheet (4×3, 한 칸 480×270)
