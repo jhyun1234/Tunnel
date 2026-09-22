@@ -124,9 +124,9 @@
 - **전체 `build.sh` 에서만 걸린 것 둘**: ⓐ `LureStage` 가 `st.enabled = false` 로 끝나 다음 절 `ChaseStage` 에서 괴물이 서서 못 봤다(7개 FAIL) — `-only` 로는 절이 하나라 안 걸렸다 → 켜고 끝낸다 ⓑ 살 요철 구조값이 앞 절들을 거치면 29.4 → 27.5 로 내려가(2 m 밝기 0.128 → 0.123) 문턱 28 에 걸림 → m3 flatskin 실측 24.6 과의 사이 **26** 으로(`Tuning.STALKER_RELIEF_MIN`).
 - **Claude 소견(판정은 사용자)**: ⓐ 서서 걷는 배회에서 왼팔 팔꿈치가 35° 굽어 있다(오른팔은 그대로) — 그림 `build/check_m3/final/21_anim_up_walk_sheet.png` 에선 자연스러워 보이나 판정 필요 ⓑ **벽타기는 몸이 벽에서 0.42 m 떠서 곧은 팔로 버티는 모양**이 됐다 — 발은 벽에 안 닿는다. 제대로 하려면 crawl 을 IK 로 다시 짜야 한다(손·발을 벽에, 몸은 팔 길이에 맞게) → 제안서 후보. 캡처 `21_anim_climb.png` 은 멀어 판정이 안 된다 — 게임에서 F1 로 벽타기를 보게 할 방법이 필요(DevHud 에 있는지 확인).
 
-### 다음 세션 시작 프롬프트 (2026-09-22, main 에 합친 뒤)
+### 다음 세션 시작 프롬프트 (2026-09-22, main 에 합친 뒤 · 작업 폴더 `Tunnel/unity`)
 
-> docs/HANDOFF.md 0절을 읽고 이어서 해라. 상태: 새 몸 m3 는 손목 2차·GLB 2K 까지 사용자 판정 통과, ⑤ anim FAIL 4개 정리 끝 — **기본 괴물 = `miner_m3.glb`**, 전체 `tools/build.sh` 는 0절 "⑤ 결과" 줄 참조. main 에 합쳐졌고(`35462a7`) 배회 팔 굽힘·벽타기 판정도 통과. **이제 main 에서 일한다**(`Tunnel/unity`; 작업 트리 `unity-m2`·가지 `m2-body` 는 지워도 된다). 다음: ⓐ 인트로(UI-2) WIP 이어서 — 옛 몸으로 만들어졐던 인트로를 m3 로 다시 본다 ⓑ 옛 몸 `miner_rigged.glb`·`miner_m2.glb` 를 저장소에서 뺄지 물을 것 ⓒ MR1 맵 단계(1절·2절)로 복귀. 규칙: 굽기는 `bash tools/bake_m3.sh`(손가락 → 목 → 발광 → 손목 → 갱목 → 걸음+팔 바닥 보호 → 그림 2K), 빌드는 `MakeScene`(-quit 꼭) → `tools/build.sh`, 몸 그물·클립을 바꾸면 monster · lure · anim 셋 다 돌린다(`-only` 를 잇달아 돌릴 때 `build/Tunnel/check` 를 지우면 앞 단계 캡처가 사라진다 — 먼저 복사). Blender ↔ GLB 비교는 클립 전체 최솟값으로만(프레임 번호는 fps 가 달라 안 맞는다).
+> docs/HANDOFF.md 0절을 읽고 이어서 해라. 상태: 괴물 새 몸 m3 완료 — 손목 2차·GLB 2K·배회 팔 굽힘·벽타기까지 사용자 판정 통과, main 에 합침(`35462a7`, 뒤 `5b4d411`), **기본 괴물 = `Assets/Tunnel/Monster/miner_m3.glb`**, 전체 `bash tools/build.sh` ALL PASS 132(인트로 검사 포함). 가지 `m2-body`·작업 트리 `unity-m2` 는 지웠다(빈 폴더만 남았으면 지운다). 다음 일: ⓐ 인트로(UI-2, `Intro.cs`·`Assets/Scenes/Intro.unity`, WIP 커밋 `bd57ef7`) 이어서 — 옛 몸으로 만들던 것이라 m3 로 다시 본다 ⓑ 옛 몸 `miner_rigged.glb`·`miner_m2.glb` 를 저장소에서 뺄지 사용자에게 물을 것 ⓒ MR1 맵 단계(1절·2절)로 복귀. 규칙: 괴물 굽기는 `bash tools/bake_m3.sh`(손가락 → 목 → 발광 → 손목 → 갱목 → 걸음+팔 바닥 보호 → 그림 2K, 알려진 FAIL 2개 = up_grope 손 앞 0.035 · 그림 해시), 빌드는 `MakeScene`(-quit 꼭) → `bash tools/build.sh`, 몸 그물·클립을 바꾸면 `-only monster · lure · anim` 셋 다 돌린다(잇달아 돌릴 때 `build/Tunnel/check` 를 지우면 앞 단계 캡처가 사라진다 — 먼저 복사). Blender ↔ GLB 비교는 클립 전체 최솟값으로만(프레임 번호는 fps 가 달라 안 맞는다). 새 검사는 일부러 FAIL 시켜 확인하고 HANDOFF 갱신 뒤 커밋.
 
 ## 1. 지금 어디까지 왔나
 
