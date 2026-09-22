@@ -316,7 +316,7 @@ public static class Tuning
     public const float STALKER_LURE_HALO_M = 0.5f;          // m, 빛무리 판 크기 (가까울 때)
     public const float STALKER_LURE_HALO_ANGLE = 0.03f;     // 멀 때: 거리 × 이 값 (약 1.7° — 1080p 에서 40 픽셀쯤)
     public const int STALKER_LURE_BRIGHT_MIN_25M = 4;       // 25 m · 내 램프 끔: 몸 화면 영역에서 밝기 0.1 넘는 표본 픽셀 수 하한
-    public const float STALKER_RELIEF_MIN = 28f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 실측(09-17): 점토 상태 24.6 · flatskin 26.1 · 요철 그림 30.7 → 그 사이
+    public const float STALKER_RELIEF_MIN = 26f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 옛 몸 실측(09-17): 점토 24.6 · flatskin 26.1 · 요철 30.7 → 28. m3(09-22): flatskin 24.6 · 요철 29.4(-only monster) / 27.5(전체 build.sh — 앞 절들을 거치면 2 m 밝기가 0.128 → 0.123 로 조금 어둡다) → 그 사이 26
     public const int STALKER_EYE_BRIGHT_MIN = 1;            // 램프 끄고 5 m 몸 영역에서 밝기 0.1 넘는 표본 픽셀(3픽셀 간격) 수 하한. 사용자 값 발광 0.08 은 어둡다(0.2 문턱에선 1개) → 문턱 0.1 · 1개. dimeyes 0
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
     // 7 m 보임 = 모델을 그렸을 때와 숨겼을 때 같은 화면 영역의 차이. 모델이 검댕처럼 어두워 밝기 자체(첫 실측 0.036)로는 바탕(0.05)과 못 가른다
@@ -375,7 +375,7 @@ public static class Tuning
     public const float STALKER_NECK_BRIGHT = 0.57f;            // 목 밝기 배율 (DevHud Q/R). m3 Meshy 속 목: 사용자 09-20 판정 밝기 0.57 · 붉기 0.5 (옛 몸은 1 · 0). StalkerLook 이 재질 색을 통째로 덮어써 GLB 의 baseColorFactor 는 안 먹는다 — 몸 살과 이어져 보이는 값을 사용자가 찾는다
     public static readonly Color STALKER_NECK_RED_TINT = new Color(1f, 0.35f, 0.30f);
     public const float STALKER_NECK_OFF_PATH_MAX = 0.02f;   // 검사: 마디 뼈가 길에서 벗어난 거리 상한 (모델 m)
-    public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
+    public const float STALKER_FINGER_CHORD_MAX = 0.905f;   // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. m3 손가락 뼈(09-20): 곧을 때 0.930 · 걷기 굽힘 0.882 사이 = tools/bake_m3.sh 의 CHORD_MAX 와 같은 값 (옛 손은 0.879 · 0.800 → 0.84 였다)
     public const float STALKER_RUN_HAND_PLANT_MIN = 0.10f;  // 새 달리기: 같은 몫 하한. 짚는 몫이 0.25 인데 닿고 떼는 호를 빼면 게임 실측 L 14 % · R 18 % (09-19) — 제안서 15 % 는 어림값이었다
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)

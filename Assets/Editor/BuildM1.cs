@@ -22,8 +22,8 @@ public static class BuildM1
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
-    // TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_m2.glb 로 새 몸(Meshy m2, blender/rig/m2_body.py)을 세운다 — 판정 전이라 기본은 그대로
-    static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_rigged.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
+    // 기본 = 새 몸 m3(Meshy 부위 조립, tools/bake_m3.sh — 사용자 판정 통과 09-22). 옛 TRELLIS 몸은 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb 로 (검사 문턱은 m3 값)
+    static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_m3.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";

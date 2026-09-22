@@ -2092,11 +2092,15 @@ public class M1Check : MonoBehaviour
                 $"{heard}: head within {headFirst:F0}° of the noise {snapT:F2} s after it (max 0.3) while the body was still {bodyThen:F0}° off · head top leaned up to {tiltMax:F0}° (listen tilt {sa.headTilt:F0}) · closest head {heMin:F0}° at {tAtMin:F2} s with body {beAtMin:F0}° off, clip {sa.Current}");
             t = 0f;
             while (st.state != Stalker.State.Search && t < 15f) { t += Time.deltaTime; yield return null; }
+            // 첫 수색 자리에서는 STALKER_GROPE_S 6 s 동안 웅크려 더듬는다(09-20) — 그동안 머리는 옮기는 손을 천천히 따라가(mode 6) 끊어 돌리지 않는다 → 더듬기가 끝난 뒤를 잰다
+            t = 0f;
+            while (st.state == Stalker.State.Search && st.Groping && t < Tuning.STALKER_GROPE_S + 3f) { t += Time.deltaTime; yield return null; }
             int steps = 0, frames = 0;
             bool wasMoving = false;
             float prevYaw = sa.HeadYaw;
             t = 0f;
-            while (t < 3f && st.state == Stalker.State.Search)
+            // 머무는 시간이 0.6~1.2 s 무작위라 3 s 에 2~5번 — 6 s 안에 4번이면 통과(4번 채우면 바로 끝)
+            while (t < 6f && steps < 4 && (st.state == Stalker.State.Search || sa.HeadMode == 2) && !st.Groping)      // 수색이 끝나도 서서 둘러보는 동안(mode 2)은 같은 머리 규칙
             {
                 yield return null;
                 t += Time.deltaTime;
@@ -2107,8 +2111,8 @@ public class M1Check : MonoBehaviour
                 wasMoving = moving;
                 frames++;
             }
-            Check("anim_head_search_in_behavior", steps >= 4 && t >= 2f,
-                $"real search ({st.state}, {t:F1} s sampled): head jumped {steps} times (want ≥ 4 in ≥ 2 s)");
+            Check("anim_head_search_in_behavior", steps >= 4,
+                $"real search after the grope ({st.state}, groping {st.Groping}): head jumped {steps} times in {t:F1} s (want 4 within 6 s)");
             player.frozen = false;
             lamp.lampOn = true;
         }
@@ -2239,7 +2243,7 @@ public class M1Check : MonoBehaviour
         float lampMaxChase = 0f, farMin = 99f; t = 0f;
         while (st.state == Stalker.State.Chase && t < 2f) { t += Time.deltaTime; lampMaxChase = Mathf.Max(lampMaxChase, look.LampNow); farMin = Mathf.Min(farMin, st.DistToPlayer); yield return null; }
         Check("lure_lamp_off_in_chase", chasing && t >= 1f && farMin > look.lureOffM + 5f && lampMaxChase <= 0f, $"chase started {chasing}; I moved {farMin:F0} m away, still chasing for {t:F1} s: brightest lamp {lampMaxChase:F2} (want 0)");
-        st.enabled = false;
+        st.enabled = true;                                 // 끈 채 두면 다음 절(ChaseStage)에서 괴물이 서서 못 본다 — 전체 build.sh 에서 7개 FAIL(09-22, -only 로는 안 걸렸다)
         lamp.lampOn = true;
         st.Teleport(st.homePos);
     }
