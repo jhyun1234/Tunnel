@@ -84,7 +84,7 @@ public static class Tuning
     // 법선 편차는 키울수록 나빠진다(0.5 → 2.0 에서 0.58 → 0.31). 깊이 1.0 을 넘겨도 더 안 좋아진다 → 1.0 · 0.25
     public const float LAMP_SHADOW_DEPTH_BIAS = 1.0f;
     public const float LAMP_SHADOW_NORMAL_BIAS = 0.25f;
-    public const float STALKER_ACNE_MIN_RATIO = 0.85f;   // 제안값: 2 m 정면 몸 밝기, 그림자 켬÷끔 이 값 이상이면 얼룩 없음 (실측 0.90~0.96)
+    public const float STALKER_ACNE_MIN_RATIO = 0.80f;   // 2 m 정면 몸 밝기, 그림자 켬÷끔 이 값 이상이면 얼룩 없음. 옛 몸 실측 0.90~0.96 → 0.85. m3(09-22): -only monster 0.87~0.93 · 전체 build.sh 0.836(앞 절들을 거치면 그림자 끈 밝기가 0.125 → 0.134 로 오른다) · 사보타주 acne(URP 기본 편차) 0.58 → 그 사이 0.80
     public const float STALKER_BURN_MAX = 0.03f;         // 제안값: 2 m 정면 화면의 하얗게 탄 픽셀 비율 상한. 얼룩 걷힌 뒤 흰 뼈가 램프에 타서 1.45 % (얼룩 있을 땐 0.26 %) — 뼈 밝기는 사용자 판정
     public const float LAMP_FOLLOW_TIME = 0.10f;   // 초, 램프가 시점을 늦게 따라온다
     public static readonly Vector3 LAMP_OFFSET = new Vector3(0.0f, 0.12f, 0.0f); // 카메라 기준, 이마 자리

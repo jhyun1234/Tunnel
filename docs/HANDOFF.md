@@ -112,7 +112,7 @@
 
 **09-22 손목 2차 + ④ 게임 판정(사용자): ① 손목 통과 ② 고무 소매 괜찮다 ③ 2K 살 무늬 괜찬다 → ⑤ 진행 지시.** = 새 몸 m3 판정 전부 끝.
 
-**09-22 ⑤ 결과 — anim 알려진 FAIL 4개 정리: `-only monster` ALL PASS · `-only lure` ALL PASS · `-only anim` **ALL PASS 35개**(이 가지에서 처음). 전체 `bash tools/build.sh`: **ALL PASS 128개**(배포물 471 MB · 안개 210 fps, 09-22). 사보타주 확인: `noguard`(팔 바닥 보호) FAIL · `-sabotage flatskin -only monster` 구조값 24.6 FAIL. **main 합치기는 보류** — main 작업 트리 `Tunnel/unity` 에 커밋 안 된 수정(`BuildM1.cs`·`M1Check.cs`·`Stalker.cs`·`Tuning.cs`·씬, MR1 맵 WIP 로 보임)이 있어 `merge --ff-only` 가 그 파일들을 덮게 된다 → 사용자가 그쪽을 커밋(또는 버림)한 뒤 `git -C C:/Users/anjyo/Tunnel/unity merge --ff-only m2-body` 한 줄(main 은 이 가지의 조상이라 충돌 없음).**
+**09-22 ⑤ 결과 — anim 알려진 FAIL 4개 정리: `-only monster` ALL PASS · `-only lure` ALL PASS · `-only anim` **ALL PASS 35개**(이 가지에서 처음). 전체 `bash tools/build.sh`: **ALL PASS 128개**(배포물 471 MB · 안개 210 fps, 09-22). 사보타주 확인: `noguard`(팔 바닥 보호) FAIL · `-sabotage flatskin -only monster` 구조값 24.6 FAIL. **main 에 합침(09-22, 사용자 지시)**: main 쪽 커밋 안 된 UI-2 인트로·틈 조각·지스타 문서를 `bd57ef7` WIP 로 먼저 커밋하고 `35462a7` 로 합침 — 충돌은 `M1Check.cs` 하나(양쪽이 같은 수색 머리 검사를 따로 고쳤다 → m2-body 쪽 채택, `-only intro`·`norestart` 와 램프 미끼 사보타주 목록은 둘 다 살림). 합친 main 전체 `build.sh`: **ALL PASS 132개**(인트로 검사 포함, 배포물 473 MB · 안개 193 fps). 얼룩 비율은 전체 실행에서 0.836~0.840(-only 0.87) 이라 `STALKER_ACNE_MIN_RATIO` 0.85 → **0.80**(사보타주 acne 0.58). 사용자 판정(09-22): 배회 왼팔 굽힘 통과 · 벽타기 통과.**
 - 기본 몸 = m3: `BuildM1.MonsterPath` 기본값을 `miner_m3.glb` 로(옛 몸은 `TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb`). main 은 이 가지의 조상(`cc75948`)이라 합치기는 fast-forward — 충돌 없음.
 - ① 손가락 문턱 `Tuning.STALKER_FINGER_CHORD_MAX` 0.84 → **0.905**(= `bake_m3.sh` 의 CHORD_MAX; m3 손가락 곧을 때 0.930 · 걷기 굽힘 0.882). PASS.
 - ② 수색 머리 튐 `anim_head_search_in_behavior`: 첫 수색 자리에서 `STALKER_GROPE_S` 6 s 더듬는 동안(09-20 에 생김) 머리가 손을 천천히 따라가(mode 6) 끊어 돌리지 않는다 → 더듬기가 끝난 뒤 3 s 를 잰다(`M1Check`). PASS(4번).
@@ -126,7 +126,7 @@
 
 ### 다음 세션 시작 프롬프트 (2026-09-22, main 에 합친 뒤)
 
-> docs/HANDOFF.md 0절을 읽고 이어서 해라. 상태: 새 몸 m3 는 손목 2차·GLB 2K 까지 사용자 판정 통과, ⑤ anim FAIL 4개 정리 끝 — **기본 괴물 = `miner_m3.glb`**, 전체 `tools/build.sh` 는 0절 "⑤ 결과" 줄 참조. **main 합치기만 남음**: `Tunnel/unity`(main) 에 커밋 안 된 MR1 맵 수정이 있어 보류 — 사용자가 그쪽을 정리하면 `git -C C:/Users/anjyo/Tunnel/unity merge --ff-only m2-body`. 다음: ⓐ 사용자 게임 판정 — 서서 걷는 배회의 왼팔 팔꿈치 35° 굽힘 · 벽타기(몸이 벽에서 0.42 m 떠 곧은 팔로 버팀, 발은 안 닿음)가 거슬리는가(거슬리면 crawl IK 재작성 제안서) ⓑ 옛 몸 `miner_rigged.glb`·`miner_m2.glb` 를 저장소에서 뺄지 물을 것 ⓒ MR1 맵 단계(1절·2절)로 복귀. 규칙: 굽기는 `bash tools/bake_m3.sh`(손가락 → 목 → 발광 → 손목 → 갱목 → 걸음+팔 바닥 보호 → 그림 2K), 빌드는 `MakeScene`(-quit 꼭) → `tools/build.sh`, 몸 그물·클립을 바꾸면 monster · lure · anim 셋 다 돌린다(`-only` 를 잇달아 돌릴 때 `build/Tunnel/check` 를 지우면 앞 단계 캡처가 사라진다 — 먼저 복사). Blender ↔ GLB 비교는 클립 전체 최솟값으로만(프레임 번호는 fps 가 달라 안 맞는다).
+> docs/HANDOFF.md 0절을 읽고 이어서 해라. 상태: 새 몸 m3 는 손목 2차·GLB 2K 까지 사용자 판정 통과, ⑤ anim FAIL 4개 정리 끝 — **기본 괴물 = `miner_m3.glb`**, 전체 `tools/build.sh` 는 0절 "⑤ 결과" 줄 참조. main 에 합쳐졌고(`35462a7`) 배회 팔 굽힘·벽타기 판정도 통과. **이제 main 에서 일한다**(`Tunnel/unity`; 작업 트리 `unity-m2`·가지 `m2-body` 는 지워도 된다). 다음: ⓐ 인트로(UI-2) WIP 이어서 — 옛 몸으로 만들어졐던 인트로를 m3 로 다시 본다 ⓑ 옛 몸 `miner_rigged.glb`·`miner_m2.glb` 를 저장소에서 뺄지 물을 것 ⓒ MR1 맵 단계(1절·2절)로 복귀. 규칙: 굽기는 `bash tools/bake_m3.sh`(손가락 → 목 → 발광 → 손목 → 갱목 → 걸음+팔 바닥 보호 → 그림 2K), 빌드는 `MakeScene`(-quit 꼭) → `tools/build.sh`, 몸 그물·클립을 바꾸면 monster · lure · anim 셋 다 돌린다(`-only` 를 잇달아 돌릴 때 `build/Tunnel/check` 를 지우면 앞 단계 캡처가 사라진다 — 먼저 복사). Blender ↔ GLB 비교는 클립 전체 최솟값으로만(프레임 번호는 fps 가 달라 안 맞는다).
 
 ## 1. 지금 어디까지 왔나
 
