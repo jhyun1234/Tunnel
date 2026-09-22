@@ -1474,7 +1474,7 @@ public class M1Check : MonoBehaviour
         var acc = new Dictionary<string, GaitAcc>();
         Transform chestB = Bone("Spine2");
         Transform[] shoulders = { Bone("LeftArm"), Bone("RightArm") }, thighs = { Bone("LeftUpLeg"), Bone("RightUpLeg") };
-        var handTips = hands.Select(h => h.GetComponentsInChildren<Transform>()).ToArray();
+        var handTips = hands.Select(h => h.GetComponentsInChildren<Transform>().Where(b => b.name.StartsWith("mixamorig:")).ToArray()).ToArray();   // 뼈만 (갱목·끈 노드 제외)
         int accLiftPrev = 0;
         float handLow = 99f, handOut = 0f, boneLow = 99f;
         string boneLowName = "-";

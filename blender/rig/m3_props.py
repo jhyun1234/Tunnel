@@ -1,7 +1,7 @@
 """m3 갱목·못·끈: 옛 몸(stage16)의 단단한 물체 15개를 새 몸 겉에 다시 맞춰 같은 뼈에 매단다 (제안서 docs/제안서_m3_눈_발광_램프_미끼_갱목.md M2, 09-20 승인 · 목 끈은 뺀다 — 사용자).
   blender -b --factory-startup -P blender/rig/m3_props.py
-입력: Documents/MineTunnel/blender/miner_v4_stage16_neck.blend (물체·재질·그림만 가져온다, 안 고친다) + miner_v5_stage20_m3_glow.blend (안 고친다)
-출력: Documents/MineTunnel/blender/miner_v5_stage21_m3_props.blend → SRC_BLEND 로 walk_knuckle.py 에 (tools/bake_m3.sh)
+입력: Documents/MineTunnel/blender/miner_v4_stage16_neck.blend (물체·재질·그림만 가져온다, 안 고친다) + miner_v5_stage21_m3_wrist.blend (안 고친다)
+출력: Documents/MineTunnel/blender/miner_v5_stage22_m3_props.blend → SRC_BLEND 로 walk_knuckle.py 에 (tools/bake_m3.sh)
 하는 일: ① stage16 에서 물체마다 쉬는 자세 세계 좌표를 그물에 굽고 부모를 떼어 작은 묶음 파일로 → stage20 에 들여온다 (옛 뼈대·동작이 딸려 오지 않게)
         ② 자리: 제 뼈 위 같은 **비율** 자리로 (팔이 1.47배 길어졌다 — 뼈 길이 방향으로만 옮긴다, 물체 크기는 그대로)
         ④ 끈(고리): 고리 면 안에서 각도 10° 칸마다 새 살(+ 제 판자)의 바깥 반지름을 광선으로 재어, 끈 안쪽 면이 살에서 GAP 만큼 뜨게 점마다 반지름을 다시 준다 (끈 두께·너비는 그대로)
@@ -14,8 +14,8 @@ from mathutils.bvhtree import BVHTree
 
 MT = os.path.join(os.path.expanduser("~"), "Documents", "MineTunnel")
 OLD = os.path.join(MT, "blender", "miner_v4_stage16_neck.blend")
-SRC = os.environ.get("SRC_BLEND", os.path.join(MT, "blender", "miner_v5_stage20_m3_glow.blend"))
-OUT = os.environ.get("OUT_BLEND", os.path.join(MT, "blender", "miner_v5_stage21_m3_props.blend"))
+SRC = os.environ.get("SRC_BLEND", os.path.join(MT, "blender", "miner_v5_stage21_m3_wrist.blend"))
+OUT = os.environ.get("OUT_BLEND", os.path.join(MT, "blender", "miner_v5_stage22_m3_props.blend"))
 SHOTS = os.environ.get("SHOTS", "")
 SABOTAGE = os.environ.get("SABOTAGE", "")
 P = "mixamorig:"
