@@ -267,7 +267,7 @@ public class M1Check : MonoBehaviour
             yield return Mining(cc);
         if (only == "" || only == "map")
             yield return MapStage(cc);
-        if (only == "" || only == "props")
+        if (only == "props" || (only == "" && Tuning.PIECE_SUFFIX != ""))   // A1 소품이 켜져 있을 때만 (09-23 판정 불통과로 옛 조각으로 되돌림 — -only props 는 언제든 직접)
             yield return PropsStage(cc);
         stalker.enabled = true;
         if (only == "" || only == "monster")
