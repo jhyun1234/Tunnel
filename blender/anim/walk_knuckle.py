@@ -9,7 +9,7 @@
         ⑤ 자기 검사 PASS/FAIL + 옆·앞 연속 그림
 출력: Tunnel/unity/Assets/Tunnel/Monster/miner_rigged.glb (덮어쓰기, 사용자 허락 09-18) · blender/anim/walk_knuckle.blend(리그 + 동작만)
       Documents/MineTunnel/blender/anim_render/walk_knuckle_*.png (저장소 밖)
-사보타주: SABOTAGE=noplant -> 손이 바닥에 안 닿는다 (검사 "손 짚기" FAIL). SABOTAGE=straight -> 손가락을 안 굽힌다 (검사 "손가락 굽음" FAIL). 사보타주 실행은 GLB·blend 를 덮어쓰지 않는다"""
+사보타주: SABOTAGE=noplant -> 손이 바닥에 안 닿는다 (검사 "손 짚기" FAIL). SABOTAGE=straight -> 손가락을 안 굽힌다 (검사 "손가락 굽음" FAIL). SABOTAGE=bodyonly(Miner_Body 만 잰다 = 09-20 까지의 검사) · sinkhands(손을 8 cm 파묻는다) -> "손 살이 바닥을 안 뚫음" FAIL. STRIP_FINGER_KEYS=1 SABOTAGE=keepfingerkeys -> "손가락 키가 없다" FAIL. 사보타주 실행은 GLB·blend 를 덮어쓰지 않는다"""
 import bpy, os, sys, json, struct, math, hashlib
 import numpy as np
 from mathutils import Vector, Matrix, Quaternion
@@ -21,7 +21,7 @@ SABOTAGE = os.environ.get("SABOTAGE", "")
 SFX = "_" + SABOTAGE if SABOTAGE else ""
 OUT_GLB = os.environ.get("OUT_GLB", os.path.join(MT, "mesh", "miner_rigged_unity%s.glb" % SFX) if SABOTAGE
           else r"C:\Users\anjyo\Tunnel\unity\Assets\Tunnel\Monster\miner_rigged.glb")
-OUT_BLEND = os.path.join(HERE, "walk_knuckle%s.blend" % SFX)
+OUT_BLEND = os.environ.get("OUT_BLEND", os.path.join(HERE, "walk_knuckle%s.blend" % SFX))   # 다른 몸(m3)을 구울 땐 밖으로 돌린다 — 안 그러면 옛 몸의 동작 파일을 덮어쓴다
 RENDER = os.path.join(MT, "blender", "anim_render" + SFX); os.makedirs(RENDER, exist_ok=True)
 
 # ---- 걸음 값 (모델 크기 1 기준 m · s). 게임 괴물은 Tuning.STALKER_MODEL_SCALE 1.5 배
@@ -135,7 +135,7 @@ HAND_DIR = Vector((0.15, -math.cos(math.radians(HAND_DOWN)), -math.sin(math.radi
 # 발톱 끝(끝뼈 머리)이 짚는 높이. Unity 팔 들기 안전망(StalkerAnim.LateUpdate)은 손끝이 발바닥 면 위 STALKER_ARM_FLOOR_MARGIN 0.02 m(게임)
 # 밑이면 팔을 든다 — 0 에 짚으면 걷는 내내 팔을 들어 올렸다(09-18 Unity 실측 1499 프레임), 0.02 는 Unity 에서 0.020 m 로 문턱에 붙어 11 프레임. 0.03 에 짚는다
 CLAW_Z = 0.03
-HAND_LIFT_ALL = 0.30 if SABOTAGE == "noplant" else CLAW_Z    # noplant: 손을 바닥에서 30 cm 띄운다
+HAND_LIFT_ALL = {"noplant": 0.30, "sinkhands": -0.08}.get(SABOTAGE, CLAW_Z)    # noplant: 손을 바닥에서 30 cm 띄운다 · sinkhands: 8 cm 파묻는다 ("손 살이 바닥을 안 뚫음" FAIL)
 # 손가락 마디 굽힘(도, 첫·둘째·셋째 마디). 09-18 판정 "손가락이 일직선으로 오는 게 어색하다" → 09-19 발톱이 갈고리처럼 바닥을 찍게.
 # 엄지는 반만. 굽는 쪽 = 쉬는 자세(T포즈)에서 손가락 끝이 내려가는 쪽(손바닥 쪽) — 뼈마다 재서 고른다
 CURL = [0.0, 0.0, 0.0] if SABOTAGE == "straight" else [float(x) for x in os.environ.get("CURL", "10,15,10").split(",")]
@@ -459,18 +459,28 @@ for NAME, G in GAITS.items():
     check(cmax <= CHORD_MAX, "손가락 굽음: 뿌리 → 끝 곧은 거리 ÷ 마디 길이 합 가장 클 때 %.3f (≤ %.2f, 곧으면 1 에 가깝다)" % (cmax, CHORD_MAX))
 
     # 살이 바닥을 뚫는지: 손·손가락 뼈에 붙은 살 점 중 가장 낮은 것 (뼈 끝 점만 재는 위 검사로는 굽은 손가락 등이 안 잡힌다)
-    body = bpy.data.objects["Miner_Body"]
-    hand_g = {g.index for g in body.vertex_groups if "Hand" in g.name}
-    hand_v = np.array([v.index for v in body.data.vertices if any(g.group in hand_g and g.weight > 0.3 for g in v.groups)])
-    mesh_low = 9.9
-    for f in range(0, N, 2):
-        scene.frame_set(f); upd()
-        ev = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
-        me = ev.to_mesh(); co = np.empty(len(me.vertices) * 3, np.float32); me.vertices.foreach_get("co", co); ev.to_mesh_clear()
-        co = co.reshape(-1, 3)[hand_v]
-        wz = (np.array(body.matrix_world) @ np.c_[co, np.ones(len(co))].T)[2]
-        mesh_low = min(mesh_low, float(wz.min()))
-    check(mesh_low >= -0.01, "손 살이 바닥을 안 뚫음: 손·손가락 살 점 가장 낮은 %.3f m ≥ −0.01 (점 %d개, 2 프레임마다)" % (mesh_low, len(hand_v)))
+    # 뼈대에 붙은 **모든 그물**을 잰다 — 09-20 까지는 Miner_Body 만 봐서, 손이 따로 그물(Miner_Hands)인 m3 는 손목 자투리 몇 점만 재고 PASS 였다.
+    # 그래서 손마다 잰 점 수도 검사한다: 안 잰 PASS 를 막는다. SABOTAGE=bodyonly = 옛 검사 그대로
+    mesh_low = 9.9; n_hand = {"Left": 0, "Right": 0}
+    for body in [o for o in bpy.data.objects if o.type == "MESH" and any(md.type == "ARMATURE" and md.object == arm for md in o.modifiers)
+                 and (SABOTAGE != "bodyonly" or o.name == "Miner_Body")]:
+        hand_g = {g.index: ("Left" if "Left" in g.name else "Right") for g in body.vertex_groups if "Hand" in g.name}
+        side_of = {v.index: next(hand_g[g.group] for g in v.groups if g.group in hand_g and g.weight > 0.3)
+                   for v in body.data.vertices if any(g.group in hand_g and g.weight > 0.3 for g in v.groups)}
+        if not side_of:
+            continue
+        for sd_ in side_of.values():
+            n_hand[sd_] += 1
+        hand_v = np.array(sorted(side_of))
+        for f in range(0, N, 2):
+            scene.frame_set(f); upd()
+            ev = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            me = ev.to_mesh(); co = np.empty(len(me.vertices) * 3, np.float32); me.vertices.foreach_get("co", co); ev.to_mesh_clear()
+            co = co.reshape(-1, 3)[hand_v]
+            wz = (np.array(body.matrix_world) @ np.c_[co, np.ones(len(co))].T)[2]
+            mesh_low = min(mesh_low, float(wz.min()))
+    check(mesh_low >= -0.01 and min(n_hand.values()) >= 1000,
+          "손 살이 바닥을 안 뚫음: 손·손가락 살 점 가장 낮은 %.3f m ≥ −0.01 (잰 점 왼손 %d · 오른손 %d개, 손마다 ≥ 1000, 2 프레임마다)" % (mesh_low, n_hand["Left"], n_hand["Right"]))
 
     if QUICK and not SHOTS:
         continue
@@ -524,6 +534,165 @@ if os.environ.get("PREVIEW"):              # 영상 후보 (3D-④ MA 1단계): 
 if QUICK:
     print("walk_knuckle QUICK %s  fails=%d %s" % ("ALL PASS" if not fails else "FAIL", len(fails), fails))
     sys.exit(0 if not fails else 2)
+
+# ---- 6b. STRIP_FINGER_KEYS=1 (m3, 사용자 09-20 A안): 모션캡처 클립의 손가락 키를 지운다 — 옛 손(짧은 손가락)용 주먹 키가 m3 의 30 cm 발톱을 제 손목에 박는다(attack_swipe).
+# 걸음(GAITS — 여기서 구운 굽힘)은 그대로. 나머지 손가락은 Unity 가 얹는 굽힘(StalkerAnim.Fingers)만 움직인다. SABOTAGE=keepfingerkeys -> 아래 검사 FAIL
+if os.environ.get("STRIP_FINGER_KEYS") == "1":
+    import re
+    finger_path = re.compile(r'pose\.bones\["mixamorig:(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)\d"\]')
+    def finger_curves(a):
+        return [(cb, fc) for layer in a.layers for strip in layer.strips for cb in strip.channelbags for fc in cb.fcurves if finger_path.match(fc.data_path)]
+    mocap = [a for a in bpy.data.actions if a.name not in GAITS]
+    removed = 0
+    if SABOTAGE != "keepfingerkeys":
+        for a in mocap:
+            for cb, fc in finger_curves(a):
+                cb.fcurves.remove(fc); removed += 1
+    left = sum(len(finger_curves(a)) for a in mocap)
+    check(left == 0 and len(mocap) >= 14, "모션캡처 클립에 손가락 키가 없다: 남은 곡선 %d개 (지운 것 %d개, 클립 %d개)" % (left, removed, len(mocap)))
+
+# ---- 6c. 팔 바닥 보호 (m3, 09-22): 팔이 1.47배 길고 발톱이 30 cm 라 모션캡처·덧칠 클립에서 팔이 바닥 밑으로 들어간다(GLB 실측: up_walk 발톱 −0.20 · up_stand −0.20
+# · up_jog −0.29 · roar −0.28 · crawl 손 −0.36·팔꿈치 −0.15 m). Unity 안전망(StalkerAnim 팔 들기)이 매 프레임 어깨를 들어 감췄지만 배포물 검사는 팔 들기 0 을 요구하고
+# (anim_up_run_reaches 배회 520번), 벽타기(crawl 을 세운 것)는 팔꿈치가 벽 속 12 cm 였다(anim_climb_on_wall). 여기서 프레임마다 팔의 가장 낮은 뼈(팔꿈치·손목·발톱 끝)가
+# GUARD_Z 위에 오도록 **팔꿈치를 먼저 굽히고**(ELBOW_MAX 까지) 모자라면 어깨를 든다. 걸음(GAITS)은 제 손 짚기가 있고 up_grope 는 Unity IK 가 손을 놓으니 뺀다.
+# SABOTAGE=noguard -> 안 함 (검사 "팔 바닥 보호" FAIL)
+GUARD_Z, ELBOW_MAX, SHOULDER_MAX, GUARD_STEP = 0.03, 75.0, 60.0, 5.0
+# 걸음(GAITS)은 제 손 짚기가 있고 up_grope 는 Unity IK 가 손을 놓는다. prone_down·land_hard·run(옛 달리기)은 게임이 안 튼다(StalkerAnim: 상태 → roar·hit·attack_swipe·crawl·up_*·run_knuckle) — 팔이 바닥에 깊어(−0.6~−0.8) 손대지 않고 뺀다
+GUARD_SKIP = set(GAITS) | {"up_grope", "prone_down", "land_hard", "run"}
+# crawl(벽타기): 어깨가 바닥 20 cm 라 팔을 굽혀서는 못 올린다(굽히면 손이 벽에서 떨어져 벽타기 검사 "가장 가까운 뼈 ≤ 0.2 m" 이 깨진다) → 손목을 젖혀 발톱을 벽에 눕히고, 몸을 그만큼 띄운다(손이 벽에 닿은 채)
+GUARD_HIPS_ONLY = {"crawl"}
+def arm_chain(s_):
+    return [n for n in [s_ + "ForeArm", s_ + "Hand"] + [fb(s_, f_, i_) for f_ in FINGERS for i_ in (1, 2, 3, 4)] if (P + n) in pbs]
+def arm_low(s_): return min(whead(n).z for n in arm_chain(s_))
+GUARD_FINGERS = [fb(s_, f_, i_) for s_ in ("Left", "Right") for f_ in FINGERS for i_ in (1, 2, 3) if (P + fb(s_, f_, i_)) in pbs]
+def guard_use(a, f):
+    """클립 프레임으로 — 손가락 키는 6b 가 지웠으니(GLB 는 쉬는 자세로 나간다) 뼈에 남은 옛 자세를 쉬는 자세로 되돌린다. 안 그러면 굽은 발톱으로 재서 GLB 에서 26 cm 낮았다(09-22)"""
+    up_use(a, f)
+    for n in GUARD_FINGERS:
+        pb(n).matrix_basis = Matrix.Identity(4)
+    upd()
+def guard_axis(s_):
+    return (whead("LeftArm") - whead("RightArm")).normalized()          # 어깨선(좌우 축): 손이 몸 앞뒤·위로만 움직여 옆으로 안 벌어진다 (팔 평면 축으로 굽히니 손이 벽 밖 12 cm, 09-22)
+def guard_apply(s_, bent, lifted, sign, wrist=0.0, wsign=1.0):
+    """팔꿈치 bent° · 어깨 lifted° · 손목 wrist° 를 어깨선 축으로 (sign = 손이 올라가는 쪽, wsign = 발톱 끝이 올라가는 쪽). 프레임마다 같은 값을 얹어야 동작이 튀지 않는다"""
+    ax = guard_axis(s_)
+    if lifted:
+        rotate_world(s_ + "Arm", Matrix.Rotation(math.radians(lifted), 4, ax * sign))
+    if bent:
+        rotate_world(s_ + "ForeArm", Matrix.Rotation(math.radians(bent), 4, ax * sign))
+    if wrist:
+        rotate_world(s_ + "Hand", Matrix.Rotation(math.radians(wrist), 4, ax * wsign))
+def tips_low(s_): return min(whead(n).z for n in arm_chain(s_) if n != s_ + "ForeArm" and n != s_ + "Hand")
+def guard_wsign(s_):
+    before = tips_low(s_) - whead(s_ + "Hand").z; guard_apply(s_, 0, 0, 1.0, GUARD_STEP, 1.0); after = tips_low(s_) - whead(s_ + "Hand").z; guard_apply(s_, 0, 0, 1.0, -GUARD_STEP, 1.0)
+    return 1.0 if after > before else -1.0
+def guard_need_wrist(s_, wsign):
+    """발톱 끝이 손목보다 2 cm 넘게 아래로 안 가게 하는 손목 각 (≤ 90°)"""
+    w = 0.0
+    while tips_low(s_) < whead(s_ + "Hand").z - 0.02 and w < 90.0:
+        guard_apply(s_, 0, 0, 1.0, GUARD_STEP, wsign); w += GUARD_STEP
+    return w
+def guard_sign(s_):
+    """손이 올라가는 회전 방향: 팔꿈치를 +5° 굽혀 보고 가장 낮은 점이 올라가면 +, 아니면 −"""
+    before = arm_low(s_); guard_apply(s_, GUARD_STEP, 0, 1.0); after = arm_low(s_); guard_apply(s_, -GUARD_STEP, 0, 1.0)
+    return 1.0 if after > before else -1.0
+def guard_need(s_, sign):
+    """이 프레임에서 GUARD_Z 위로 올리는 데 필요한 (팔꿈치, 어깨) 도 — 팔꿈치 먼저 ELBOW_MAX 까지, 모자라면 어깨 90 까지"""
+    bent = lifted = 0.0
+    while arm_low(s_) < GUARD_Z and bent < ELBOW_MAX:
+        guard_apply(s_, GUARD_STEP, 0, sign); bent += GUARD_STEP
+    while arm_low(s_) < GUARD_Z and lifted < SHOULDER_MAX:
+        guard_apply(s_, 0, GUARD_STEP, sign); lifted += GUARD_STEP
+    return bent, lifted
+guard_worst = {}
+GUARD_CLIPS = [a for a in bpy.data.actions if a.name not in GUARD_SKIP and (a.name in acts or a.name in [t.name for t in ad.nla_tracks])]   # 내보내는 클립만 — 다른 동작(원본·임시)을 붙였다 떼면 뼈대 물체 변환이 남아 GLB 전체가 떠서 나갔다(09-22 1차: 손 0.96 m 공중)
+guard_M = arm.matrix_world.copy(); guard_act0, guard_pos0 = ad.action, arm.data.pose_position
+print("팔 바닥 보호 대상 %d: %s" % (len(GUARD_CLIPS), ", ".join(a.name for a in GUARD_CLIPS)))
+if SABOTAGE != "noguard":
+    for a in GUARD_CLIPS:
+        if a.name in GUARD_SKIP:
+            continue
+        f0, f1 = (int(x) for x in a.frame_range); n_fix = 0
+        # 1) 프레임마다 원래 자세(팔·아래팔 회전, 엉덩이 자리)를 적어 두고 필요한 각을 재서, 팔마다 클립 전체의 최댓값을 고른다 —
+        #    프레임마다 따로 고치면 이웃 프레임과 자세가 달라 사이 보간에서 팔이 튀고 다시 내려갔다(09-22 반프레임 실측 run −0.71)
+        need = {s_: [0.0, 0.0] for s_ in ("Left", "Right")}; wrist = {s_: 0.0 for s_ in ("Left", "Right")}; base = {}
+        hips_only = a.name in GUARD_HIPS_ONLY
+        guard_use(a, f0); sign = {s_: guard_sign(s_) for s_ in ("Left", "Right")}; wsign = {s_: guard_wsign(s_) for s_ in ("Left", "Right")}
+        for f in range(f0, f1 + 1):
+            guard_use(a, f)
+            base[f] = ({n: pb(n).rotation_quaternion.copy() for s_ in ("Left", "Right") for n in (s_ + "Arm", s_ + "ForeArm", s_ + "Hand")}, pb("Hips").location.copy())
+            for s_ in ("Left", "Right"):
+                if hips_only:
+                    w_ = guard_need_wrist(s_, wsign[s_]); wrist[s_] = max(wrist[s_], w_)
+                    if arm_low(s_) < GUARD_Z: n_fix += 1
+                    continue
+                b_, l_ = guard_need(s_, sign[s_])
+                if b_ or l_:
+                    n_fix += 1; need[s_] = [max(need[s_][0], b_), max(need[s_][1], l_)]
+        # 2) 원래 자세에서 출발해 같은 각을 모든 프레임에 얹고 키를 박는다 (정수 프레임마다, 앞 프레임과 같은 반구의 사원수로 — −q 로 들어가면 사이 보간이 뒤집힌다).
+        #    팔로 모자라면(crawl: 어깨가 바닥 20 cm) 엉덩이를 그만큼 띄운다 — 벽타기에선 몸이 벽에서 그만큼 떠서 손발이 벽에 닿는다
+        dz = 0.0
+        for _round in range(4):
+            prevq = {}
+            for f in range(f0, f1 + 1):
+                guard_use(a, f)
+                for n, q0 in base[f][0].items():
+                    pb(n).rotation_quaternion = q0
+                pb("Hips").location = base[f][1] + (up_hips_axes @ Vector((0, 0, dz)) if dz else Vector((0, 0, 0)))
+                upd()
+                for s_ in ("Left", "Right"):
+                    guard_apply(s_, need[s_][0], need[s_][1], sign[s_], wrist[s_], wsign[s_])
+                    for n in (s_ + "Arm", s_ + "ForeArm", s_ + "Hand"):
+                        q = pb(n).rotation_quaternion.copy()
+                        if n in prevq and q.dot(prevq[n]) < 0:
+                            q = -q; pb(n).rotation_quaternion = q
+                        prevq[n] = q
+                        pb(n).keyframe_insert("rotation_quaternion", frame=f)
+                if dz:
+                    pb("Hips").keyframe_insert("location", frame=f)
+            lo = 9.0
+            for f in range(f0, f1 + 1):
+                for sub in (0.0, 0.5):
+                    guard_use(a, f + sub); lo = min(lo, arm_low("Left"), arm_low("Right"))
+            if lo >= GUARD_Z - 0.005:
+                break
+            dz += (GUARD_Z - lo) + 0.005
+            print("  팔 바닥 보호 %s: %d차 뒤 가장 낮은 뼈 %.3f → 엉덩이 %.3f m 띄움" % (a.name, _round + 1, lo, dz))
+        guard_dz = dz
+        for layer in a.layers:
+            for strip in layer.strips:
+                for cb in strip.channelbags:
+                    for fc in cb.fcurves:
+                        if any(fc.data_path == 'pose.bones["%s%s%s"].rotation_quaternion' % (P, sd, bn) for sd in ("Left", "Right") for bn in ("Arm", "ForeArm", "Hand")) or (guard_dz and fc.data_path == 'pose.bones["%sHips"].location' % P):
+                            while True:                                       # 지우면 참조가 죄다 죽는다 — 하나씩 다시 찾아 지운다
+                                k = next((k for k in fc.keyframe_points if abs(k.co.x - round(k.co.x)) > 1e-3), None)
+                                if k is None:
+                                    break
+                                fc.keyframe_points.remove(k)
+                            fc.update()
+        if n_fix:
+            guard_worst[a.name] = (need, guard_dz); print("팔 바닥 보호 %s: 모자란 팔·프레임 %d — 얹은 각 L 팔꿈치 %.0f°/어깨 %.0f° · R 팔꿈치 %.0f°/어깨 %.0f° · 손목 L %.0f° R %.0f° · 엉덩이 +%.2f m" % (a.name, n_fix, *need["Left"], *need["Right"], wrist["Left"], wrist["Right"], guard_dz))
+guard_low = {}
+for a in GUARD_CLIPS:
+    if a.name in GUARD_SKIP:
+        continue
+    f0, f1 = (int(x) for x in a.frame_range)
+    lo = 9.0
+    for f in range(f0, f1 + 1, max(1, (f1 - f0) // 40)):
+        for sub in (0.0, 0.5):                                   # 프레임 사이도 — 사원수 부호가 뒤집힌 키는 정수 프레임에서만 맞다
+            guard_use(a, f + sub); lo = min(lo, arm_low("Left"), arm_low("Right"))
+            if os.environ.get("DIAG") and min(arm_low("Left"), arm_low("Right")) < GUARD_Z - 0.005:
+                s_ = "Left" if arm_low("Left") < arm_low("Right") else "Right"
+                def _q(bn, fr):
+                    fcs = sorted([fc for layer in a.layers for strip in layer.strips for cb in strip.channelbags for fc in cb.fcurves if fc.data_path == 'pose.bones["%s%s"].rotation_quaternion' % (P, bn)], key=lambda fc: fc.array_index)
+                    return [round(fc.evaluate(fr), 3) for fc in fcs], sorted({round(k.co.x, 2) for k in fcs[0].keyframe_points if f - 1 <= k.co.x <= f + 2}) if fcs else []
+                print("  DIAG %s f %.1f %s low %.3f ForeArm q %s keys %s | Arm q %s" % (a.name, f + sub, s_, arm_low(s_), *_q(s_ + "ForeArm", f + sub), _q(s_ + "Arm", f + sub)[0]))
+    guard_low[a.name] = lo
+ad.action = guard_act0; arm.matrix_world = guard_M; upd()
+check((arm.matrix_world - guard_M).determinant() == 0 and max(abs(x) for r in (arm.matrix_world - guard_M) for x in r) < 1e-6, "팔 바닥 보호 뒤 뼈대 물체 변환 그대로")
+bad = {k: v for k, v in guard_low.items() if v < GUARD_Z - 0.005}
+check(not bad and len(guard_low) >= 10, "팔 바닥 보호: 걸음·up_grope 뺀 클립 %d개에서 팔의 가장 낮은 뼈 ≥ %.3f m — 어긴 것 %s (고친 클립 %d: %s)" %
+      (len(guard_low), GUARD_Z - 0.005, {k: round(v, 3) for k, v in bad.items()} or "없음", len(guard_worst), ", ".join("%s L%.0f/%.0f R%.0f/%.0f 엉덩이+%.2f" % (k, *v[0]["Left"], *v[0]["Right"], v[1]) for k, v in guard_worst.items())))
 
 # ---- 7. NLA 트랙으로 더하고 GLB 내보내기 (stage12 와 같은 설정)
 for tr in ad.nla_tracks:

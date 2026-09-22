@@ -27,7 +27,8 @@ public static class BuildM1
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
-    const string MonsterPath = "Assets/Tunnel/Monster/miner_rigged.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
+    // 기본 = 새 몸 m3(Meshy 부위 조립, tools/bake_m3.sh — 사용자 판정 통과 09-22). 옛 TRELLIS 몸은 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb 로 (검사 문턱은 m3 값)
+    static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_m3.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";
@@ -251,6 +252,9 @@ public static class BuildM1
         model.AddComponent<StalkerAnim>();                           // 3D-③: 행동에 맞는 동작을 튼다 (Stalker 는 부모에서 찾는다)
         var look = model.AddComponent<StalkerLook>();
         look.scaleShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/ScaleNormal.shader");   // 요철 세기용 (glTFast 의 normalTexture_scale 이 URP 에서 안 먹는다)
+        look.glowShader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/LureGlow.shader");     // 램프 미끼 빛무리 (빌드에 들어가게 참조로)
+        if (look.glowShader == null)
+            Debug.LogError("Assets/Shaders/LureGlow.shader 를 못 읽었다");
         if (look.scaleShader == null)
         {
             Debug.LogError("Assets/Shaders/ScaleNormal.shader 를 못 읽었다");

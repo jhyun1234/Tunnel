@@ -305,10 +305,25 @@ public static class Tuning
     // 3D-② (09-17 판정 "구체 두 개가 눈구멍에 박혀 이질감"): 눈 = 눈구멍 속 작은 빛점. 지름 0.04(눈구멍 폭 0.08 의 절반), 안쪽으로 0.04 m
     // 3D-②b (09-17 판정 "구체 두 개가 너무 잘 보인다"): 눈 구체 없음. 머리 그림의 발광 그림(눈구멍 자리, stage12 4b)이 빛난다.
     // 아래 셋은 사용자가 실행 파일 DevHud 키로 찾는 값 — 7/8 요철 세기 · ,/. 거칠기 배율 · k/l 눈 발광 (StalkerLook.cs)
-    public const float STALKER_SKIN_NORMAL_SCALE = 1.56f;   // 사용자 지시(09-18 3D-③ 판정 중, 1.25^2). 전 값 1.95 (09-18, 7/8 키, 1.25^3). 시작값 1.0. glTFast 속성이 아니라 ScaleNormal.shader 로 적용한다
-    public const float STALKER_SKIN_ROUGH_MUL = 0.6f;       // 사용자가 ,/. 키로 찾은 값 (09-18). 시작값 1.0
+    public const float STALKER_SKIN_NORMAL_SCALE = 1.0f;    // m2-body 가지: 새 몸(Meshy m3) 시작값. main 의 1.56 은 옛 TRELLIS 살에 맞춘 값 — 새 그림에 걸면 무늬가 부푼다(09-20). 아래 옛 설명은 그대로 둔다
+    // (옛 값 1.56)   // 사용자 지시(09-18 3D-③ 판정 중, 1.25^2). 전 값 1.95 (09-18, 7/8 키, 1.25^3). 시작값 1.0. glTFast 속성이 아니라 ScaleNormal.shader 로 적용한다
+    public const float STALKER_SKIN_ROUGH_MUL = 1.0f;       // m2-body 가지: 새 몸 시작값 (main 은 0.6 — 새 살 그림이 밝아 0.6 이면 번들거리고 탄다)
+    // (옛 값 0.6)       // 사용자가 ,/. 키로 찾은 값 (09-18). 시작값 1.0
     public const float STALKER_EYE_EMISSION = 0.31f;        // 사용자가 k/l 키로 찾은 값 (09-18 재판정, 눈구멍 자리 고친 뒤). 0.08 은 발광이 광대뼈 넓은 얼룩일 때 값. 시작값 0.6
-    public const float STALKER_RELIEF_MIN = 28f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 실측(09-17): 점토 상태 24.6 · flatskin 26.1 · 요철 그림 30.7 → 그 사이
+    // m3-③ M1 램프 미끼 (사용자 아이디어 09-20, 제안서 docs/제안서_m3_눈_발광_램프_미끼_갱목.md): 멀리서는 안전모 램프가 켜져 전등·사람 램프처럼 보이고,
+    // 다가오면 램프가 꺼지고 잠깐 캄캄한 뒤 눈이 켜진다. 전부 제안값 — 사용자가 DevHud ; ' (거리) · / \ (밝기) 로 찾는다. 램프 유리 재질('램프_유리')이 없는 몸(옛 몸)은 눈이 늘 켜져 있다
+    public const float STALKER_LURE_OFF_M = 13f;            // m, 이보다 가까우면 램프가 꺼진다 — 괴물 눈 사거리(STALKER_EYE_M 12) 바로 밖: 불이 꺼지는 순간 = 나를 볼 수 있게 되는 순간
+    public const float STALKER_LURE_ON_M = 17f;             // m, 이보다 멀어지면 다시 켜진다 (13~17 사이에선 안 바뀐다 — 경계에서 깜빡이지 않게)
+    public const float STALKER_LURE_FLICKER_S = 0.25f;      // 꺼지기 전 두 번 떠는 시간
+    public const float STALKER_LURE_GAP_S = 0.6f;           // 램프도 눈도 꺼진 완전한 어둠
+    public const float STALKER_LURE_FADE_S = 0.4f;          // 눈이 밝아지는 · 램프가 다시 켜지는 시간
+    public const float STALKER_LURE_EMISSION = 3.0f;        // 램프 유리 발광 세기 (LAMP_COLOR 에 곱한다)
+    public const float STALKER_LURE_LIGHT = 1.2f;           // 램프 앞 점광 세기 — 보이기만 하고 몸을 비추지는 않게 약하게, 그림자 없음
+    public const float STALKER_LURE_LIGHT_RANGE = 3.0f;     // m
+    public const float STALKER_LURE_HALO_M = 0.5f;          // m, 빛무리 판 크기 (가까울 때)
+    public const float STALKER_LURE_HALO_ANGLE = 0.03f;     // 멀 때: 거리 × 이 값 (약 1.7° — 1080p 에서 40 픽셀쯤)
+    public const int STALKER_LURE_BRIGHT_MIN_25M = 4;       // 25 m · 내 램프 끔: 몸 화면 영역에서 밝기 0.1 넘는 표본 픽셀 수 하한
+    public const float STALKER_RELIEF_MIN = 26f;            // 2 m 정면 몸 영역 구조값(이웃 밝기 차×1000) 하한. 옛 몸 실측(09-17): 점토 24.6 · flatskin 26.1 · 요철 30.7 → 28. m3(09-22): flatskin 24.6 · 요철 29.4(-only monster) / 27.5(전체 build.sh — 앞 절들을 거치면 2 m 밝기가 0.128 → 0.123 로 조금 어둡다) → 그 사이 26
     public const int STALKER_EYE_BRIGHT_MIN = 1;            // 램프 끄고 5 m 몸 영역에서 밝기 0.1 넘는 표본 픽셀(3픽셀 간격) 수 하한. 사용자 값 발광 0.08 은 어둡다(0.2 문턱에선 1개) → 문턱 0.1 · 1개. dimeyes 0
     public const float STALKER_MODEL_LUM_MAX_14M = 0.02f;   // 제안값(캡슐 13 m 실측 0.009): 램프 끝이라 안 보여야. 첫 실측 0.006
     // 7 m 보임 = 모델을 그렸을 때와 숨겼을 때 같은 화면 영역의 차이. 모델이 검댕처럼 어두워 밝기 자체(첫 실측 0.036)로는 바탕(0.05)과 못 가른다
@@ -363,11 +378,11 @@ public static class Tuning
     public const float STALKER_NECK_TILT_OUT_M = 0.25f;     // 갸웃하면 저절로 이만큼 — 갸웃 110° 에서 머리가 어깨에 파고든 점이 다섯 자세 모두 0 이 되는 길이 (얼굴 쪽 방향으로 20 cm 는 옆 90° 에서 12점 남음, 09-19 Blender 실측)
     public const float STALKER_NECK_TILT_FROM_DEG = 45f;    // 갸웃이 이 각도부터 나오기 시작해
     public const float STALKER_NECK_TILT_FULL_DEG = 90f;    // 이 각도에서 TILT_OUT 다 나온다
-    public const float STALKER_NECK_RED = 0f;               // 목 붉기 0~1 (DevHud I/M): 0 = 몸 살 색 그대로, 1 = 붉게 곱함. 사용자 09-19 "몸 색으로 해도 좋다고 느껴진다, 테스트해 보고 싶다" → 0 에서 시작
-    public const float STALKER_NECK_BRIGHT = 1f;            // 목 밝기 배율 (DevHud Q/R) — 몸 살과 이어져 보이는 값을 사용자가 찾는다
+    public const float STALKER_NECK_RED = 0.5f;             // 목 붉기 0~1 (DevHud I/M): 0 = 몸 살 색 그대로, 1 = 붉게 곱함. 사용자 09-19 "몸 색으로 해도 좋다고 느껴진다, 테스트해 보고 싶다" → 0 에서 시작
+    public const float STALKER_NECK_BRIGHT = 0.57f;            // 목 밝기 배율 (DevHud Q/R). m3 Meshy 속 목: 사용자 09-20 판정 밝기 0.57 · 붉기 0.5 (옛 몸은 1 · 0). StalkerLook 이 재질 색을 통째로 덮어써 GLB 의 baseColorFactor 는 안 먹는다 — 몸 살과 이어져 보이는 값을 사용자가 찾는다
     public static readonly Color STALKER_NECK_RED_TINT = new Color(1f, 0.35f, 0.30f);
     public const float STALKER_NECK_OFF_PATH_MAX = 0.02f;   // 검사: 마디 뼈가 길에서 벗어난 거리 상한 (모델 m)
-    public const float STALKER_FINGER_CHORD_MAX = 0.84f;    // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. 안 굽힘 0.879 · 굽힘 0.800 (Blender 실측) 사이
+    public const float STALKER_FINGER_CHORD_MAX = 0.905f;   // 새 걷기 손가락 굽음(3D-③b M1b, 09-19): 엄지 뺀 네 손가락 (뿌리 → 끝 곧은 거리 ÷ 마디 길이 합) 한 주기 최댓값 상한. m3 손가락 뼈(09-20): 곧을 때 0.930 · 걷기 굽힘 0.882 사이 = tools/bake_m3.sh 의 CHORD_MAX 와 같은 값 (옛 손은 0.879 · 0.800 → 0.84 였다)
     public const float STALKER_RUN_HAND_PLANT_MIN = 0.10f;  // 새 달리기: 같은 몫 하한. 짚는 몫이 0.25 인데 닿고 떼는 호를 빼면 게임 실측 L 14 % · R 18 % (09-19) — 제안서 15 % 는 어림값이었다
     public const float STALKER_HAND_PLANT_MIN = 0.25f;      // 새 걷기 한 주기 중 손 발톱 끝이 바닥 0.05 m 안에 있는 몫 하한. 제안값: 네 박자 중 한 박자는 짚는다
     public const float STALKER_HEAD_TOP_MIN = 1.9f;         // m, 새 걷기 중 머리 꼭대기 하한. 제안값: 웅크려도 사람 눈높이 1.7 m 보다 크다 (3D 설계서 Step 2)

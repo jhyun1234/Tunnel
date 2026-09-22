@@ -742,8 +742,9 @@ public class StalkerAnim : MonoBehaviour
             var all = GetComponentsInChildren<Transform>();
             arms = new[] { System.Array.Find(all, b => b.name == "mixamorig:LeftArm"), System.Array.Find(all, b => b.name == "mixamorig:RightArm") };
             if (arms[0] == null || arms[1] == null) { clampArms = false; return; }
-            tips0 = arms[0].GetComponentsInChildren<Transform>();
-            tips1 = arms[1].GetComponentsInChildren<Transform>();
+            // 뼈만 — m3 는 갱목·끈 물체가 팔 뼈 밑에 노드로 매달려 있어(09-22) 그 노드가 발톱 끝으로 잡히면 팔을 계속 든다(걷기 팔 들기 344번, 발톱 −0.78 m)
+            tips0 = System.Array.FindAll(arms[0].GetComponentsInChildren<Transform>(), b => b.name.StartsWith("mixamorig:"));
+            tips1 = System.Array.FindAll(arms[1].GetComponentsInChildren<Transform>(), b => b.name.StartsWith("mixamorig:"));
         }
         float floor = Tuning.STALKER_ARM_FLOOR_MARGIN / Tuning.STALKER_MODEL_SCALE;   // 모델 공간 (크기 1)
         for (int side = 0; side < 2; side++)
