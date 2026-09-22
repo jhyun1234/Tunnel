@@ -101,6 +101,10 @@
 - 배포물 10차: `-only monster` ALL PASS · `-only lure` ALL PASS · `-only anim` 31 / 4. 그림 `build/check_m3/wrist/70_game_wrist_{left,front}_zoom.png`(배포물 2 m 확대) · `62_wristzoom_{L,R}_sheet.png`(Blender).
 - Claude 소견(판정은 사용자): 관이 요철 없이 매끈해 팔보다 "고무 소매"처럼 보일 수 있다. 거슬리면 관 UV 를 팔 그림의 큰 조각에 펴서 무늬를 입히는 안.
 
+### 다음 세션 시작 프롬프트 (2026-09-22, `m2-body` 가지 · 작업 트리 `Tunnel/unity-m2`)
+
+> docs/HANDOFF.md 0절을 읽고 이어서 해라. 상태: 새 몸 m3 는 ①손가락 뼈 ②목(Meshy 속 목·소매) ③M1 눈 발광+램프 미끼 ③M2 갱목·못·끈 까지 사용자 판정 통과. 09-22 마지막 빌드(커밋 `5f86fa3`)는 손목 소매 관(`blender/rig/m3_wrist.py`)으로 손과 손목을 잇고 M2 가 만든 회귀(갱목 노드가 발톱 끝으로 읽힘)를 잡은 것 — **아직 판정 안 받음**. 먼저 사용자에게 손목 판정을 받아라(`build/Tunnel/Tunnel.exe` F1 → `9`, 손목 가까이; 그림 `build/check_m3/wrist/70_game_wrist_*_zoom.png`). 물을 것: 손목 이어짐 · 관이 매끈해 고무 소매처럼 보이는가 · 전완 판자 옆면 흰 사선이 아직 거슬리는가. 통과하면 ④ GLB 162 MB 줄이기(그림 4K → 2K, `docs/제안서_*` 형식으로 제안서부터, 승인 뒤 구현) → ⑤ 전체 `bash tools/build.sh` + `-only anim` 알려진 FAIL 4개 정리(손가락 문턱 0.905 · 배회 팔 들기 · 벽 타기 전완 · 수색 머리 튐) + main 합치기(씬·`BuildM1.cs`·`Tuning.cs` 충돌 예상). 규칙: 굽기는 `bash tools/bake_m3.sh`, 빌드는 `TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_m3.glb` 를 준 채 `MakeScene`(-quit 꼭) → `tools/build.sh -only monster`, 몸 그물을 바꾸면 monster · lure · anim 셋 다 돌린다. 새 검사는 일부러 FAIL 시켜 확인하고 HANDOFF 갱신 뒤 커밋.
+
 ## 1. 지금 어디까지 왔나
 
 | | 상태 |
