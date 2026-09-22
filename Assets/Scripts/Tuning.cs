@@ -93,6 +93,13 @@ public static class Tuning
     // 공기 (LOOK_REFERENCE 4-3, 4-4)
     public static readonly Color AMBIENT_COLOR = new Color(0.1f, 0.12f, 0.2f);
     public const float AMBIENT_ENERGY = 0.03f;
+    // ---- UI-2 인트로 (지스타 2026 운영지침 1-1 · 4-1, 제안서 UI-2 승인 09-22). 전부 Unity 전용 ----
+    public const string INTRO_TEAM = "(팀명)";                    // 팀명 — 사용자가 정하면 바꾼다 (지침: 인트로에 팀명 필수)
+    public const string INTRO_TITLE = "막장";
+    public const string INTRO_SUBTITLE = "End of the Dead-End";  // 영문 부제 (사용자 확정 09-22; "They Wait Below" 는 itch.io 게임과 겹쳐 폐기)
+    public const float INTRO_LOGO_MIN_S = 2.0f;    // s, 로고 최소 노출 (지침 1-1 "최소 2초") — 그 전엔 키를 눌러도 안 넘어간다. 사보타주 skipearly 가 0 으로
+    public const float INTRO_LOGO_AUTO_S = 5.0f;   // s, 키가 없어도 이때 메뉴로 (제안값 — 부스 대기 시간 최소화)
+    public const int INTRO_VOLUME_STEP = 10;       // 소리 크기 한 칸 (0~100), 좌우 키
     public const bool DEVHUD_START_VISIBLE = false;  // Unity 전용 (UI-1d, 설계서 Step 6 빌드 규칙): 실행하면 갱도 화면, F1 로 켠다. 사보타주 hudon 이 true 로
     public static readonly Color BACKGROUND = new Color(0.02f, 0.02f, 0.03f);
     public const float FOG_DENSITY = 0.03f;        // 거리 안개 (Exponential)

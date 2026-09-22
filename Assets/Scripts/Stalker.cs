@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 // 괴물 (M3 귀·배회·조사·수색 + M4 눈·빛·alert·chase·catch + M5 체력·스턴·철수). Godot Stalker.gd 에서 옮겼다.
 // 천장 이동은 모델 뒤. 던진 곡괭이(M6)는 ThrownPick 이 Hit 을 부른다 — 휘두른 한 대와 같다. 길찾기 없음 — 직선 갱도라 목적지로 곧장 간다.
@@ -41,6 +42,7 @@ public class Stalker : MonoBehaviour
     [System.NonSerialized] public int hitsSeen;      // 곡괭이가 닿은 횟수 (스턴 중 무효 포함)
     [System.NonSerialized] public int spotsVisited;  // 이번 수색에서 들여다본 곳 수
     [System.NonSerialized] public int catches, restarts;
+    [System.NonSerialized] public bool returnToIntro = true;   // UI-2 (지침 4-1): 잡힌 뒤 Intro 씬으로 돌아간다. 검사는 옛 제자리 재시작으로 두고 intro 구간에서만 켠다
     [System.NonSerialized] public Vector3 noisePos, lastSeen;
     // 3D-④ MB 수색 더듬기 (영상 B4 통과 09-20): 첫 수색 자리(놓친 그 자리)에서만 STALKER_GROPE_S 동안 웅크려 가까운 면을 짚는다 — 몸짓은 StalkerAnim.
     // "들었나?": 더듬는 중 소리를 들으면(또는 heardChance 로 한 번) 몸이 굳고 머리만 그쪽을 딱 본 채 STALKER_HEARD_S — 그동안 자리 시간은 안 흐른다. 소리였으면 그 뒤에 조사하러 간다
@@ -389,6 +391,8 @@ public class Stalker : MonoBehaviour
     }
 
     // 잡힘: 플레이어 잠금 → 검은 화면 → CATCH_RESTART_S 에 복도 시작점에서 다시 (설계서 v2 Step 2, 교차 검토 반영)
+    public void ForceCatch() => StartCatch();   // 검사(intro 구간)가 추격 없이 잡힘만 일으킨다
+
     void StartCatch()
     {
         state = State.Catch;
@@ -404,6 +408,13 @@ public class Stalker : MonoBehaviour
         black = Mathf.Clamp01(catchT / Tuning.CATCH_FADE_S);
         if (catchT < Tuning.CATCH_RESTART_S)
             return;
+        if (returnToIntro)                       // UI-2: 씬을 다시 불러 처음(인트로)으로 — 광석·괴물·곡괭이 전부 새것
+        {
+            restarts++;
+            enabled = false;
+            SceneManager.LoadScene("Intro");
+            return;
+        }
         var pcc = player.GetComponent<CharacterController>();
         pcc.enabled = false;
         player.SetPositionAndRotation(restartPos, Quaternion.identity);

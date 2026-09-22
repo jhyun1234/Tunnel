@@ -8,11 +8,12 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.SceneManagement;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound 은 그 구간만 돈다 (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -53,7 +54,8 @@ public class M1Check : MonoBehaviour
     // 실측(09-15): 검정 재질(0.12) 3 m 0.159 · 7 m 0.055 = 바탕과 같음 → 회갈색(0.40) 3 m 0.303 · 7 m 0.127. 안 그리면(ghost) 0.077 · 0.009
     static readonly Vector3 NearWallPos = new Vector3(2.75f, 0.1f, 15.75f);   // 오른쪽 벽에 몸이 닿는 자리, 기둥 사이
     static readonly Vector3 MidTunnel = new Vector3(0f, 1.9f, 17.5f);
-    readonly List<string> fails = new List<string>();
+    public static readonly List<string> fails = new List<string>();   // static: Intro 씬(UI-2)의 검사도 여기 쌓고, 씬이 바뀌어도 남는다
+    bool noRestart;                                                     // 사보타주 norestart: 잡혀도 인트로로 안 간다 (UI-2 전 상태)
     string outDir;
     string only = "";
 
@@ -238,6 +240,7 @@ public class M1Check : MonoBehaviour
             sanim.driveNeck = false;
         if (sabotage == "nopreview" && hud != null)     // U 가 세운 괴물을 안 걸린다 (사용자 09-18 "U 가 적용 안 된다" 상태)
             hud.previewOn = false;
+        noRestart = sabotage == "norestart";
         if (sabotage == "dimeyes")              // 괴물 눈 발광 끔 (3D-②b: 눈구멍 발광 0)
         {
             var lk = stalker.GetComponentInChildren<StalkerLook>(); lk.eyeEmission = 0f; lk.Apply();
@@ -250,6 +253,7 @@ public class M1Check : MonoBehaviour
     {
         var cc = player.GetComponent<CharacterController>();
         stalker.enabled = false;                 // 괴물 무관 구간은 괴물을 끈다 (DevHud 0 키와 같다) — 켜 두면 램프 빛을 보고 와서 잡는다
+        stalker.returnToIntro = false;           // 잡힘은 옛 제자리 재시작으로 — 다른 구간이 씬을 안 떠나게. intro 구간만 진짜 길
         yield return new WaitForSeconds(1.5f);   // 바닥에 내려앉는다
         if (only == "" || only == "m1")
             yield return M1(cc, fog);
@@ -280,6 +284,30 @@ public class M1Check : MonoBehaviour
             yield return HudStage(cc);
         if (only == "" || only == "sound")
             yield return SoundStage(cc);
+        if (only == "" || only == "intro")
+        {
+            yield return IntroStage(cc);         // 씬을 떠난다 — 통과면 Intro.Start 가 Finish 한다, 안 떠나면 IntroStage 가
+            yield break;
+        }
+        Finish();
+    }
+
+    // UI-2 (지침 4-1 "플레이 종료 후 초기 상태로 자동 복귀"): 잡히면 CATCH_RESTART_S 뒤 Intro 씬으로. 씬이 바뀌면 이 컴포넌트는 사라지므로
+    // 통과는 Intro.Start(expectReturn)가 적고 Finish 한다. 여기까지 살아 있으면 = 안 돌아간 것 → FAIL. 사보타주 norestart
+    IEnumerator IntroStage(CharacterController cc)
+    {
+        var st = stalker;
+        st.enabled = true;
+        st.returnToIntro = !noRestart;
+        Intro.expectReturn = true;
+        Teleport(cc, new Vector3(0f, 0.1f, 6f), 0f);
+        player.frozen = false;
+        yield return null;
+        st.Teleport(new Vector3(0f, 0.1f, 7.2f), 180f);
+        st.ForceCatch();
+        float t = 0f;
+        while (t < Tuning.CATCH_RESTART_S + 2f) { t += Time.deltaTime; yield return null; }
+        Check("intro_returns_after_catch", false, $"still in {SceneManager.GetActiveScene().name} {t:F1} s after catch (restarts {st.restarts}, returnToIntro {st.returnToIntro})");
         Finish();
     }
 
@@ -999,6 +1027,12 @@ public class M1Check : MonoBehaviour
             bool isSmall = roof.bounds.min.y < Tuning.BODY_HEIGHT;           // 서서는 못 들어가는 높이
             if (isSmall) small++; else big++;
             float side = Mathf.Sign(back.bounds.center.x), z = back.bounds.center.z;
+            if (isSmall ? small == 1 : big == 1)                              // 사람이 볼 그림: 3 m 앞 비스듬히, 램프 켠 채
+            {
+                Teleport(cc, new Vector3(-side * 0.5f, 0.1f, z - 3f), side * 51f);
+                yield return new WaitForSeconds(0.5f);
+                yield return Capture(isSmall ? "23_map_gap_small" : "23_map_gap_big", _ => { });
+            }
             foreach (bool crouch in isSmall ? new[] { false, true } : new[] { false })
             {
                 Teleport(cc, new Vector3(side * 1.5f, 0.1f, z), side > 0f ? 90f : -90f);
@@ -2085,11 +2119,14 @@ public class M1Check : MonoBehaviour
                 $"{heard}: head within {headFirst:F0}° of the noise {snapT:F2} s after it (max 0.3) while the body was still {bodyThen:F0}° off · head top leaned up to {tiltMax:F0}° (listen tilt {sa.headTilt:F0}) · closest head {heMin:F0}° at {tAtMin:F2} s with body {beAtMin:F0}° off, clip {sa.Current}");
             t = 0f;
             while (st.state != Stalker.State.Search && t < 15f) { t += Time.deltaTime; yield return null; }
+            // 첫 자리는 더듬기(3D-④ MB)다 — 머리가 옮기는 손을 천천히 따라가서 끊어 도는 횟수가 운에 달린다(맵에 벽 틈이 생겨 짚는 자리 난수가 달라지자 1~3번으로 빠졌다, 09-20). 끊어 도는 머리는 그 뒤 자리의 "서서 둘러보기"에서 잰다
+            t = 0f;
+            while (st.state == Stalker.State.Search && st.Groping && t < 12f) { t += Time.deltaTime; yield return null; }
             int steps = 0, frames = 0;
             bool wasMoving = false;
             float prevYaw = sa.HeadYaw;
             t = 0f;
-            while (t < 3f && st.state == Stalker.State.Search)
+            while (t < 8f && st.state == Stalker.State.Search)      // 남은 수색 전부(자리 사이를 걷는 시간이 섞여 3 s 로는 3번뿐이었다)
             {
                 yield return null;
                 t += Time.deltaTime;
@@ -2101,7 +2138,7 @@ public class M1Check : MonoBehaviour
                 frames++;
             }
             Check("anim_head_search_in_behavior", steps >= 4 && t >= 2f,
-                $"real search ({st.state}, {t:F1} s sampled): head jumped {steps} times (want ≥ 4 in ≥ 2 s)");
+                $"real search after the groping spot ({st.state}, {t:F1} s sampled): head jumped {steps} times (want ≥ 4 in ≥ 2 s)");
             player.frozen = false;
             lamp.lampOn = true;
         }
@@ -2567,14 +2604,14 @@ public class M1Check : MonoBehaviour
         cc.enabled = true;
     }
 
-    void Finish()
+    public static void Finish()
     {
         string summary = fails.Count == 0 ? "CHECK ALL PASS" : "CHECK FAILED: " + string.Join(", ", fails);
         Debug.Log(summary);
         Application.Quit(fails.Count == 0 ? 0 : 1);
     }
 
-    void Check(string name, bool ok, string value)
+    public static void Check(string name, bool ok, string value)
     {
         Debug.Log($"CHECK {(ok ? "PASS" : "FAIL")} {name} {value}");
         if (!ok) fails.Add(name);

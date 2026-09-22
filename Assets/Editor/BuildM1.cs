@@ -7,11 +7,16 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.UI;
 
 // 마일스톤 1·2 씬 만들기와 Windows 빌드. 배치 모드에서 부른다 (명령은 docs/HANDOFF.md, tools/build.sh).
 public static class BuildM1
 {
     const string ScenePath = "Assets/Scenes/M1_Tunnel.unity";
+    const string IntroScenePath = "Assets/Scenes/Intro.unity";   // UI-2 인트로 (지스타 지침 1-1) — MakeIntro 가 만든다, 빌드 0번
+    const string FontPath = "Assets/Fonts/Pretendard-Regular.otf"; // 한글 글꼴 (OFL, 같은 폴더 LICENSE_Pretendard_OFL.txt)
+    const string LogoUnivPath = "Assets/UI/logo_university.png";   // 회색 자리표시 — 센터가 주는 원본으로 바꾼다 (임의 변형 금지)
+    const string LogoCenterPath = "Assets/UI/logo_center.png";
     const string PiecePath = "Assets/Tunnel/Pieces/piece_straight.gltf";
     const string GapBigPath = "Assets/Tunnel/Pieces/piece_gap_big.gltf";      // 3D-④ MR1 맵: 큰 벽 틈(괴물 굴) · 작은 벽 틈(플레이어 전용) — blender/map/make_gaps.py
     const string GapSmallPath = "Assets/Tunnel/Pieces/piece_gap_small.gltf";
@@ -331,7 +336,7 @@ public static class BuildM1
         miningHud.pickaxe = pickaxe;
 
         EditorSceneManager.SaveScene(scene, ScenePath);
-        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(IntroScenePath, true), new EditorBuildSettingsScene(ScenePath, true) };
         PlayerSettings.productName = "Tunnel";
         PlayerSettings.companyName = "jhyun1234";
         AssetDatabase.SaveAssets();
@@ -342,13 +347,130 @@ public static class BuildM1
     {
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
-            scenes = new[] { ScenePath },
+            scenes = new[] { IntroScenePath, ScenePath },   // 0 = 인트로(UI-2), 1 = 갱도
             locationPathName = ExePath,
             target = BuildTarget.StandaloneWindows64,
             options = BuildOptions.None,
         });
         Debug.Log($"BUILD {report.summary.result} errors={report.summary.totalErrors} size={report.summary.totalSize / 1048576} MB");
         EditorApplication.Exit(report.summary.result == BuildResult.Succeeded ? 0 : 1);
+    }
+
+    // UI-2 인트로 씬 (지침 1-1 · 4-1, 제안서 UI-2). 검은 카메라 + Canvas(1920×1080 기준) — 로고 패널(로고 2 · 팀명 · 게임명) / 메뉴 패널(시작 · 소리 크기 · 끝내기).
+    // 값·글자는 Tuning.INTRO_*. 기본 해상도도 여기서 1920×1080 으로 (지침 하드웨어 사양서 16:9)
+    public static void MakeIntro()
+    {
+        var font = AssetDatabase.LoadAssetAtPath<Font>(FontPath);
+        var univ = LoadSprite(LogoUnivPath);
+        var center = LoadSprite(LogoCenterPath);
+        if (font == null || univ == null || center == null)
+        {
+            Debug.LogError($"{FontPath} / {LogoUnivPath} / {LogoCenterPath} 를 못 읽었다 (font {font != null}, univ {univ != null}, center {center != null})");
+            EditorApplication.Exit(9);
+            return;
+        }
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var camGo = new GameObject("Camera") { tag = "MainCamera" };
+        var cam = camGo.AddComponent<Camera>();
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = Color.black;
+        cam.cullingMask = 0;
+        camGo.AddComponent<UniversalAdditionalCameraData>().renderPostProcessing = false;
+        camGo.AddComponent<AudioListener>();
+
+        var canvasGo = new GameObject("Canvas");
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        // 로고 패널: 로고 높이 = 화면의 18 % (제안값), 가로로 둘, 아래 팀명 · 게임명 · 영문 부제
+        var logo = Panel(canvasGo.transform, "LogoPanel");
+        float logoH = 1080f * 0.18f;
+        Image(logo, "LogoUniversity", univ, new Vector2(-300f, 200f), logoH);
+        Image(logo, "LogoCenter", center, new Vector2(300f, 200f), logoH);
+        Label(logo, "Team", Tuning.INTRO_TEAM, 40, new Vector2(0f, -40f), font);
+        Label(logo, "Title", Tuning.INTRO_TITLE, 96, new Vector2(0f, -160f), font);
+        Label(logo, "Subtitle", Tuning.INTRO_SUBTITLE, 44, new Vector2(0f, -250f), font).color = new Color(0.75f, 0.75f, 0.75f);
+
+        // 메뉴 패널: 글자 3줄, 화면 높이의 5 %
+        var menu = Panel(canvasGo.transform, "MenuPanel");
+        var items = new[]
+        {
+            Label(menu, "Start", "시작", 54, new Vector2(0f, 70f), font),
+            Label(menu, "Volume", "소리 크기", 54, new Vector2(0f, 0f), font),
+            Label(menu, "Quit", "끝내기", 54, new Vector2(0f, -70f), font),
+        };
+        menu.gameObject.SetActive(false);
+
+        var intro = new GameObject("Intro").AddComponent<Intro>();
+        intro.logoPanel = logo.gameObject;
+        intro.menuPanel = menu.gameObject;
+        intro.items = items;
+
+        EditorSceneManager.SaveScene(scene, IntroScenePath);
+        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(IntroScenePath, true), new EditorBuildSettingsScene(ScenePath, true) };
+        PlayerSettings.defaultScreenWidth = 1920;
+        PlayerSettings.defaultScreenHeight = 1080;
+        AssetDatabase.SaveAssets();
+        Debug.Log($"Intro scene saved: {IntroScenePath}");
+    }
+
+    static Sprite LoadSprite(string path)
+    {
+        var imp = AssetImporter.GetAtPath(path) as TextureImporter;
+        if (imp == null) return null;
+        if (imp.textureType != TextureImporterType.Sprite || imp.spriteImportMode != SpriteImportMode.Single)
+        {
+            imp.textureType = TextureImporterType.Sprite;
+            imp.spriteImportMode = SpriteImportMode.Single;
+            imp.SaveAndReimport();
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+        }
+        return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+    }
+
+    static RectTransform Rect(Transform parent, string name, Vector2 pos, Vector2 size)
+    {
+        var rt = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+        return rt;
+    }
+
+    static RectTransform Panel(Transform parent, string name)
+    {
+        var rt = Rect(parent, name, Vector2.zero, Vector2.zero);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        return rt;
+    }
+
+    static Image Image(Transform parent, string name, Sprite sprite, Vector2 pos, float height)
+    {
+        float w = height * sprite.rect.width / sprite.rect.height;
+        var img = Rect(parent, name, pos, new Vector2(w, height)).gameObject.AddComponent<Image>();
+        img.sprite = sprite;
+        img.preserveAspect = true;
+        return img;
+    }
+
+    static Text Label(Transform parent, string name, string text, int size, Vector2 pos, Font font)
+    {
+        var t = Rect(parent, name, pos, new Vector2(1800f, size * 1.6f)).gameObject.AddComponent<Text>();
+        t.font = font;
+        t.fontSize = size;
+        t.text = text;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.color = Color.white;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        return t;
     }
 
     static GameObject Instance(GameObject prefab, Transform parent)

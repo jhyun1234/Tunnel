@@ -69,10 +69,20 @@ def build(name, g):
         pts = [(-hw, h * i / nz) for i in range(nz + 1)] + [(-hw + 2 * hw * i / ny, h) for i in range(1, ny)] + [(hw, h * (nz - i) / nz) for i in range(nz + 1)]
         out = []
         for (dy, z) in pts:
-            if k == 0: x = wall_x(Y + dy * 0.999, min(z, H - 0.01)) + 0.015           # 첫 고리는 벽면 위에 (1.5 cm 앞 — 잘린 가장자리를 덮는다)
+            if k == 0: x = wall_x(Y + dy * 0.999, min(z, H - 0.01)) + 0.04            # 첫 고리는 벽면 위에 (4 cm 앞)
             else: x = WALL_X - D * t
             j = 0.0 if k == 0 else 0.07
-            out.append(Vector((x + rnd.uniform(-j, j), Y + dy + rnd.uniform(-j, j) * (0.3 if z < 0.05 else 1), max(0.0, z + rnd.uniform(-j, j)) if 0.05 < z else 0.0)))
+            out.append(Vector((x + rnd.uniform(-j, j), Y + dy + rnd.uniform(-j, j) * (0.3 if z < 0.05 else 1), max(0.0, z + rnd.uniform(-j, j)) if 0.05 < z else 0.015)))      # 바닥은 1.5 cm 띄운다 — 갱도 바닥(−3.5 까지 깔려 있다)과 겹쳐 지직거리지 않게
+        return out
+    def collar():
+        """입구 테두리: 첫 고리에서 바깥으로 0.14 m 넓히고 벽 속으로 0.12 m 들어간 고리. 첫 고리(벽면 4 cm 앞)와 이으면 잘린 가장자리와 고리 사이의 실틈을 앞에서 덮는다
+        (게임 그림 23_map_gap_small 에서 입구 왼쪽·아래에 검은 실틈이 보였다 — 벽이 점과 점 사이에서 울퉁불퉁해서)"""
+        out = []
+        for p0 in rings[0]:
+            dy, z = p0.y - Y, p0.z
+            oy = 0.14 * (1 if dy > 0 else -1) if abs(dy) > HW - 0.01 else 0.0
+            oz = 0.14 if z > H - 0.01 else 0.0
+            out.append(Vector((wall_x(p0.y + oy, min(z + oz, CEIL - 0.1)) - 0.12, p0.y + oy, z + oz if z > 0.05 else 0.0)))
         return out
     TS = [0.0, 0.08, 0.25, 0.45, 0.7, 1.0]
     rings = [ring(t, k) for k, t in enumerate(TS)]
@@ -85,6 +95,9 @@ def build(name, g):
         for l in f.loops:                                      # 그림 좌표: 깊이(x) · 둘레(y+z)를 벽과 같은 촘촘함으로
             l[uv].uv = ((l.vert.co.x) * uv_per_m, (l.vert.co.y + l.vert.co.z) * uv_per_m) if mat == mat_wall else (l.vert.co.x * uv_per_m, l.vert.co.y * uv_per_m)
         new_faces.append(f)
+    col_ = collar()
+    for i in range(n - 1):
+        face([col_[i], col_[i + 1], rings[0][i + 1], rings[0][i]], mat_wall, Vector((0, Y, H * 0.45)))      # 테두리는 갱도 쪽을 본다
     for a, b in zip(rings, rings[1:]):
         for i in range(n - 1):
             mid = (a[i] + b[i + 1]) / 2
@@ -106,6 +119,8 @@ def build(name, g):
             along = (w.z - z0) / (z1 - z0) - 0.5
             p = Vector((WALL_X - 0.02 + (w.x - ctr.x) * 0.8, Y + along * (g["w"] + 0.75), H + 0.17 + (w.y - ctr.y) * 0.8))
             v.co = post.matrix_world.inverted() @ p
+        bm2 = bmesh.new(); bm2.from_mesh(lin.data)             # 축을 바꾸는 건 거울 뒤집기다 — 면이 뒤집혀 Unity 에서 새까맣게 나왔다(게임 그림 23_map_gap_big) → 면을 다시 뒤집는다
+        bmesh.ops.reverse_faces(bm2, faces=bm2.faces); bm2.normal_update(); bm2.to_mesh(lin.data); bm2.free()
 
     # ---- 충돌
     old = bpy.data.objects["COL_straight_wall_W-convcolonly"]
