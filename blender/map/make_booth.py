@@ -8,7 +8,7 @@
   → 면 뒤집기(안에서 보는 동굴) → 벽만 바위 쪽으로 파는 잡음(바닥은 조금) → 상자 투영 UV → 덩어리 다섯으로 나눔.
 노드: SHL_Booth_<덩어리>(보임) · COL_Booth_<덩어리>(충돌, 같은 그물) · PRP_*(갱목·돌무더기·울타리·널문·철판) · BLK_1..4(부스 막힘 스위치 돌무더기)
   · SLOT_Pocket_1..12 · SLOT_GapBig_1..3 · SLOT_GapSmall_1..2 · SLOT_Light_* · SLOT_DeadLight_* · SPAWN_Player · LOOK_Player · SPAWN_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox.
-자기 검사: 길 위 0.5 m 마다 폭 ≥ 1.9 · 천장 ≥ 2.2 · 바닥 있음, 2 m 마다 26 방향 광선이 40 m 안에서 벽에 맞음(구멍 없음), 광맥 12곳이 벽에 붙음, 삼각형 ≤ 50만.
+자기 검사: 길 위 0.5 m 마다 폭 ≥ 1.9 · 천장 ≥ 2.7 · 바닥 있음, 2 m 마다 26 방향 광선이 40 m 안에서 벽에 맞음(구멍 없음), 광맥 12곳이 벽에 붙음, 삼각형 ≤ 50만.
 사보타주: SABOTAGE=holeroof(천장에 구멍) · narrow(연층 끝을 1.2 m 로) · plate(철판을 연층 안에) · step(노보리 밑 받침을 되살림) → FAIL 로 죽는다. 빠른 확인 FAST=1(렌더 안 함)."""
 import bpy, bmesh, os, math, random, json
 from mathutils import Vector
@@ -22,38 +22,39 @@ CHECK = os.path.join(ROOT, "build", "check_map1")
 SAB = os.environ.get("SABOTAGE", "")
 FAST = os.environ.get("FAST", "") == "1"
 VOXEL, CARVE, FLOOR_CARVE = 0.15, 0.30, 0.06      # 복셀 크기 · 벽을 바위 쪽으로 파는 깊이(최대) · 바닥
-MIN_W, MIN_H, SEAL_M, TRI_MAX = 1.9, 2.2, 100.0, 500_000   # 구멍 광선 100 m — 운반갱이 72 m 로 곧다
+MIN_W, MIN_H, SEAL_M, TRI_MAX = 1.9, 2.7, 100.0, 500_000   # 구멍 광선 100 m — 운반갱이 72 m 로 곧다
 
 # ---- 표: 갱도 = (이름, [(x, y, 바닥 높이, 폭)], 천장 높이, 갱목?, 걷는 길?)  — 평면도 v2 그대로
+#   천장은 실제(2.2~2.7 m)보다 0.5 m 높다 — 사용자 09-24 "맵이 생각보다 낮다" → 전부 +0.5 m
 SEAM = 1.0                                         # 탄층 쪽 바닥 (운반갱보다 1 m 높다 — 크로스컷이 완만히 오른다)
 W2 = 1.2 if SAB == "narrow" else 2.1               # 연층 끝 폭 (설계 2.1 → 복셀 뒤 ≥ 1.9)
 TUNNELS = [
-    ("station",   [(0, 0, 0, 5.0), (8, 0, 0, 5.0)], 3.5, False, True),
-    ("haulage",   [(8, 0, 0, 3.3), (72.5, 0, 0, 3.3)], 2.7, True, True),
-    ("siding",    [(9, 0, 0, 3.0), (12, -3.2, 0, 3.0), (22, -3.2, 0, 3.0), (25, 0, 0, 3.0)], 2.7, True, True),
-    ("refuge",    [(40, 0, 0, 1.6), (40, -2.6, 0, 1.6)], 2.2, False, False),
-    ("pump_pass", [(60, 0, 0, 2.4), (60, -3.2, 0, 2.4)], 2.4, False, True),
-    ("xcut1",     [(16, 0, 0, 3.0), (17.21, 1.56, 0, 3.0), (23, 9, SEAM, 3.0)], 2.5, True, True),   # 비탈은 운반갱 벽선에서 시작 (가운데서 시작하면 벽선에 0.2 m 턱)
-    ("xcut2",     [(50, 0, 0, 3.0), (51.09, 1.56, 0, 3.0), (57, 10, SEAM, 3.0)], 2.5, True, True),
-    ("xcut3",     [(30, 0, 0, 3.0), (35, -6, 0, 3.0)], 2.5, True, True),
-    ("door_pass", [(33, -3.6, 0, 2.4), (28.4, -7.6, 0, 2.4)], 2.4, True, True),
-    ("noburi",    [(35, -6, 0, 2.4), (41, -7, 2.8, 2.4), (48, -8.5, 6.2, 2.4)], 2.4, True, True),
-    ("seamW1",    [(23, 9, SEAM, 2.4), (18, 10.2, SEAM, 2.4), (13, 9.6, SEAM, 2.3)], 2.5, True, True),
-    ("seamW2",    [(13, 9.6, SEAM, 2.3), (8, 11, SEAM, 2.2), (3, 11.5, SEAM, W2)], 2.35, True, True),
-    ("stub1",     [(18, 10.2, SEAM, 2.2), (18.3, 14.4, SEAM, 2.2)], 2.35, True, True),
-    ("stub2",     [(9, 10.8, SEAM, 2.1), (9.6, 14.8, SEAM, 2.1)], 2.35, True, True),
-    ("oldnoburi", [(21, 9.4, SEAM, 1.4), (21.2, 11.0, SEAM, 1.4)], 2.0, False, False),
-    ("seamE1",    [(23, 9, SEAM, 2.4), (28, 9.6, SEAM, 2.4), (32.5, 9.5, SEAM, 2.4)], 2.5, True, True),
-    ("seamE2",    [(47, 10, SEAM, 2.4), (52, 10.8, SEAM, 2.4), (57, 10, SEAM, 2.4), (62, 11, SEAM, 2.4), (66, 10.6, SEAM, 2.4)], 2.5, True, True),
+    ("station",   [(0, 0, 0, 5.0), (8, 0, 0, 5.0)], 4.0, False, True),
+    ("haulage",   [(8, 0, 0, 3.3), (72.5, 0, 0, 3.3)], 3.2, True, True),
+    ("siding",    [(9, 0, 0, 3.0), (12, -3.2, 0, 3.0), (22, -3.2, 0, 3.0), (25, 0, 0, 3.0)], 3.2, True, True),
+    ("refuge",    [(40, 0, 0, 1.6), (40, -2.6, 0, 1.6)], 2.7, False, False),
+    ("pump_pass", [(60, 0, 0, 2.4), (60, -3.2, 0, 2.4)], 2.9, False, True),
+    ("xcut1",     [(16, 0, 0, 3.0), (17.21, 1.56, 0, 3.0), (23, 9, SEAM, 3.0)], 3.0, True, True),   # 비탈은 운반갱 벽선에서 시작 (가운데서 시작하면 벽선에 0.2 m 턱)
+    ("xcut2",     [(50, 0, 0, 3.0), (51.09, 1.56, 0, 3.0), (57, 10, SEAM, 3.0)], 3.0, True, True),
+    ("xcut3",     [(30, 0, 0, 3.0), (35, -6, 0, 3.0)], 3.0, True, True),
+    ("door_pass", [(33, -3.6, 0, 2.4), (28.4, -7.6, 0, 2.4)], 2.9, True, True),
+    ("noburi",    [(35, -6, 0, 2.4), (41, -7, 2.8, 2.4), (48, -8.5, 6.2, 2.4)], 2.9, True, True),
+    ("seamW1",    [(23, 9, SEAM, 2.4), (18, 10.2, SEAM, 2.4), (13, 9.6, SEAM, 2.3)], 3.0, True, True),
+    ("seamW2",    [(13, 9.6, SEAM, 2.3), (8, 11, SEAM, 2.2), (3, 11.5, SEAM, W2)], 2.85, True, True),
+    ("stub1",     [(18, 10.2, SEAM, 2.2), (18.3, 14.4, SEAM, 2.2)], 2.85, True, True),
+    ("stub2",     [(9, 10.8, SEAM, 2.1), (9.6, 14.8, SEAM, 2.1)], 2.85, True, True),
+    ("oldnoburi", [(21, 9.4, SEAM, 1.4), (21.2, 11.0, SEAM, 1.4)], 2.5, False, False),
+    ("seamE1",    [(23, 9, SEAM, 2.4), (28, 9.6, SEAM, 2.4), (32.5, 9.5, SEAM, 2.4)], 3.0, True, True),
+    ("seamE2",    [(47, 10, SEAM, 2.4), (52, 10.8, SEAM, 2.4), (57, 10, SEAM, 2.4), (62, 11, SEAM, 2.4), (66, 10.6, SEAM, 2.4)], 3.0, True, True),
 ]
 # 방 = (이름, x0, x1, y0, y1, 바닥, 천장) — 기둥 사이는 통로 줄 상자들의 합(기둥 자리만 빈다)
 RX0, RX1, RY0, RY1, PIL, AIS = 32.0, 47.6, 5.0, 16.1, 2.4, 2.1
 PILLARS = [(35.3, 8.3), (39.8, 8.3), (44.3, 8.3), (35.3, 12.8), (39.8, 12.8), (44.3, 12.8)]
-ROOMS = [("cage", -3, 0, -1.5, 1.5, 0, 3.0), ("pump", 57, 64, -8, -3, 0, 3.0), ("goaf", RX0, RX1, RY1 - 0.2, 17.8, SEAM, 2.4)]
+ROOMS = [("cage", -3, 0, -1.5, 1.5, 0, 3.5), ("pump", 57, 64, -8, -3, 0, 3.5), ("goaf", RX0, RX1, RY1 - 0.2, 17.8, SEAM, 2.9)]
 for i, cx in enumerate((RX0, 36.5, 41.0, 45.5)):                     # 세로 통로 넷
-    ROOMS.append(("room_c%d" % i, cx, cx + AIS, RY0, RY1, SEAM, 2.4))
+    ROOMS.append(("room_c%d" % i, cx, cx + AIS, RY0, RY1, SEAM, 2.9))
 for i, cy in enumerate((RY0, 9.5, 14.0)):                             # 가로 통로 셋
-    ROOMS.append(("room_r%d" % i, RX0, RX1, cy, cy + AIS, SEAM, 2.4))
+    ROOMS.append(("room_r%d" % i, RX0, RX1, cy, cy + AIS, SEAM, 2.9))
 
 # ---- 자리들
 POCKETS = [((18.25, 13.2, SEAM), (0.05, 1)), ((9.5, 13.6, SEAM), (0.15, 1)), ((4.0, 11.4, SEAM), (-1, 0.1)),
@@ -62,8 +63,8 @@ POCKETS = [((18.25, 13.2, SEAM), (0.05, 1)), ((9.5, 13.6, SEAM), (0.15, 1)), ((4
            ((41.5, -7.1, 2.95), (0.15, 1)), ((47.0, -8.3, 5.8), (1, -0.2))]
 GAP_BIG = [(4.2, 12.2, SEAM), (40.0, 15.6, SEAM), (47.0, -9.0, 5.9)]
 GAP_SMALL = [(13.0, 8.7, SEAM), (63.3, -7.3, 0)]
-LIGHTS = [(-1.5, 0, 0, 3.0), (4, 0, 0, 3.5), (12, 0, 0, 2.7), (18, 0, 0, 2.7), (17, -3.2, 0, 2.7)]
-DEAD_LIGHTS = [(26, 0, 0, 2.7), (32, 0, 0, 2.7), (38, 0, 0, 2.7), (44, 0, 0, 2.7), (18.5, 3.2, 0.4, 2.5), (32.5, -3.0, 0, 2.5)]
+LIGHTS = [(-1.5, 0, 0, 3.5), (4, 0, 0, 4.0), (12, 0, 0, 3.2), (18, 0, 0, 3.2), (17, -3.2, 0, 3.2)]          # (x, y, 바닥, 그 자리 천장)
+DEAD_LIGHTS = [(26, 0, 0, 3.2), (32, 0, 0, 3.2), (38, 0, 0, 3.2), (44, 0, 0, 3.2), (18.5, 3.2, 0.4, 3.0), (32.5, -3.0, 0, 3.0)]
 BLOCKS = [(51.3, 1.9, 0, 55.0), (31.3, -1.6, 0, -50.2), (48.4, 10.1, SEAM, 10.0), (45.5, 0, 0, 90.0)]   # (x, y, 바닥, 갱도 방향 °)
 
 def floor_at(pts, x, y):
@@ -194,7 +195,7 @@ bpy.data.objects.remove(air, do_unlink=True)
 bm = bmesh.new(); bm.from_mesh(cave_me)
 bmesh.ops.reverse_faces(bm, faces=bm.faces); bm.normal_update()
 if SAB == "holeroof":                                        # 사보타주: 운반갱 x=30 천장에 구멍
-    kill = [f for f in bm.faces if (f.calc_center_median() - Vector((30, 0, 2.7))).length < 0.8 and f.normal.z < -0.5]
+    kill = [f for f in bm.faces if (f.calc_center_median() - Vector((30, 0, next(h for n, _, h, _, _ in TUNNELS if n == "haulage")))).length < 0.8 and f.normal.z < -0.5]
     bmesh.ops.delete(bm, geom=kill, context="FACES")
 bm.to_mesh(cave_me); bm.free()
 cave = bpy.data.objects.new("CAVE", cave_me); bpy.context.scene.collection.objects.link(cave)
@@ -311,10 +312,10 @@ def rubble(name, C, d_deg, width, depth, height, mat=M_ROCK, n=40):
             vv.co = Vector((vv.co.x * (0.8 + rnd.random() * 0.5), vv.co.y * (0.8 + rnd.random() * 0.5), vv.co.z * 0.7)) + C + lat * u + d * v + Z * z
     o = new_obj(name, bm, mat); box_uv(o.data, UV_WALL * 2); return o
 
-rubble("PRP_Rubble_End", Vector((72.0, 0, 0)), 0, 3.6, 1.4, 2.7)
+rubble("PRP_Rubble_End", Vector((72.0, 0, 0)), 0, 3.6, 1.4, 3.2)
 for i, (bx, by, bz, deg) in enumerate(BLOCKS, 1):
-    rubble("BLK_%d" % i, Vector((bx, by, bz)), deg, 3.6, 1.6, 2.7)
-rubble("PRP_Rubble_Goaf", Vector(((RX0 + RX1) / 2, 17.1, SEAM)), 90, RX1 - RX0, 1.4, 2.4, n=90)
+    rubble("BLK_%d" % i, Vector((bx, by, bz)), deg, 3.6, 1.6, 3.2)
+rubble("PRP_Rubble_Goaf", Vector(((RX0 + RX1) / 2, 17.1, SEAM)), 90, RX1 - RX0, 1.4, 2.9, n=90)
 bm = bmesh.new()                                             # 채굴적 앞 울타리 + 경고판
 x = RX0 + 0.4
 while x < RX1 - 0.3:
@@ -324,10 +325,11 @@ for zz in (0.5, 1.1):
 box_verts(bm, Vector((40.0, 15.9, SEAM + 1.25)), X, Y, Z, 0.45, 0.02, 0.28)
 o = new_obj("PRP_Fence", bm, M_TIMB); box_uv(o.data, UV_WALL * 2)
 dd = (Vector((28.4, -7.6, 0)) - Vector((33, -3.6, 0))).normalized(); dl = Vector((-dd.y, dd.x, 0))   # 바람 문 = 널문
-bm = bmesh.new(); box_verts(bm, Vector((28.4, -7.6, 1.15)) - dd * 0.25, dd, dl, Z, 0.05, 1.15, 1.15)
+bm = bmesh.new(); box_verts(bm, Vector((28.4, -7.6, 1.4)) - dd * 0.25, dd, dl, Z, 0.05, 1.15, 1.4)                    # 높이 2.8 m = 갱도(2.9)를 막는다
 o = new_obj("PRP_WindDoor", bm, M_TIMB); box_uv(o.data, UV_WALL * 2)
-bm = bmesh.new(); box_verts(bm, Vector((0, 0, 0)), X, Y, Z, 0.75, 0.015, 1.0)                         # 옛 노보리 입구의 매달린 철판 — 제 가운데로 돌린다
-o = new_obj("PRP_Plate", bm, M_RUST); o.location = (21.15, 10.0 if SAB == "plate" else 10.95, SEAM + 1.0);   # 사보타주 plate = 옛 자리(연층 안) o.rotation_euler = (math.radians(4), 0, math.radians(-7)); box_uv(o.data, UV_WALL * 2)   # (09-24: 원점 기준으로 돌려 크로스컷 1 한가운데 섰다)
+bm = bmesh.new(); box_verts(bm, Vector((0, 0, 0)), X, Y, Z, 0.75, 0.015, 1.25)                        # 옛 노보리 입구의 매달린 철판(높이 2.5 = 옛 노보리 천장) — 제 가운데로 돌린다
+o = new_obj("PRP_Plate", bm, M_RUST); o.location = (21.15, 10.0 if SAB == "plate" else 10.95, SEAM + 1.25)   # 사보타주 plate = 옛 자리(연층 안)
+o.rotation_euler = (math.radians(4), 0, math.radians(-7)); box_uv(o.data, UV_WALL * 2)   # (09-24: 원점 기준으로 돌려 크로스컷 1 한가운데 섰다. 이 줄이 위 줄 주석 속에 들어가 돌림·UV 가 빠져 있었다)
 
 # 소품 충돌까지 넣고 걷는 길 폭을 다시 잰다 — Unity 는 철판·널문·울타리에 충돌을 붙인다 (09-24: 연층 한가운데 선 철판이 길을 막았는데 동굴만 재서 못 잡았다)
 deps = bpy.context.evaluated_depsgraph_get()

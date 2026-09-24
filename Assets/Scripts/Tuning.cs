@@ -116,7 +116,7 @@ public static class Tuning
     public static readonly Color BOOTH_LIGHT_COLOR = new Color(1f, 0.72f, 0.42f);   // 켜진 전등 (백열등)
     public const float BOOTH_LIGHT_ENERGY = 25f;                // 제안값 — 판정 때 숫자패드 −/+ 로 정한다 (4 는 전등 아래도 거의 안 보였다, 첫 부스 검사 09-24)
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
-    public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 실제 갱도 천장 2.2~2.7 m (복도는 STALKER_H 2.8 그대로)
+    public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 부스 천장 2.7~3.2 m(09-24 +0.5 m 전 2.2~2.7 에 맞춘 값) (복도는 STALKER_H 2.8 그대로)
     // 천장 밑 숙이기 (MAP1, 사용자 09-24 "실제 크기 지키고 괴물이 숙여 다니게"): 머리 꼭대기가 그 자리 천장 − STOOP_MARGIN 밑에 오게
     // 먼저 엉덩이를 STOOP_DROP_MAX 까지 낮추고(발은 다리 IK 로 제자리), 모자라면 허리를 STOOP_PITCH_MAX 까지 앞으로 숙인다. 천장이 높으면(복도 5.6 m) 아무 일 없음
     public const float STALKER_STOOP_MARGIN = 0.3f;             // m (0.15 는 달릴 때 따라가는 사이 머리가 4 cm 닿았다)

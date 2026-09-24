@@ -422,7 +422,7 @@ public class M1Check : MonoBehaviour
         bool lensOk = Mathf.Abs(faceA - 49f) <= 49f * 0.15f && Mathf.Abs(faceB - 73f) <= 73f * 0.15f && Mathf.Abs(faceC - 54f) <= 54f * 0.15f;
         Check("booth_walk_route", reached == legs.Count && legs.Count == 13 && lensOk,
             $"walked to {reached}/{legs.Count} stops (12 veins + back to the cage) in {Time.time - t0:F0} s, {walked:F0} m · path cage → face A {faceA:F0} m (49) · C {faceC:F0} m (54) · B {faceB:F0} m (73), ±15 %");
-        Check("booth_clearance", minW >= 1.9f && minH >= 2.2f, $"along the walked route: narrowest {minW:F2} m at {worstAt} (≥ 1.9) · lowest ceiling {minH:F2} m at {lowAt} (≥ 2.2)");
+        Check("booth_clearance", minW >= 1.9f && minH >= 2.5f, $"along the walked route: narrowest {minW:F2} m at {worstAt} (≥ 1.9) · lowest ceiling {minH:F2} m at {lowAt} (≥ 2.5)");   // 벽 옆은 아치라 가운데(2.85~)보다 낮다: 천장 +0.5 m 뒤 2.67 · 그 전 맵 2.30 → 사이 값
 
         // ---- 1b. 입구마다 곧장 걸어 들어가기 — 사람처럼 갈림길에서 굴 쪽을 보고 W 만 누른다 (길찾기 봇은 둘러 가서 못 잡았다: 09-24 사용자 "크로스컷 1 로 못 들어간다")
         {
