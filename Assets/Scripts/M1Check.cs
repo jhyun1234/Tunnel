@@ -172,6 +172,8 @@ public class M1Check : MonoBehaviour
             lamp.soonNod = false;
         if (sabotage == "nostagger")            // 탈진해도 자세 없음 (UI-1b 전 상태)
             player.stagger = false;
+        if (sabotage == "nosnap")               // 비탈을 내려갈 때 바닥에 안 붙인다 — 발소리가 프레임마다 나던(09-24 전) 상태
+            player.snapDown = false;
         if (sabotage == "hudtext")              // 갱도 화면에 "철 N" 글자 (UI-1c 전 상태)
             FindFirstObjectByType<MiningHud>().oreText = true;
         if (sabotage == "noglow")               // 던진 곡괭이 머리가 안 빛난다
@@ -457,6 +459,28 @@ public class M1Check : MonoBehaviour
                 yield return null;
             }
             Check("booth_enter_tunnels", eOk, "walking straight in with W for 2.5 s (≥ 3 m): " + string.Join(" · ", eNotes));
+        }
+
+        // ---- 1c. 노보리(25°) 발소리: 오를 때와 내릴 때 같은 박자 — 내릴 때 몸이 떴다 붙었다 하면 발소리가 프레임마다 났다 (사용자 09-24 영상)
+        {
+            static Vector3 B(float x, float y, float z = 0f) => new Vector3(-x, z, -y);
+            var sNotes = new List<string>(); bool sOk = true;
+            foreach (var (nm, from, toward, fz) in new[] { ("up", new Vector2(36.0f, -6.2f), new Vector2(48f, -8.5f), 0.5f), ("down", new Vector2(47.0f, -8.3f), new Vector2(35f, -6f), 6.3f) })
+            {
+                Vector3 start = OnNav(B(from.x, from.y, fz)), dir = Flat3(B(toward.x, toward.y) - B(from.x, from.y)).normalized;
+                Teleport(cc, start + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
+                yield return new WaitForSeconds(0.3f);
+                int s0 = player.steps; float y0 = player.transform.position.y, t = 0f;
+                InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+                while (t < 2.5f) { player.transform.rotation = Quaternion.LookRotation(dir); yield return null; t += Time.deltaTime; }
+                InputSystem.QueueStateEvent(kb, new KeyboardState());
+                yield return null;
+                int n = player.steps - s0; float want = 2.5f / Tuning.STEP_INTERVAL;           // 첫 발 1 + 0.5 s 마다 1
+                bool ok = n >= want - 1f && n <= want + 2f;
+                sOk &= ok;
+                sNotes.Add($"{nm} {n} steps in 2.5 s, height {player.transform.position.y - y0:+0.0;-0.0} m{(ok ? "" : " WRONG")}");
+            }
+            Check("booth_slope_steps", sOk, $"walking the noburi slope (want {2.5f / Tuning.STEP_INTERVAL - 1f:F0}~{2.5f / Tuning.STEP_INTERVAL + 2f:F0} steps each way): " + string.Join(" · ", sNotes));
         }
 
         // ---- 2. 막힘 스위치: 켜면 그 자리를 못 지나간다(길찾기가 돌아가거나 없음), 넷 다 켜도 열린 쪽 광맥 5곳 이상

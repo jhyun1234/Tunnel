@@ -15,6 +15,7 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 - 최소 사양 목표(잠정): GTX 1650 / 1080p / 60fps
 - 명령어는 `game-engine` 스킬에 있다. 경로를 추측하지 말고 그 스킬을 읽는다.
 - 빌드·배포물 검사: `bash tools/build.sh` (사보타주: `-sabotage floor|lamp|fog|thickfog`)
+- 개발 중 빠른 검사: `bash tools/quick.sh <구간>` (바뀐 구간만, 사보타주 여럿은 `-sab a,b <구간>`). 전체 build.sh 는 커밋 전 한 번
 - 산출물: `build/`
 
 ## Godot판 참조 (읽기 전용)

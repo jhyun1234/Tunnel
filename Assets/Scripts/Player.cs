@@ -17,6 +17,7 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
     [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
     [System.NonSerialized] public bool stagger = true;        // 사보타주 nostagger 가 끈다 — 탈진해도 자세 없는(옛) 상태
+    [System.NonSerialized] public bool snapDown = true;       // 사보타주 nosnap 이 끈다 — 비탈을 내려가며 떴다 붙었다 하던(옛) 상태
     [System.NonSerialized] public float blurMul = 1f;         // 검사가 흐림만 끄고 비교한다
     public bool BlurOn => dof != null && dof.active;          // 검사: 탈진 아닐 때 흐림이 없어야 한다
     [System.NonSerialized] public float lookDown, breathAmp, pant;   // 탈진 자세: 시야 숙임 각 · 숨 들썩임 폭(0~1) · 탈진 정도(0~1, 시야각·흐림·시점 잠금) (검사가 읽는다)
@@ -144,6 +145,17 @@ public class Player : MonoBehaviour
 
         if ((cc.Move(velocity * dt) & CollisionFlags.Above) != 0 && velocity.y > 0f)
             velocity.y = 0f;
+        // 비탈 내려가기: 노보리(25°)를 걸어 내려가면 한 프레임에 떨어지는 높이가 바닥 붙이기(−2 m/s)보다 커서 떴다 붙었다 한다 →
+        // 붙을 때마다 걷기 시작으로 쳐서 발소리가 프레임마다 났다 (사용자 09-24 영상: 오를 때 0.5 s, 내릴 때 0.05~0.07 s).
+        // 걸을 수 있는 가장 가파른 비탈이 이번 이동만큼 떨어뜨리는 거리를 내려 본다 — 바닥에 닿으면 붙은 채, 못 닿으면(턱 밖) 되돌려 그대로 떨어진다.
+        // (발밑 광선으로 바닥을 찾던 첫 판은 비탈에서 캡슐 밑과 바닥 사이가 광선보다 멀어 못 붙였다)
+        if (grounded && !cc.isGrounded && velocity.y <= 0f && snapDown)
+        {
+            float drop = new Vector2(velocity.x, velocity.z).magnitude * dt * Mathf.Tan(cc.slopeLimit * Mathf.Deg2Rad) + 0.02f;
+            cc.Move(Vector3.down * drop);
+            if (!cc.isGrounded)
+                cc.Move(Vector3.up * drop);
+        }
 
         // 발소리: 땅에서 움직이는 동안 걸음 위상이 π 를 지날 때마다(발이 땅에 닿는 순간) 소음 한 번 (Godot Player.gd 의 간격 = 자세별 STEP_INTERVAL).
         // 곡괭이 흔들림(Pickaxe)이 같은 위상을 쓰므로 소리와 움직임이 맞는다 (사용자 09-16 "사운드 타이밍과 모션 타이밍이 안 맞는다"). 소리는 NoiseSound 가 튼다
