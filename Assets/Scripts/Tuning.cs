@@ -112,7 +112,7 @@ public static class Tuning
     public const int INTRO_VOLUME_STEP = 10;       // 소리 크기 한 칸 (0~100), 좌우 키
     // ---- MAP1 부스 한 층 맵 (제안서 docs/제안서_MAP1_부스_갱도_모양.md, 승인 09-24). 맵 그물 = blender/map/make_booth.py
     public const string BOOTH_SCENE = "Booth";                  // 인트로 "시작"이 가는 씬 (42 m 복도 M1_Tunnel 은 검사용으로만)
-    public static readonly bool[] BOOTH_BLOCKS = { false, false, false, false };   // 부스 막힘 스위치(BLK_1..4 = 크로스컷 2 · 크로스컷 3 · 기둥 사이 동쪽 · 운반갱 45 m). 판정 때 F5~F8 로 정한다
+    public static readonly bool[] BOOTH_BLOCKS = { true, true };   // MAP2 부스판 막힘 묶음(BLK_1_* = 서쪽: ① 채탄장·서쪽 바깥 고리 8곳 · BLK_2_* = 동쪽: ③ 노보리·동쪽 바깥 고리 5곳). 둘 다 켜면 가운데만(제안서 MAP2 부스판). 판정 때 F5·F6
     public static readonly Color BOOTH_LIGHT_COLOR = new Color(1f, 0.72f, 0.42f);   // 켜진 전등 (백열등)
     public const float BOOTH_LIGHT_ENERGY = 60.5f;              // 사용자 판정 09-24 (숫자패드 −/+, 제안값 25). 부스 씬을 만들 때 박힌다 — 바꾸면 MakeBooth -force
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
@@ -125,6 +125,7 @@ public static class Tuning
     public const float STALKER_STOOP_HEAD_TOP = 0.3f;           // m, 머리 뼈에서 머리 꼭대기까지 (모델 크기 1.5)
     public const float STALKER_STOOP_S = 0.3f;                  // s, 펴는 빠르기 (천장이 높아지는 곳에서 튀지 않게)
     public const float STALKER_STOOP_DOWN_S = 0.05f;            // s, 숙이는 빠르기 — 0.15~0.25 는 달리며 낮은 천장에 들어갈 때 늦어 머리가 닿았다 (09-24)
+    public const float STALKER_CORNER_KEEP_M = 0.4f;            // m, 부스 맵: 길찾기 꺾는 점을 바닥 끝에서 이만큼 안으로 (벽에서 0.6 + 0.4 = 1 m) — 기둥 모서리를 돌 때 머리가 벽에 파고들었다 (MAP2 09-25)
     public const float STALKER_WALL_STOP_M = 2.4f;              // m, 부스 맵: 소리 조사 끝에 가는 쪽 벽이 이 안이면 거기서 멈춘다 — 벽에 붙어 더듬으면 숙인 머리가 벽 속으로 1.3 m (09-24 검사)
     public const bool DEVHUD_START_VISIBLE = false;  // Unity 전용 (UI-1d, 설계서 Step 6 빌드 규칙): 실행하면 갱도 화면, F1 로 켠다. 사보타주 hudon 이 true 로
     public static readonly Color BACKGROUND = new Color(0.02f, 0.02f, 0.03f);

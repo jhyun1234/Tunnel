@@ -592,10 +592,18 @@ public class StalkerAnim : MonoBehaviour
                 return;
             }
         }
-        Vector3 p = transform.position + r.right * (sd * Rnd(-0.15f, Tuning.STALKER_GROPE_SIDE_M)) + r.forward * Rnd(Tuning.STALKER_GROPE_NEAR_M, Tuning.STALKER_GROPE_FAR_M);
-        if (Physics.Raycast(p + Vector3.up * 1.2f, Vector3.down, out RaycastHit fh, 2.5f, ~0, QueryTriggerInteraction.Ignore) && fh.normal.y > 0.5f && Ok(fh))
-        { point = fh.point; normal = fh.normal; }
-        else { point = p; normal = Vector3.up; }
+        // 바닥: 제 발과 같은 높이(±0.6 m)이고 몸에서 막힘 없이 닿는 자리만 — 좁은 굴(부스 맵 2.4 m)에서 옆 자리가 벽 너머 바위 속이면
+        // 아래 광선이 다른 굴 바닥에 닿아 손이 벽 너머로 가고 엉덩이·머리가 따라 들어갔다 (MAP2 검사 09-25). 안 되면 바로 앞 NEAR
+        Vector3 body = transform.position + Vector3.up * 0.8f;
+        for (int k = 0; k < 2; k++)
+        {
+            Vector3 p = k == 0 ? transform.position + r.right * (sd * Rnd(-0.15f, Tuning.STALKER_GROPE_SIDE_M)) + r.forward * Rnd(Tuning.STALKER_GROPE_NEAR_M, Tuning.STALKER_GROPE_FAR_M)
+                               : transform.position + r.forward * Tuning.STALKER_GROPE_NEAR_M;
+            if (Physics.Raycast(p + Vector3.up * 1.2f, Vector3.down, out RaycastHit fh, 2.5f, ~0, QueryTriggerInteraction.Ignore) && fh.normal.y > 0.5f && Ok(fh)
+                && Mathf.Abs(fh.point.y - transform.position.y) < 0.6f && !Physics.Linecast(body, fh.point + Vector3.up * 0.3f, ~0, QueryTriggerInteraction.Ignore))
+            { point = fh.point; normal = fh.normal; return; }
+        }
+        point = transform.position + r.forward * Tuning.STALKER_GROPE_NEAR_M; normal = Vector3.up;
     }
 
     void StartMove(int h)

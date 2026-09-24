@@ -189,7 +189,7 @@ def build():
     crawl("c_plaza", m_(910,598), m_(910,530))
     xm = (Z1["xs"][2] + Z2["x0"]) / 2; crawl("c_link12", (xm, Z1["ys"][2]), (xm, Z1["ys"][1]))
     crawl("c_z4", (Z4["x0"] + 0.5, m_(0,770)[1]), m_(22,770)); crawl("c_z5", (Z5["x0"] + 0.5, m_(0,720)[1]), m_(1470,705))
-    crawl("c_charge", m_(330,1070), m_(300,965)); crawl("c_comp", m_(1460,1105), m_(1460,955))
+    crawl("c_charge", m_(510,1070), m_(510,930)); crawl("c_comp", m_(1460,1105), m_(1460,955))   # 충전실 뒷문은 들어오는 굴(왼쪽 위)과 먼 오른쪽 위 — 왼쪽(330)에 두었더니 괴물이 14 m 만 돌면 반대편이었다(구멍 7.6 m, MAP2 검사 09-25)
     crawl("c_z2", (Z2["x1"] - 1.0, Z2["y0"]), m_(1115,538)); crawl("c_z1", (Z1["xs"][0], Z1["ys"][0]), m_(240,515))
 
     # ---- 좁은 대피소 자동: 걷는 굴마다 갈림·숨을 곳 사이가 12.5 m 를 넘지 않게 (다른 굴·방과 부딪히면 앞뒤로 옮김)
@@ -247,8 +247,13 @@ def build():
         t = next(t for t in T if t[0] == parent); par = t[1]; q = m_(px, py); d, s, z = proj(par, q)
         (x1, y1) = point_at(par, max(s - 1, 0)); (x2, y2) = point_at(par, min(s + 1, seg_len(par)))
         return (g, *point_at(par, s), z, math.degrees(math.atan2(y2 - y1, x2 - x1)), par[0][3], t[2])
-    blocks = [blk(1, 400, 450, "v_z1"), blk(1, 720, 0, "link12b"), blk(1, 130, 521, "main"), blk(1, 60, 948, "bottom_w"),
-              blk(2, 1540, 460, "v_z3"), blk(2, 1250, 0, "link23"), blk(2, 1800, 517, "main"), blk(2, 1880, 946, "bottom_e")]
+    def blk_mid(g, parent):                                                  # 개구멍 한가운데 (사람만 지나가는 길도 막는다)
+        par = next(t for t in T if t[0] == parent)[1]; q = point_at(par, seg_len(par) / 2); return blk(g, q[0] / F + CX, CY - q[1] / F, parent)
+    # 묶음 = 가운데와 닫을 구역 사이를 잇는 곳 전부 (09-25 Unity 전 점검: 넷씩이면 ①–② 윗줄 · 바깥 고리 끝 → 충전실·컴프레서실 · 개구멍 둘이 열려 둘 다 켜도 거의 다 열렸다)
+    # 가운데 쪽 갈림에서 3 m 쯤 — 멀리 두면 가운데 쪽에 막다른 굴이 남는다(첫 자리: 최대 17.5 m, 도망치다 갇힌다 · 길 잃고 걷기 부스판 67 %, MAP2 검사 09-25)
+    blocks = [blk(1, 400, 450, "v_z1"), blk(1, 745, 0, "link12b"), blk(1, 745, 0, "link12a"), blk(1, 160, 521, "main"), blk(1, 160, 948, "bottom_w"),
+              blk(1, 255, 1128, "W_edge"), blk_mid(1, "c_z1"), blk_mid(1, "c_z4"),
+              blk(2, 1540, 460, "v_z3"), blk(2, 1135, 0, "link23"), blk(2, 1710, 520, "main"), blk(2, 1675, 948, "bottom_e"), blk(2, 1535, 1147, "E_edge")]
     spawn_p = (*m_(910, 705), 0.05); look_p = (*m_(910, 560), 1.6)
     gy = Z2["y1"] - 1.5; spawn_s = (Z2["cx"][1], gy, SEAM + 0.05); look_s = (Z2["cx"][-1], gy, SEAM + 1.0)
     fake_end = T[[t[0] for t in T].index("fake_exit")][1][-1]

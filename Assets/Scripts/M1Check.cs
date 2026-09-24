@@ -13,9 +13,9 @@ using UnityEngine.SceneManagement;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only booth 은 부스 맵(MAP1) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다.
+// -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -312,7 +312,7 @@ public class M1Check : MonoBehaviour
         Finish();
     }
 
-    // ================= MAP1 부스 한 층 맵 (제안서 docs/제안서_MAP1_부스_갱도_모양.md). 끝나면 전체 실행은 복도 씬으로 넘어간다
+    // ================= 부스 한 층 맵 MAP2 (제안서 docs/제안서_MAP2_맵_5배.md · MAP1 은 docs/제안서_MAP1_부스_갱도_모양.md). 끝나면 전체 실행은 복도 씬으로 넘어간다
     string sabotageName = "";
 
     IEnumerator BoothRun()
@@ -346,38 +346,146 @@ public class M1Check : MonoBehaviour
     IEnumerator BoothStage(CharacterController cc)
     {
         var kb = InputSystem.AddDevice<Keyboard>("BoothKeyboard");
-        var blocks = Enumerable.Range(1, 4).Select(i => Slot("BLK_" + i).gameObject).ToArray();
+        var blocks = pieces.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BLK_")).Select(t => t.gameObject).OrderBy(b => b.name).ToArray();
+        IEnumerator Groups(bool west, bool east)                        // 막힘 묶음 켜기 — 길찾기 바닥 파내기는 다음 프레임들에
+        {
+            foreach (var b in blocks) b.SetActive(DevHud.BlockGroup(b) == 1 ? west : east);
+            yield return new WaitForSeconds(0.4f);
+        }
         var model = stalker.transform.Find("Body/Model");
         var scc = stalker.GetComponent<CharacterController>();
-        if (sabotageName == "blockcut")          // 크로스컷 1 한가운데 보이지 않는 기둥 — 길찾기 바닥은 그대로라 봇이 부딪힌다
+        var rubble = Slot("PRP_Rubble_FakeExit");
+        string[] plazaExits = { "link_nw", "link_ne", "link_e", "link_w", "south" };
+        void Plug(string slot)                                            // 사보타주용: 굴을 막는 보이지 않는 기둥 (길찾기 바닥도 파낸다)
+        {
+            var go = new GameObject("SabotagePlug_" + slot);
+            go.transform.position = Slot(slot).position + Vector3.up * 1.5f;
+            var col = go.AddComponent<CapsuleCollider>(); col.radius = 2.0f; col.height = 6f;
+            var ob = go.AddComponent<NavMeshObstacle>(); ob.shape = NavMeshObstacleShape.Capsule; ob.radius = 2.0f; ob.height = 6f; ob.carving = true;
+        }
+        if (sabotageName == "blockcut")          // 걷는 길(큰길 → ① 채탄장) 한가운데 보이지 않는 기둥 — 길찾기 바닥은 그대로라 봇이 부딪힌다
         {
             var wall = new GameObject("SabotageWall").AddComponent<CapsuleCollider>();
-            wall.transform.position = OnNav(Slot("SLOT_DeadLight_5").position) + Vector3.up * 1.5f;
+            wall.transform.position = Slot("SLOT_Mid_v_z1").position + Vector3.up * 1.5f;
             wall.radius = 1.7f; wall.height = 4f;
         }
         if (sabotageName == "blockleak") { blocks[0].GetComponent<Collider>().enabled = false; blocks[0].GetComponent<NavMeshObstacle>().enabled = false; }
         if (sabotageName == "nonav") NavMesh.RemoveAllNavMeshData();
         if (sabotageName == "tallcap") { scc.height = Tuning.STALKER_H; scc.center = Vector3.up * Tuning.STALKER_H * 0.5f; }
         if (sabotageName == "bigmonster") model.GetComponent<StalkerAnim>().stoop = false;   // 숙이기 끔 = 선 키 그대로 (천장 밑 머리 검사가 잡는지)
-        if (sabotageName == "nocol") Slot("COL_Booth_haulB").GetComponent<Collider>().enabled = false;
-        foreach (var b in blocks) b.SetActive(false);             // 검사는 맵 전체에서 (스위치는 아래서 하나씩)
-        yield return null;
+        if (sabotageName == "nocol" && Physics.Raycast(player.transform.position + Vector3.up, Vector3.down, out RaycastHit under, 3f, ~(1 << 2), QueryTriggerInteraction.Ignore))
+            under.collider.enabled = false;                                // 케이지 칸 충돌 끔
+        if (sabotageName == "smallmap") foreach (var n in plazaExits) Plug($"SLOT_In_{n}_0");                  // 케이지 광장에서 나가는 굴 다섯을 다 막음 = 좁은 맵
+        if (sabotageName == "nohub") foreach (var n in plazaExits.Take(3)) Plug($"SLOT_In_{n}_0");             // 광장에서 나가는 굴 셋을 막음 — 길 잃은 사람이 정거장으로 못 온다
+        if (sabotageName == "nosidings") foreach (var t in pieces.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Mid_sd_")).ToArray()) Plug(t.name);   // 곁길 8 을 다 막음
+        if (sabotageName == "nofakeexit") rubble.GetComponent<Collider>().enabled = false;                    // 가짜 출구 끝 무너짐이 없다
+        yield return Groups(false, false);                                // 검사는 맵 전체에서 (묶음은 아래서)
         Vector3 spawn = OnNav(player.transform.position);
-        var pockets = FindObjectsByType<OrePocket>(FindObjectsSortMode.None).Select(pk => pk.transform.position).ToList();
-
-        // ---- 1. 걷기: 케이지 → 광맥 12곳 → 케이지. W 키로 걷고 방향만 봇이 돌린다. 걸으며 0.5 m 마다 폭·천장을 잰다
-        float faceA = PathLen(spawn, Slot("SLOT_Pocket_3").position), faceB = PathLen(spawn, Slot("SLOT_Pocket_10").position), faceC = PathLen(spawn, Slot("SLOT_Pocket_12").position);
-        int reached = 0; float walked = 0f, minW = 99f, minH = 99f, t0 = Time.time; string worstAt = "", lowAt = "";
-        var trail = new List<string> { "x,y,z" };
-        var todo = new List<Vector3>(pockets);
-        Vector3 at = spawn;
-        var legs = new List<Vector3>();
-        while (todo.Count > 0)                                        // 가까운 것부터 (길찾기 길이)
+        Vector3 SlotAt(string n) => Slot(n).position;
+        var veins = Enumerable.Range(1, 30).Select(i => SlotAt("SLOT_Pocket_" + i)).ToList();
+        Vector3 hA = SlotAt("SLOT_Home_A"), hB = SlotAt("SLOT_Home_B");
+        Vector2 homeMin = new Vector2(Mathf.Min(hA.x, hB.x), Mathf.Min(hA.z, hB.z)), homeMax = new Vector2(Mathf.Max(hA.x, hB.x), Mathf.Max(hA.z, hB.z));
+        var crawlNames = pieces.GetComponentsInChildren<Transform>(true).Select(t => t.name).ToHashSet();
+        var crawls = Enumerable.Range(1, 99).TakeWhile(i => crawlNames.Contains($"SLOT_Crawl_{i}_A"))
+            .Select(i => (a: SlotAt($"SLOT_Crawl_{i}_A"), b: SlotAt($"SLOT_Crawl_{i}_B"))).ToList();
+        IEnumerable<(Vector3, Vector3)> OpenCrawls()                     // 사람이 지나가는 개구멍 (막힘 돌무더기가 안 막은 것) — 양 끝을 1 m 씩 늘려 바닥에 잇는다
         {
-            var next = todo.OrderBy(q => { float L = PathLen(at, q); return L < 0f ? 1e6f : L; }).First();
-            legs.Add(next); todo.Remove(next); at = next;
+            foreach (var (a, b) in crawls)
+            {
+                Vector3 d = Flat3(b - a).normalized;
+                if (!Physics.Linecast(a + Vector3.up * 0.6f, b + Vector3.up * 0.6f, ~(1 << 2), QueryTriggerInteraction.Ignore)) yield return (a - d, b + d);
+            }
         }
-        legs.Add(spawn);
+
+        // ---- 1. 넓이 · 도망 · 길 잃고 걷기 · 막힘 · 가짜 출구 · 구멍 (길찾기 바닥 = 괴물 반지름 0.6 m 를 뺀 바닥)
+        if (NavMesh.CalculateTriangulation().indices.Length == 0)       // 바닥이 없으면 아래 재기가 예외로 멈춘다(사보타주 nonav) — FAIL 을 적고 끝낸다
+        {
+            Check("booth_size", false, "no navmesh (floor the monster can walk) — nothing to measure");
+            InputSystem.RemoveDevice(kb);
+            yield break;
+        }
+        float t0 = Time.realtimeSinceStartup;
+        float mapA = BoothMeasure.ReachArea(spawn);
+        var laps = BoothMeasure.Loops(BoothMeasure.Raster(NavMesh.CalculateTriangulation()));
+        var wFull = BoothMeasure.Wander(BoothMeasure.Raster(NavMesh.CalculateTriangulation(), OpenCrawls()), homeMin, homeMax, 200, 1);
+        yield return Groups(true, true);
+        float boothA = BoothMeasure.ReachArea(spawn);
+        var lapsBooth = BoothMeasure.Loops(BoothMeasure.Raster(NavMesh.CalculateTriangulation()));
+        var wBooth = BoothMeasure.Wander(BoothMeasure.Raster(NavMesh.CalculateTriangulation(), OpenCrawls()), homeMin, homeMax, 200, 1);
+        int veinsBooth = veins.Count(q => PathLen(spawn, q) > 0f);
+        yield return Groups(false, false);
+        int shortLaps = laps.Count(l => l <= 60f);
+        Check("booth_size", mapA >= 1950f && boothA >= 1500f, $"floor the monster can walk (navmesh) reachable from the cage: whole map {mapA:F0} m² ({mapA / 436f:F1} × MAP1 436, ≥ 1950) · booth (both block groups on) {boothA:F0} m² ({boothA / 436f:F1} ×, ≥ 1500) · structure measured in {Time.realtimeSinceStartup - t0:F1} s");
+        Check("booth_escape", shortLaps >= 30, $"rock pillars with floor all round and one lap ≤ 60 m: {shortLaps} (≥ 30, plan 35) · booth {lapsBooth.Count(l => l <= 60f)} · laps m: {string.Join(" ", laps.OrderBy(l => l).Select(l => l.ToString("F0")))}");
+        Check("booth_return", wFull.within300 >= 40f && wBooth.within300 >= 75f,
+            $"lost walker (never turns back except at dead ends, random at every fork, crawls too), {wFull.runs} starts: home to the cage plaza within 300 m {wFull.within300:F0} % (≥ 40, plan 47), median {wFull.median:F0} m · booth {wBooth.within300:F0} % (≥ 75, plan 85), median {wBooth.median:F0} m · graph {wFull.nodes} forks/ends, {wFull.edges} tunnels, {wFull.deadEnds} dead ends, {wFull.homeNodes} plaza points");
+
+        var notes = new List<string>(); bool blocksOk = true;
+        foreach (var blk in blocks)
+        {
+            Vector3 c = blk.transform.TransformPoint(blk.GetComponent<MeshFilter>().sharedMesh.bounds.center);   // 꺼진 물체는 Renderer.bounds 가 비어 있다
+            if (blk.GetComponent<MeshFilter>().sharedMesh.bounds.size.y < 2.2f)                 // 개구멍 속 돌무더기(높이 1.3 m, 괴물 바닥 밖): 사람 몸이 막힌다
+            {
+                var (ca, cb) = crawls.OrderBy(k => Flat((k.a + k.b) * 0.5f - c)).First();
+                Vector3 la = ca + Vector3.up * 0.6f, lb = cb + Vector3.up * 0.6f;
+                bool clearOff = !Physics.Linecast(la, lb, ~(1 << 2), QueryTriggerInteraction.Ignore);
+                blk.SetActive(true); yield return null;
+                bool shut = Physics.Linecast(la, lb, out RaycastHit ch, ~(1 << 2), QueryTriggerInteraction.Ignore) && ch.collider.gameObject == blk;
+                blk.SetActive(false);
+                blocksOk &= clearOff && shut;
+                notes.Add($"{blk.name} crawl: open {clearOff} → shut {shut}");
+                continue;
+            }
+            c = OnNav(c);
+            Vector3 a = c, b = c; float best = 99f;
+            for (int k = 0; k < 8; k++)                              // 막힘 양쪽의 바닥 두 점: 꺼진 채로 곧게 이어지는 방향
+            {
+                Vector3 d = Quaternion.Euler(0f, k * 22.5f, 0f) * Vector3.forward;
+                if (!NavMesh.SamplePosition(c + d * 2.8f, out NavMeshHit ha, 1.0f, NavMesh.AllAreas) || !NavMesh.SamplePosition(c - d * 2.8f, out NavMeshHit hb, 1.0f, NavMesh.AllAreas)
+                    || Flat(ha.position - (c + d * 2.8f)) > 0.3f || Flat(hb.position - (c - d * 2.8f)) > 0.3f) continue;          // 비탈 위(v_z1)는 양쪽 바닥 높이가 달라 0.3 m 공으로는 못 찾았다 — 위에서 본 거리로
+                float L = PathLen(ha.position, hb.position);
+                if (L > 0f && L / 5.6f < best) { best = L / 5.6f; a = ha.position; b = hb.position; }
+            }
+            float off = PathLen(a, b);
+            blk.SetActive(true);
+            yield return new WaitForSeconds(0.3f);
+            float on = PathLen(a, b);
+            bool through = Physics.Linecast(a + Vector3.up, b + Vector3.up, out RaycastHit bh, ~(1 << 2), QueryTriggerInteraction.Ignore) && bh.collider.gameObject == blk;
+            blk.SetActive(false);
+            bool ok = off > 0f && off < 7f && (on < 0f || on > off + 5f) && through;
+            blocksOk &= ok;
+            notes.Add($"{blk.name}: across {off:F1} m → {(on < 0f ? "no path" : on.ToString("F0") + " m around")} · body blocks {through}");
+        }
+        yield return new WaitForSeconds(0.3f);
+        Check("booth_blocks", blocksOk && veinsBooth >= 5 && veinsBooth < veins.Count, string.Join(" · ", notes) + $" · both groups on: {veinsBooth}/{veins.Count} veins reachable (≥ 5, fewer than all)");
+
+        Vector3 rc = rubble.TransformPoint(rubble.GetComponent<MeshFilter>().sharedMesh.bounds.center), fm = SlotAt("SLOT_Mid_fake_exit") + Vector3.up * 1.2f;
+        bool fHit = Physics.Raycast(fm, rc - fm, out RaycastHit fh, 40f, ~(1 << 2), QueryTriggerInteraction.Ignore);
+        float fakeLen = PathLen(spawn, SlotAt("SLOT_Mid_fake_exit"));
+        Check("booth_fake_exit", fHit && fh.collider.transform == rubble && fakeLen > 0f,
+            $"from halfway up the fake exit incline ({fakeLen:F0} m walk from the cage) the way ahead ends in {(fHit ? fh.collider.name : "nothing")} at {(fHit ? fh.distance : 0f):F1} m (want PRP_Rubble_FakeExit)");
+
+        var tri = NavMesh.CalculateTriangulation(); var rnd = new System.Random(7); int leaks = 0, pts0 = 0; string leakAt = "";
+        var dirs = new List<Vector3>();
+        for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) if (x != 0 || y != 0 || z != 0) dirs.Add(new Vector3(x, y, z).normalized);
+        for (int n = 0; n < 600 && tri.indices.Length > 0; n++)
+        {
+            int k = rnd.Next(tri.indices.Length / 3) * 3;
+            Vector3 o = (tri.vertices[tri.indices[k]] + tri.vertices[tri.indices[k + 1]] + tri.vertices[tri.indices[k + 2]]) / 3f + Vector3.up * 1.0f;
+            pts0++;
+            foreach (var d in dirs)
+                if (!Physics.Raycast(o, d, 200f, ~(1 << 2), QueryTriggerInteraction.Ignore)) { leaks++; leakAt = $"({o.x:F1}, {o.y:F1}, {o.z:F1}) dir {d}"; break; }
+        }
+        Check("booth_sealed", pts0 >= 600 && leaks == 0, $"{pts0} floor points × 26 rays (200 m): {leaks} escaped the map {leakAt}");
+
+        // ---- 2. 걷기: 케이지 → 막장 A(① 채탄장) · C(② 기둥 사이) · B(③ 노보리) → 케이지. W 키로 걷고 방향만 봇이 돌린다. 걸으며 0.5 m 마다 폭·천장을 잰다. 광맥 30곳은 길이 있는지만
+        string Far(int from, int to) => Enumerable.Range(from, to - from + 1).Select(i => "SLOT_Pocket_" + i).OrderByDescending(s => PathLen(spawn, SlotAt(s))).First();
+        string faceA = Far(1, 8), faceB = Far(9, 16), faceC = Far(17, 28);
+        float lenA = PathLen(spawn, SlotAt(faceA)), lenB = PathLen(spawn, SlotAt(faceB)), lenC = PathLen(spawn, SlotAt(faceC));
+        int veinPaths = veins.Count(q => PathLen(spawn, q) > 0f);
+        int reached = 0; float walked = 0f, minW = 99f, minH = 99f, tw = Time.time; string worstAt = "", lowAt = "";
+        var trail = new List<string> { "x,y,z" };
+        var legs = new List<Vector3> { SlotAt(faceA), SlotAt(faceC), SlotAt(faceB), spawn };
         foreach (var goal0 in legs)
         {
             Vector3 goal = OnNav(goal0);
@@ -421,53 +529,46 @@ public class M1Check : MonoBehaviour
             for (int i = 0; i < navTri.indices.Length; i += 3) obj.Add($"f {navTri.indices[i] + 1} {navTri.indices[i + 1] + 1} {navTri.indices[i + 2] + 1}");
             File.WriteAllLines(Path.Combine(outDir, "26_booth_navmesh.obj"), obj);
         }
-        bool lensOk = Mathf.Abs(faceA - 49f) <= 49f * 0.15f && Mathf.Abs(faceB - 73f) <= 73f * 0.15f && Mathf.Abs(faceC - 54f) <= 54f * 0.15f;
-        Check("booth_walk_route", reached == legs.Count && legs.Count == 13 && lensOk,
-            $"walked to {reached}/{legs.Count} stops (12 veins + back to the cage) in {Time.time - t0:F0} s, {walked:F0} m · path cage → face A {faceA:F0} m (49) · C {faceC:F0} m (54) · B {faceB:F0} m (73), ±15 %");
-        Check("booth_clearance", minW >= 1.9f && minH >= 2.5f, $"along the walked route: narrowest {minW:F2} m at {worstAt} (≥ 1.9) · lowest ceiling {minH:F2} m at {lowAt} (≥ 2.5)");   // 벽 옆은 아치라 가운데(2.85~)보다 낮다: 천장 +0.5 m 뒤 2.67 · 그 전 맵 2.30 → 사이 값
+        bool lensOk = Mathf.Abs(lenA - FaceA_M) <= FaceA_M * 0.15f && Mathf.Abs(lenB - FaceB_M) <= FaceB_M * 0.15f && Mathf.Abs(lenC - FaceC_M) <= FaceC_M * 0.15f;
+        Check("booth_walk_route", reached == legs.Count && lensOk && veinPaths == veins.Count,
+            $"walked to {reached}/{legs.Count} stops (faces A · C · B + back to the cage) in {Time.time - tw:F0} s, {walked:F0} m · path cage → face A {faceA} {lenA:F0} m ({FaceA_M:F0}) · C {faceC} {lenC:F0} m ({FaceC_M:F0}) · B {faceB} {lenB:F0} m ({FaceB_M:F0}), ±15 % · veins with a path {veinPaths}/{veins.Count}");
+        Check("booth_clearance", minW >= 1.9f && minH >= 2.5f, $"along the walked route: narrowest {minW:F2} m at {worstAt} (≥ 1.9) · lowest ceiling {minH:F2} m at {lowAt} (≥ 2.5)");   // 벽 옆은 아치라 가운데보다 낮다
 
-        // ---- 1b. 입구마다 곧장 걸어 들어가기 — 사람처럼 갈림길에서 굴 쪽을 보고 W 만 누른다 (길찾기 봇은 둘러 가서 못 잡았다: 09-24 사용자 "크로스컷 1 로 못 들어간다")
+        // ---- 2b. 비탈 입구마다 곧장 걸어 들어가기 — 사람처럼 갈림에서 굴 쪽을 보고 W 만 누른다 (MAP1 09-24 사용자 "크로스컷 1 로 못 들어간다": 비탈 시작의 턱)
         {
-            static Vector3 B(float x, float y, float z = 0f) => new Vector3(-x, z, -y);         // Blender 평면도 (x, y, 높이) → Unity (glTF 가져오기가 180° 돈다)
-            var entries = new (string name, Vector2 from, Vector2 toward)[] {
-                ("crosscut 1", new Vector2(15.37f, -0.81f), new Vector2(23f, 9f)), ("crosscut 2", new Vector2(49.4f, -0.87f), new Vector2(57f, 10f)),
-                ("crosscut 3", new Vector2(28.7f, 1.54f), new Vector2(35f, -6f)), ("siding west", new Vector2(7.6f, 1.5f), new Vector2(12f, -3.2f)),
-                ("siding east", new Vector2(26.4f, 1.5f), new Vector2(22f, -3.2f)), ("noburi", new Vector2(33.7f, -4.5f), new Vector2(41f, -7f)),
-                ("stub 1", new Vector2(17.9f, 9.2f), new Vector2(18.3f, 14.4f)), ("pump room", new Vector2(60f, 1.3f), new Vector2(60f, -5f)),
-                ("pillar room", new Vector2(29.5f, 9.6f), new Vector2(40f, 9.5f)), ("wind door", new Vector2(33.9f, -2.8f), new Vector2(28.4f, -7.6f)) };
-            var eNotes = new List<string>(); bool eOk = true;
-            foreach (var (nm, from, toward) in entries)
+            var mouths = pieces.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Mouth_")).ToArray();
+            var eNotes = new List<string>(); bool eOk = true; int tried = 0;
+            foreach (var m in mouths)
             {
-                Vector3 start = OnNav(B(from.x, from.y, 0.5f)), dir = Flat3(B(toward.x, toward.y) - B(from.x, from.y)).normalized;
+                Vector3 inP = SlotAt("SLOT_In_" + m.name.Substring("SLOT_Mouth_".Length));
+                if (Mathf.Abs(inP.y - m.position.y) < 0.15f) continue;                        // 입구 2.5 m 안이 평평한 굴은 뺀다
+                tried++;
+                Vector3 start = OnNav(m.position), dir = Flat3(inP - m.position).normalized;
                 Teleport(cc, start + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
-                yield return new WaitForSeconds(0.2f);
+                yield return new WaitForSeconds(0.15f);
                 InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
                 float t = 0f;
-                while (t < 2.5f) { player.transform.rotation = Quaternion.LookRotation(dir); yield return null; t += Time.deltaTime; }
+                while (t < 1.6f) { player.transform.rotation = Quaternion.LookRotation(dir); yield return null; t += Time.deltaTime; }
                 InputSystem.QueueStateEvent(kb, new KeyboardState());
                 float prog = Vector3.Dot(Flat3(player.transform.position - start), dir);
+                if (prog >= 3f) continue;
                 string blocker = "";
-                if (prog < 3f)
-                {
-                    foreach (float hgt in new[] { 0.3f, 1.0f, 1.7f })
-                        if (Stalker.RayIgnore(player.transform.position + Vector3.up * hgt, dir, 1.0f, ~(1 << 2), cc, out RaycastHit bh))
-                            blocker += $" at {hgt:F1} m: {bh.collider.name} {bh.distance:F2} m";
-                    blocker += $" · feet y {player.transform.position.y:F2}";
-                }
-                eOk &= prog >= 3f;
-                eNotes.Add($"{nm} {prog:F1} m{(prog < 3f ? " BLOCKED" + blocker : "")}");
-                yield return null;
+                foreach (float hgt in new[] { 0.3f, 1.0f, 1.7f })
+                    if (Stalker.RayIgnore(player.transform.position + Vector3.up * hgt, dir, 1.0f, ~(1 << 2), cc, out RaycastHit bh))
+                        blocker += $" at {hgt:F1} m: {bh.collider.name} {bh.distance:F2} m";
+                eOk = false;
+                eNotes.Add($"{m.name.Substring(11)} {prog:F1} m BLOCKED{blocker} · feet y {player.transform.position.y:F2}");
             }
-            Check("booth_enter_tunnels", eOk, "walking straight in with W for 2.5 s (≥ 3 m): " + string.Join(" · ", eNotes));
+            Check("booth_enter_tunnels", eOk && tried >= 10, $"walking straight into {tried} sloped tunnel mouths with W for 1.6 s (≥ 3 m each)" + (eNotes.Count > 0 ? ": " + string.Join(" · ", eNotes) : ": all in"));
         }
 
-        // ---- 1c. 노보리(25°) 발소리: 오를 때와 내릴 때 같은 박자 — 내릴 때 몸이 떴다 붙었다 하면 발소리가 프레임마다 났다 (사용자 09-24 영상)
+        // ---- 2c. 노보리(25°) 발소리: 오를 때와 내릴 때 같은 박자 — 내릴 때 몸이 떴다 붙었다 하면 발소리가 프레임마다 났다 (사용자 09-24 영상)
+        Vector3 nbLow = SlotAt("SLOT_Mouth_E_z3_col1_0"), nbHigh = SlotAt("SLOT_Mouth_E_z3_col1_1");
         {
-            static Vector3 B(float x, float y, float z = 0f) => new Vector3(-x, z, -y);
             var sNotes = new List<string>(); bool sOk = true;
-            foreach (var (nm, from, toward, fz) in new[] { ("up", new Vector2(36.0f, -6.2f), new Vector2(48f, -8.5f), 0.5f), ("down", new Vector2(47.0f, -8.3f), new Vector2(35f, -6f), 6.3f) })
+            foreach (var (nm, from, toward) in new[] { ("up", nbLow, nbHigh), ("down", nbHigh, nbLow) })
             {
-                Vector3 start = OnNav(B(from.x, from.y, fz)), dir = Flat3(B(toward.x, toward.y) - B(from.x, from.y)).normalized;
+                Vector3 start = OnNav(from), dir = Flat3(toward - from).normalized;
                 Teleport(cc, start + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
                 yield return new WaitForSeconds(0.3f);
                 int s0 = player.steps; float y0 = player.transform.position.y, t = 0f;
@@ -483,73 +584,83 @@ public class M1Check : MonoBehaviour
             Check("booth_slope_steps", sOk, $"walking the noburi slope (want {2.5f / Tuning.STEP_INTERVAL - 1f:F0}~{2.5f / Tuning.STEP_INTERVAL + 2f:F0} steps each way): " + string.Join(" · ", sNotes));
         }
 
-        // ---- 2. 막힘 스위치: 켜면 그 자리를 못 지나간다(길찾기가 돌아가거나 없음), 넷 다 켜도 열린 쪽 광맥 5곳 이상
-        var notes = new List<string>(); bool blocksOk = true;
-        for (int i = 0; i < blocks.Length; i++)
+        // ---- 3. 개구멍: 사람은 숙여서 끝까지(서서는 못 감) · 괴물은 길찾기로 구멍 길이의 2배 넘게 돌아간다
         {
-            Vector3 c = OnNav(blocks[i].transform.TransformPoint(blocks[i].GetComponent<MeshFilter>().sharedMesh.bounds.center));   // 꺼진 물체는 Renderer.bounds 가 비어 있다
-            Vector3 a = c, b = c; float best = 99f;
-            for (int k = 0; k < 8; k++)                              // 막힘 양쪽의 바닥 두 점: 꺼진 채로 곧게 이어지는 방향
+            var cNotes = new List<string>(); bool cOk = true; int ci = 0;
+            foreach (var (a, b) in crawls)
             {
-                Vector3 d = Quaternion.Euler(0f, k * 22.5f, 0f) * Vector3.forward;
-                Vector3 pa = c + d * 2.8f, pb = c - d * 2.8f;
-                if (!NavMesh.SamplePosition(pa, out NavMeshHit ha, 0.3f, NavMesh.AllAreas) || !NavMesh.SamplePosition(pb, out NavMeshHit hb, 0.3f, NavMesh.AllAreas)) continue;
-                float L = PathLen(ha.position, hb.position);
-                if (L > 0f && L / 5.6f < best) { best = L / 5.6f; a = ha.position; b = hb.position; }
+                ci++;
+                Vector3 dir = Flat3(b - a).normalized; float L = Flat(b - a);
+                bool[] got = new bool[2]; string stuckAt = "";
+                for (int crouch = 0; crouch < 2; crouch++)
+                {
+                    Teleport(cc, OnNav(a - dir * 1.0f, 1.5f) + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
+                    if (crouch == 1) { InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftCtrl)); yield return new WaitForSeconds(0.3f); }   // 숙인 채로 시작
+                    InputSystem.QueueStateEvent(kb, crouch == 1 ? new KeyboardState(Key.W, Key.LeftCtrl) : new KeyboardState(Key.W));
+                    float t = 0f, limit = crouch == 1 ? (L + 2f) / Tuning.CROUCH_SPEED * 1.5f + 1f : 2.0f;
+                    while (t < limit && Flat(b - player.transform.position) > 0.8f) { player.transform.rotation = Quaternion.LookRotation(Flat3(b - player.transform.position).normalized); yield return null; t += Time.deltaTime; }
+                    got[crouch] = Flat(b - player.transform.position) <= 0.8f;
+                    if (crouch == 1 && !got[1]) stuckAt = $" ({Flat(b - player.transform.position):F1} m short at ({player.transform.position.x:F1}, {player.transform.position.y:F2}, {player.transform.position.z:F1}), {t:F1} s, {1f / Mathf.Max(Time.smoothDeltaTime, 1e-4f):F0} fps)";
+                    InputSystem.QueueStateEvent(kb, new KeyboardState());
+                    yield return new WaitForSeconds(0.2f);                                      // 일어선다
+                }
+                float mon = PathLen(a, b);
+                bool ok = !got[0] && got[1] && (mon < 0f || mon > 2f * L);
+                cOk &= ok;
+                cNotes.Add($"crawl {ci} ({L:F1} m): standing {(got[0] ? "GOT THROUGH" : "stuck")} · crouched {(got[1] ? "through" : "STUCK" + stuckAt)} · monster {(mon < 0f ? "no path" : mon.ToString("F0") + " m around")}");
             }
-            float off = PathLen(a, b);
-            blocks[i].SetActive(true);
-            yield return new WaitForSeconds(0.3f);                   // 길찾기 바닥 파내기는 다음 프레임들에
-            float on = PathLen(a, b);
-            bool through = Physics.Linecast(a + Vector3.up, b + Vector3.up, out RaycastHit bh, ~(1 << 2), QueryTriggerInteraction.Ignore) && bh.collider.gameObject == blocks[i];
-            bool ok = off > 0f && off < 7f && (on < 0f || on > off + 5f) && through;
-            blocksOk &= ok;
-            notes.Add($"BLK_{i + 1}: across {off:F1} m off → {(on < 0f ? "no path" : on.ToString("F0") + " m around")} on · body blocks the line {through}");
+            Check("booth_crawl", cOk && crawls.Count == 8, string.Join(" · ", cNotes));
         }
-        int open = pockets.Count(q => PathLen(spawn, q) > 0f);
-        foreach (var b in blocks) b.SetActive(false);
-        yield return new WaitForSeconds(0.3f);
-        Check("booth_blocks", blocksOk && open >= 5, string.Join(" · ", notes) + $" · all four on: {open} veins still reachable (≥ 5)");
 
-        // ---- 3. 고리: 크로스컷 2 를 막아도 막장 B 에 간다(탄층 따라 돈다) · 기둥 하나를 16 m 안에 한 바퀴
-        blocks[0].SetActive(true); yield return new WaitForSeconds(0.3f);
-        float bViaSeam = PathLen(spawn, Slot("SLOT_Pocket_10").position);
-        blocks[0].SetActive(false); blocks[2].SetActive(true); yield return new WaitForSeconds(0.3f);
-        float bViaCut2 = PathLen(spawn, Slot("SLOT_Pocket_10").position);
-        blocks[2].SetActive(false); yield return new WaitForSeconds(0.3f);
-        var pk5 = Slot("SLOT_Pocket_5").position;
-        Vector3 pillar = pk5 + Flat3(pk5 - OnNav(pk5)).normalized * 1.2f; pillar.y = OnNav(pk5).y;
-        var ring = new[] { Vector3.forward, Vector3.right, Vector3.back, Vector3.left }.Select(d => OnNav(pillar + d * 2.45f, 0.6f)).ToArray();
-        float around = 0f; bool ringOk = true;
-        for (int i = 0; i < 4; i++) { float L = PathLen(ring[i], ring[(i + 1) % 4]); ringOk &= L > 0f && L < 6f; around += Mathf.Max(L, 0f); }
-        Check("booth_loop", bViaSeam > 0f && bViaCut2 > 0f && ringOk && around < 16f,
-            $"face B with crosscut 2 blocked {bViaSeam:F0} m (via the seam) · with the pillar-room east blocked {bViaCut2:F0} m (via crosscut 2) · once around a pillar {around:F1} m (< 16)");
-
-        // ---- 4. 구멍 없음: 길찾기 바닥 위 400 점, 26 방향 광선이 100 m 안에 다 맞는다
-        var tri = NavMesh.CalculateTriangulation(); var rnd = new System.Random(7); int leaks = 0, pts0 = 0; string leakAt = "";
-        var dirs = new List<Vector3>();
-        for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) if (x != 0 || y != 0 || z != 0) dirs.Add(new Vector3(x, y, z).normalized);
-        for (int n = 0; n < 400 && tri.indices.Length > 0; n++)
+        // ---- 3b. 대피소: 사람이 서서 들어가 안쪽 자리(SLOT_Niche)에 선다 · 괴물 바닥·몸은 안으로 안 들어온다. 전부 캡슐로 재고, 가장 좁은 여섯은 봇이 걸어 들어간다
         {
-            int k = rnd.Next(tri.indices.Length / 3) * 3;
-            Vector3 o = (tri.vertices[tri.indices[k]] + tri.vertices[tri.indices[k + 1]] + tri.vertices[tri.indices[k + 2]]) / 3f + Vector3.up * 1.0f;
-            pts0++;
-            foreach (var d in dirs)
-                if (!Physics.Raycast(o, d, 100f, ~(1 << 2), QueryTriggerInteraction.Ignore)) { leaks++; leakAt = $"({o.x:F1}, {o.y:F1}, {o.z:F1}) dir {d}"; break; }
+            var niches = pieces.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Niche_")).ToArray();
+            int capsuleOk = 0, monsterOut = 0; var nNotes = new List<string>(); var widths = new List<(Transform s, float w, Vector3 front, bool fits)>();
+            float pr = Tuning.BODY_RADIUS - 0.05f;                                              // 복셀 벽의 0.05 m 요철 — 실제 발걸음은 아래 걷기가 잰다
+            foreach (var s in niches)
+            {
+                Vector3 p = s.position, front = OnNav(p);                                       // 가장 가까운 괴물 바닥 = 대피소 앞 굴
+                bool navIn = Flat(front - p) < 1.0f;
+                Vector3 d = p - front;
+                bool fits = !Physics.CheckCapsule(p + Vector3.up * (0.2f + pr), p + Vector3.up * (0.2f + Tuning.BODY_HEIGHT - pr), pr, ~(1 << 2), QueryTriggerInteraction.Ignore)
+                    && !Physics.CapsuleCast(front + Vector3.up * (0.2f + pr), front + Vector3.up * (0.2f + Tuning.BODY_HEIGHT - pr), pr, d.normalized, d.magnitude, ~(1 << 2), QueryTriggerInteraction.Ignore);
+                bool monsterFits = !Physics.CheckCapsule(p + Vector3.up * (0.2f + Tuning.STALKER_R), p + Vector3.up * (0.2f + Tuning.BOOTH_STALKER_H - Tuning.STALKER_R), Tuning.STALKER_R, ~(1 << 2), QueryTriggerInteraction.Ignore);
+                if (fits) capsuleOk++;
+                if (!navIn && !monsterFits) monsterOut++; else nNotes.Add($"{s.name} MONSTER gets in (navmesh {Flat(front - p):F1} m away, body fits {monsterFits})");
+                Vector3 side = Vector3.Cross(Vector3.up, Flat3(d).normalized), o = p + Vector3.up * 1.0f;
+                float w = (Physics.Raycast(o, side, out RaycastHit wl, 3f, ~(1 << 2), QueryTriggerInteraction.Ignore) ? wl.distance : 3f) + (Physics.Raycast(o, -side, out RaycastHit wr, 3f, ~(1 << 2), QueryTriggerInteraction.Ignore) ? wr.distance : 3f);
+                widths.Add((s, w, front, fits));
+            }
+            // 봇이 걸어 들어가는 것: 가장 좁은 여섯 + 캡슐이 안 맞은 것 (캡슐은 어림 — 사람이 걷는 길이 정답)
+            int walkedIn = 0; var narrow = widths.OrderBy(x => x.w).Take(6).Concat(widths.Where(x => !x.fits)).Distinct().ToList();
+            foreach (var (s, w, front, fits) in narrow)
+            {
+                Vector3 dir = Flat3(s.position - front).normalized;
+                Teleport(cc, front + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
+                yield return new WaitForSeconds(0.15f);
+                InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+                float t = 0f;
+                while (t < 2.0f && Flat(s.position - player.transform.position) > 0.5f) { player.transform.rotation = Quaternion.LookRotation(Flat3(s.position - player.transform.position).normalized); yield return null; t += Time.deltaTime; }
+                InputSystem.QueueStateEvent(kb, new KeyboardState());
+                bool inOk = Flat(s.position - player.transform.position) <= 0.5f && player.stance == "walk";
+                if (inOk) walkedIn++; else nNotes.Add($"{s.name} ({w:F2} m wide{(fits ? "" : ", capsule did not fit")}) bot stopped {Flat(s.position - player.transform.position):F1} m short");
+                yield return null;
+            }
+            Check("booth_niche", monsterOut == niches.Length && walkedIn == narrow.Count && niches.Length >= 40,
+                $"{niches.Length} refuges: monster floor and body stay out {monsterOut} · person capsule fits standing {capsuleOk} · walked in standing by the bot {walkedIn}/{narrow.Count} (6 narrowest {string.Join(" ", widths.OrderBy(x => x.w).Take(6).Select(x => x.w.ToString("F2")))} m + capsule misses {widths.Count(x => !x.fits)})" + (nNotes.Count > 0 ? " · " + string.Join(" · ", nNotes.Take(8)) : ""));
         }
-        Check("booth_sealed", pts0 >= 400 && leaks == 0, $"{pts0} floor points × 26 rays: {leaks} escaped the map {leakAt}");
 
-        // ---- 5. 괴물: 길찾기로 막장 셋까지 걸어서 닿는다. 걷는 동안(조사 걸음·첫 자리 더듬기) 머리 꼭대기와 그 자리 천장을 잰다
+        // ---- 4. 괴물: 길찾기로 막장 셋까지 걸어서 닿는다. 걷는 동안(조사 걸음·첫 자리 더듬기) 머리 꼭대기와 그 자리 천장을 잰다
         Teleport(cc, spawn + Vector3.up * 0.1f, 0f);
         lamp.lampOn = false;
-        Vector3 home = OnNav(Slot("SPAWN_Stalker").position);
+        Vector3 home = OnNav(SlotAt("SPAWN_Stalker"));
         var head = stalker.GetComponentsInChildren<Transform>().First(b => b.name == "mixamorig:Head");
         float minGap = 99f, tallest = 0f, maxDrop = 0f, maxPitch = 0f; int overRock = 0; string gapAt = "", tallAt = "", rockAt = ""; var arrive = new List<string>(); bool allReach = true;
         stalker.enabled = true;
-        foreach (var face in new[] { "SLOT_Pocket_3", "SLOT_Pocket_12", "SLOT_Pocket_10" })
+        foreach (var face in new[] { faceA, faceC, faceB })
         {
-            Vector3 goal = OnNav(Slot(face).position);
-            stalker.Teleport(home + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(Slot("LOOK_Stalker").position - home)).eulerAngles.y);   // 사람이 볼 시작 자세 그대로
+            Vector3 goal = OnNav(SlotAt(face));
+            stalker.Teleport(home + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(SlotAt("LOOK_Stalker") - home)).eulerAngles.y);   // 사람이 볼 시작 자세 그대로
             yield return null;
             bool pathOk = PathLen(home, goal) > 0f;
             NoiseBus.Make(goal, 999f, "booth_test", null);
@@ -564,13 +675,13 @@ public class M1Check : MonoBehaviour
                 var sa = stalker.GetComponentInChildren<StalkerAnim>();
                 if (top - feet > tallest) { tallest = top - feet; tallAt = $"{stalker.state}/{sa?.Current}"; }
                 if (sa != null) { maxDrop = Mathf.Max(maxDrop, sa.StoopDrop); maxPitch = Mathf.Max(maxPitch, sa.StoopPitch); }
-                Vector3 hx = new Vector3(head.position.x, head.position.y, head.position.z);          // 머리 높이에서 — 발 높이에서 쏘면 오르막 앞은 바닥 속에서 출발한다 (09-24 헛 FAIL)
-                if (!Stalker.RayIgnore(hx, Vector3.down, head.position.y - feet + 1.0f, ~(1 << 2), scc, out RaycastHit fl)) { if (overRock++ == 0) rockAt = $"{stalker.state}/{stalker.GetComponentInChildren<StalkerAnim>()?.Current} head ({head.position.x:F1}, {head.position.y:F1}, {head.position.z:F1}) feet y {feet:F1}"; continue; }   // 머리가 바닥 위가 아니다(막다른 벽 쪽으로 숙여 벽 속) — 천장 재기에서 뺀다, 수만 센다
+                Vector3 hx = head.position;                                                  // 머리 높이에서 — 발 높이에서 쏘면 오르막 앞은 바닥 속에서 출발한다 (09-24 헛 FAIL)
+                if (!Stalker.RayIgnore(hx, Vector3.down, head.position.y - feet + 1.0f, ~(1 << 2), scc, out RaycastHit fl)) { if (overRock++ == 0) rockAt = $"{stalker.state}/{sa?.Current} head ({head.position.x:F1}, {head.position.y:F1}, {head.position.z:F1}) feet y {feet:F1}"; continue; }   // 머리가 바닥 위가 아니다 — 천장 재기에서 뺀다, 수만 센다
                 hx.y = fl.point.y + 0.3f;
                 if (Stalker.RayIgnore(hx, Vector3.up, 6f, ~(1 << 2), scc, out RaycastHit hc))
                 {
                     float g = hc.point.y - top;
-                    if (g < minGap) { minGap = g; gapAt = $"{stalker.state}/{stalker.GetComponentInChildren<StalkerAnim>()?.Current} at ({head.position.x:F1}, {feet:F1}, {head.position.z:F1}) head top {top - feet:F2} m, ceiling {hc.point.y - feet:F2} m ({hc.collider.name})"; }
+                    if (g < minGap) { minGap = g; gapAt = $"{stalker.state}/{sa?.Current} at ({head.position.x:F1}, {feet:F1}, {head.position.z:F1}) head top {top - feet:F2} m, ceiling {hc.point.y - feet:F2} m ({hc.collider.name})"; }
                 }
             }
             float miss = Flat(goal - stalker.transform.position);
@@ -579,15 +690,38 @@ public class M1Check : MonoBehaviour
             allReach &= ok;
             arrive.Add($"{face.Replace("SLOT_Pocket_", "vein ")}: {(ok ? "arrived" : "FAILED")} {miss:F1} m off in {t:F1} s (path {(pathOk ? "yes" : "none")})");
         }
+        // 비탈 내려가기: 노보리 꼭대기에서 밑의 소리로 (조사 5 m/s — 25° 면 1초에 2.3 m 떨어진다, 바닥 붙이기는 −1 m/s). 발밑 틈을 프레임마다
+        float maxAir = 0f; int airFrames = 0, slopeFrames = 0;
+        if (sabotageName == "monsterfloat") stalker.snapDown = false;
+        {
+            Vector3 top = OnNav(nbHigh), low = OnNav(nbLow);
+            stalker.Teleport(top + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(low - top)).eulerAngles.y);
+            yield return new WaitForSeconds(0.3f);
+            NoiseBus.Make(low, 999f, "booth_test", null);
+            NoiseBus.Make(low, 999f, "booth_test", null);
+            float t = 0f;
+            while (t < 8f && Flat(low - stalker.transform.position) > 1.5f)
+            {
+                yield return null;
+                t += Time.deltaTime;
+                if (stalker.transform.position.y > low.y + 0.3f && stalker.transform.position.y < top.y - 0.3f && Stalker.RayIgnore(stalker.transform.position + Vector3.up * 0.5f, Vector3.down, 3f, ~(1 << 2), scc, out RaycastHit gh))
+                {
+                    float air = gh.distance - 0.5f; slopeFrames++;                            // 캡슐 밑 공은 비탈에 가운데가 아닌 곳으로 닿는다 — 붙어 있어도 0.1 m 쯤 (그래서 판정은 땅에 붙었나로)
+                    maxAir = Mathf.Max(maxAir, air);
+                    if (!scc.isGrounded) airFrames++;
+                }
+            }
+        }
         stalker.enabled = false;
-        int reachAll = pockets.Concat(stalker.cracks).Count(q => PathLen(home, q) > 0f);
-        Check("booth_stalker_reaches", allReach && reachAll == pockets.Count + stalker.cracks.Length, string.Join(" · ", arrive) + $" · paths from its lair to {reachAll}/{pockets.Count + stalker.cracks.Length} veins and big-gap spots");
+        int reachAll = veins.Concat(stalker.cracks).Count(q => PathLen(home, q) > 0f);
+        Check("booth_stalker_reaches", allReach && reachAll == veins.Count + stalker.cracks.Length, string.Join(" · ", arrive) + $" · paths from its lair to {reachAll}/{veins.Count + stalker.cracks.Length} veins and big-gap spots");
         Check("booth_stalker_fits", minGap >= 0.1f && overRock == 0, $"closest head top to the ceiling {minGap:F2} m (≥ 0.10): {gapAt} · tallest head top above its feet {tallest:F2} m ({tallAt}) · stoop up to hips −{maxDrop:F2} m, back {maxPitch:F0}° · frames with the head past a wall (not over floor) {overRock} {rockAt}");
+        Check("booth_stalker_slope", slopeFrames >= 20 && airFrames <= slopeFrames / 20, $"walking down the noburi (25°) at investigate speed: off the ground in {airFrames}/{slopeFrames} frames (≤ 5 %), feet up to {maxAir:F2} m above the floor below the middle"); 
 
-        // ---- 6. 빛 (램프 끔, 눈이 어둠에 다 익은 뒤): 켜진 전등 옆 벽이 전등을 끄면 확 어두워진다 · 꺼진 전등 옆 벽은 켜진 전등 옆보다 어둡다
+        // ---- 5. 빛 (램프 끔, 눈이 어둠에 다 익은 뒤): 켜진 전등 옆 벽이 전등을 끄면 확 어두워진다 · 꺼진 전등 옆 벽은 켜진 전등 옆보다 어둡다
         var lit = FindObjectsByType<Light>(FindObjectsSortMode.None).Where(l => l.type == LightType.Point && l.name == "Lamp").OrderBy(l => Flat(l.transform.position - spawn)).ToArray();
         var dead = GameObject.Find("BoothLights").transform.Cast<Transform>().Where(t => t.name == "DeadLamp").OrderBy(t => Flat(t.position - spawn)).ToArray();
-        float yaw = Quaternion.LookRotation(Flat3(Slot("LOOK_Player").position - spawn)).eulerAngles.y;
+        float yaw = Quaternion.LookRotation(Flat3(SlotAt("LOOK_Player") - spawn)).eulerAngles.y;
         float WallYaw(Vector3 at)                                        // 가장 가까운 벽 쪽
         {
             float bestD = 99f, bestY = 0f;
@@ -598,7 +732,7 @@ public class M1Check : MonoBehaviour
             }
             return bestY;
         }
-        Vector3 litAt = OnNav(lit[Mathf.Min(2, lit.Length - 1)].transform.position), deadAt = OnNav(dead[0].position);
+        Vector3 litAt = OnNav(lit[Mathf.Min(4, lit.Length - 1)].transform.position), deadAt = OnNav(dead[0].position);
         Vector3 v1 = Vector3.zero, v2 = Vector3.zero, v3 = Vector3.zero;
         var mid = new Rect(Screen.width * 0.25f, Screen.height * 0.25f, Screen.width * 0.5f, Screen.height * 0.5f);
         yield return new WaitForSeconds(Tuning.DARK_ADAPT_TIME + 1f);
@@ -609,9 +743,10 @@ public class M1Check : MonoBehaviour
         Teleport(cc, deadAt + Vector3.up * 0.1f, WallYaw(deadAt)); yield return Capture("26_booth_light_dead", v => v3 = v, mid);
         Check("booth_light_zones", v1.x > 2f * v2.x && v1.x > 2f * v3.x, $"lamp off, wall beside a lit lamp {v1.x:F3} · same wall with the booth lights off {v2.x:F3} · wall beside a dead lamp {v3.x:F3} (lit > 2 × both)");
 
-        // ---- 7. fps (램프 켬): 정거장에서 운반갱 쪽 · 기둥 사이 · 크로스컷 3
+        // ---- 6. fps (램프 켬, 묶음은 사람이 받는 기본값): 정거장 · 기둥 사이 · 큰길 · 노보리 밑
+        yield return Groups(Tuning.BOOTH_BLOCKS[0], Tuning.BOOTH_BLOCKS[1]);
         lamp.lampOn = true;
-        var spots = new[] { (spawn, yaw, "station"), (OnNav(Slot("SLOT_GapBig_2").position), yaw + 180f, "pillars"), (OnNav(Slot("SLOT_DeadLight_6").position), yaw, "crosscut 3") };
+        var spots = new[] { (spawn, yaw, "station"), (home, yaw + 180f, "pillars"), (OnNav(SlotAt("SLOT_Mid_main")), yaw + 90f, "main road"), (OnNav(nbLow), yaw, "noburi") };
         float worst = 9999f; var fpsNotes = new List<string>();
         foreach (var (pos, y, nm) in spots)
         {
@@ -625,6 +760,9 @@ public class M1Check : MonoBehaviour
         Check("booth_fps", worst >= MinFps, $"fps {string.Join(" · ", fpsNotes)} (≥ {MinFps:F0})");
         InputSystem.RemoveDevice(kb);
     }
+
+    // 케이지에서 막장까지 길찾기 길이 (MAP2 첫 실행에서 잰 값 — 맵이 바뀌면 여기서 걸린다)
+    const float FaceA_M = 67f, FaceB_M = 74f, FaceC_M = 68f;   // 09-25
 
     // UI-2 (지침 4-1 "플레이 종료 후 초기 상태로 자동 복귀"): 잡히면 CATCH_RESTART_S 뒤 Intro 씬으로. 씬이 바뀌면 이 컴포넌트는 사라지므로
     // 통과는 Intro.Start(expectReturn)가 적고 Finish 한다. 여기까지 살아 있으면 = 안 돌아간 것 → FAIL. 사보타주 norestart

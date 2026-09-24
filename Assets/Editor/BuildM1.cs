@@ -397,7 +397,7 @@ public static class BuildM1
 
     static Transform Find(Transform root, string name) => root.GetComponentsInChildren<Transform>(true).First(t => t.name == name);
 
-    // MAP1: 부스 맵을 놓고 충돌을 붙이고, 막힘 스위치를 끈 채로 길찾기 바닥을 굽는다 (막힘은 NavMeshObstacle 이 켜질 때 파낸다)
+    // 부스 맵을 놓고 충돌을 붙이고, 막힘 돌무더기를 끈 채로 길찾기 바닥을 굽는다 (막힘은 NavMeshObstacle 이 켜질 때 파낸다)
     static Transform PlaceBoothMap(out GameObject[] blocks)
     {
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(BoothMapPath);
@@ -425,13 +425,15 @@ public static class BuildM1
                 ob.size = mf.sharedMesh.bounds.size;
                 ob.carving = true;
             }
+            else if (n == "PRP_Rubble_FakeExit")                           // 가짜 출구 끝 무너짐 — 몸이 막힌다 (검사 booth_fake_exit)
+                mf.gameObject.AddComponent<MeshCollider>().convex = true;
             else if (n == "PRP_Fence" || n == "PRP_WindDoor" || n == "PRP_Plate")   // 못 지나가는 것 — 울타리는 천장까지 막는다(넘어가지 않게)
             {
                 var bc = mf.gameObject.AddComponent<BoxCollider>();
                 if (n == "PRP_Fence") { var c = bc.center; c.y += (2.4f - bc.size.y) * 0.5f; bc.center = c; bc.size = new Vector3(bc.size.x, 2.4f, Mathf.Max(bc.size.z, 0.3f)); }
             }
         }
-        blocks = Enumerable.Range(1, 4).Select(i => Find(map, "BLK_" + i).gameObject).ToArray();
+        blocks = map.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BLK_")).Select(t => t.gameObject).OrderBy(b => b.name).ToArray();
         foreach (var b in blocks) b.SetActive(false);
         var surf = map.gameObject.AddComponent<NavMeshSurface>();
         surf.collectObjects = CollectObjects.Children;
@@ -439,7 +441,7 @@ public static class BuildM1
         surf.BuildNavMesh();
         AssetDatabase.DeleteAsset(BoothNavPath);
         AssetDatabase.CreateAsset(surf.navMeshData, BoothNavPath);
-        for (int i = 0; i < blocks.Length; i++) blocks[i].SetActive(Tuning.BOOTH_BLOCKS[i]);
+        foreach (var b in blocks) b.SetActive(Tuning.BOOTH_BLOCKS[DevHud.BlockGroup(b) - 1]);
         var tri = NavMesh.CalculateTriangulation();
         Debug.Log($"BOOTH navmesh: {tri.vertices.Length} verts, {tri.indices.Length / 3} tris");
         return map;

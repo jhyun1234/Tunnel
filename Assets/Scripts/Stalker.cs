@@ -52,6 +52,7 @@ public class Stalker : MonoBehaviour
     public bool Heard => Groping && heardLeft > 0f;
     public Vector3 HeardPos { get; private set; }
     [System.NonSerialized] public bool grope = true;                       // 사보타주 nogrope
+    [System.NonSerialized] public bool snapDown = true;                    // 사보타주 monsterfloat 가 끈다 — 비탈을 내려가며 떴다 붙었다 하던(옛) 상태
     [System.NonSerialized] public float heardChance = Tuning.STALKER_HEARD_CHANCE;
     [System.NonSerialized] public bool heardPause = true;                  // 사보타주 nohear: 더듬다 소리를 들어도 안 굳고 바로 간다
     [System.NonSerialized] public float foundM = Tuning.STALKER_FOUND_M;   // 사보타주 handfind 3.0 m(손보다 멀리) · shortfind 2.0 m(옛 값)
@@ -68,6 +69,7 @@ public class Stalker : MonoBehaviour
     Renderer[] renderers;
     Vector3 target, backDir;
     bool hasTarget, lightChase;
+    Vector3 gropeFace;                             // 첫 자리 더듬기 때 돌아설 쪽 (부스 맵)
     float pause, dwell, vy, stuck, alertLeft, unseen, catchT, stunLeft, investigateSpeed, retreatSide, noiseTime = -99f;
     readonly List<Vector3> spots = new List<Vector3>();
     readonly List<Vector3> corners = new List<Vector3>();   // 길찾기 꺾는 점 ([0] = 출발)
@@ -204,6 +206,7 @@ public class Stalker : MonoBehaviour
                 }
                 if (!hasTarget)
                 {
+                    if (groping && gropeFace != Vector3.zero) Face(transform.position + gropeFace, dt);
                     if (dwell > 0f) { dwell -= dt; if (dwell <= 0f) groping = false; }
                     else if (spots.Count > 0)
                     {
@@ -370,7 +373,7 @@ public class Stalker : MonoBehaviour
         foreach (var c in cracks)
         {
             float d = Flat(c - player.position);
-            if (d > best) { best = d; at = c; }
+            if (d > best && Open(c)) { best = d; at = c; }
         }
         hp = Tuning.STALKER_HP;
         foreach (var r in renderers) r.enabled = true;
@@ -432,7 +435,7 @@ public class Stalker : MonoBehaviour
     {
         if (state == State.Investigate && !lightChase && byLight)
             return;                                // 소음 조사 중엔 빛이 끼어들지 않는다
-        SetTarget(at);
+        SetTarget(Nav ? Centered(at) : at);
         investigateSpeed = speed;
         lightChase = byLight;
         spots.Clear();
@@ -445,6 +448,7 @@ public class Stalker : MonoBehaviour
         hasTarget = false;
         lightChase = false;
         groping = grope;                           // 첫 곳(놓친 그 자리)에서만 더듬는다 — 사용자 결정 09-20
+        gropeFace = groping && Nav ? OpenFacing() : Vector3.zero;
         dwell = groping ? Tuning.STALKER_GROPE_S : Tuning.STALKER_DWELL_S;
         heardLeft = 0f; heardPending = false;
         heardAt = groping && heardRng.NextDouble() < heardChance ? dwell * Mathf.Lerp(0.35f, 0.6f, (float)heardRng.NextDouble()) : 0f;
@@ -533,7 +537,11 @@ public class Stalker : MonoBehaviour
         {
             if (NavMesh.SamplePosition(t, out NavMeshHit h, 4f, NavMesh.AllAreas)) t = h.position;
             if (NavMesh.CalculatePath(transform.position, t, NavMesh.AllAreas, navPath ??= new NavMeshPath()) && navPath.corners.Length > 1)
+            {
                 corners.AddRange(navPath.corners);           // 길이 없으면(바닥 밖) 곧장 — 막히면 STALKER_STUCK_S 그물
+                for (int i = 1; i < corners.Count - 1; i++)   // 꺾는 점은 바닥 끝(= 벽에서 0.6 m) 모서리에 붙어 있다 — 숙인 머리가 몸보다 1 m 앞이라 기둥 모서리를 돌 때 벽에 0.5 m 파고들었다 (MAP2 검사 09-25)
+                    corners[i] = Inward(corners[i], Tuning.STALKER_CORNER_KEEP_M);
+            }
         }
         else
         {
@@ -544,6 +552,36 @@ public class Stalker : MonoBehaviour
         target = t;
         hasTarget = true;
     }
+
+    // 소리 난 자리가 벽이면(광맥) 가장 가까운 괴물 바닥은 그 벽 쪽 끝 — 좁은 굴에서 거기 서서 더듬으면 손·머리가 벽 속으로. 끝에서 0.6 m 안으로 (2.4 m 굴이면 가운데)
+    Vector3 Centered(Vector3 t) => NavMesh.SamplePosition(t, out NavMeshHit h0, 4f, NavMesh.AllAreas) ? Inward(h0.position, 0.6f) : t;
+
+    // 바닥 끝(가장 가까운 괴물 바닥 가장자리)에서 keep 만큼 안쪽 자리. 굴이 좁으면 늘릴 수 있는 만큼만
+    static Vector3 Inward(Vector3 p, float keep)
+    {
+        if (!NavMesh.FindClosestEdge(p, out NavMeshHit e, NavMesh.AllAreas) || e.distance >= keep) return p;
+        foreach (float s in new[] { 1f, -1f })                                   // 가장자리 법선의 방향이 안쪽인지 몰라 둘 다 — 가장자리에서 멀어지는 쪽
+            if (NavMesh.SamplePosition(p + e.normal * s * (keep - e.distance), out NavMeshHit h, 0.5f, NavMesh.AllAreas)
+                && NavMesh.FindClosestEdge(h.position, out NavMeshHit e2, NavMesh.AllAreas) && e2.distance > e.distance + 0.1f) return h.position;
+        return p;
+    }
+
+    // 더듬을 쪽: 지금 향한 쪽에서 가장 가까운, 앞 STALKER_WALL_STOP_M 이 트인 방향 — 옆벽 광맥 앞에서 벽을 본 채 웅크리면 머리가 벽 속으로 들어갔다 (MAP2 검사 09-25)
+    Vector3 OpenFacing()
+    {
+        Vector3 f = Flat3(transform.forward).normalized;
+        for (int k = 0; k <= 8; k++)
+            foreach (int s in new[] { 1, -1 })
+            {
+                Vector3 d = Quaternion.Euler(0f, s * k * 22.5f, 0f) * f;
+                if (!RayIgnore(transform.position + Vector3.up * 1.5f, d, Tuning.STALKER_WALL_STOP_M, RayMask, cc, out _)) return d;
+            }
+        return f;
+    }
+
+    // 집(시작 자리)에서 길이 이어지는가 — 부스판 막힘 돌무더기 너머의 틈에서 나오면 못 돌아온다 (MAP2: 먼 틈이 거의 다 닫힌 위 구역에 있다)
+    bool Open(Vector3 p) => !Nav || NavMesh.SamplePosition(p, out NavMeshHit a, 2f, NavMesh.AllAreas) && NavMesh.SamplePosition(homePos, out NavMeshHit b, 2f, NavMesh.AllAreas)
+        && NavMesh.CalculatePath(a.position, b.position, NavMesh.AllAreas, navPath ??= new NavMeshPath()) && navPath.status == NavMeshPathStatus.PathComplete;
 
     Vector3 RandomNear(Vector3 center, float range)
     {
@@ -582,8 +620,18 @@ public class Stalker : MonoBehaviour
         Vector3 dir = to / Mathf.Max(to.magnitude, 1e-4f);
         Vector3 face = corners.Count > 1 ? Flat3(LookAhead(1.6f) - transform.position) : dir;   // 몸은 꺾는 점으로, 얼굴은 길 1.6 m 앞 — 숙인 머리가 몸보다 1 m 앞이라 모퉁이 안쪽 벽을 스쳤다 (09-24)
         transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(face.sqrMagnitude > 1e-4f ? face.normalized : dir), 10f * dt);
-        vy = cc.isGrounded ? -1f : vy - Tuning.GRAVITY * dt;
-        cc.Move((dir * Mathf.Min(speed, d / Mathf.Max(dt, 1e-4f)) + Vector3.up * vy) * dt);
+        bool grounded = cc.isGrounded;
+        float v = Mathf.Min(speed, d / Mathf.Max(dt, 1e-4f));
+        vy = grounded ? -1f : vy - Tuning.GRAVITY * dt;
+        cc.Move((dir * v + Vector3.up * vy) * dt);
+        // 비탈 내려가기 (Player 와 같은 방법): 노보리 25° 를 조사 5 m/s 로 내려가면 1초에 2.3 m 떨어지는데 바닥 붙이기는 −1 m/s 라 프레임 75 % 가 떠 있었다 (MAP2 검사 09-25).
+        // 걸을 수 있는 가장 가파른 비탈이 이번 이동만큼 떨어뜨리는 거리를 내려 본다 — 못 닿으면(턱 밖) 되돌린다
+        if (grounded && !cc.isGrounded && snapDown)
+        {
+            float drop = v * dt * Mathf.Tan(cc.slopeLimit * Mathf.Deg2Rad) + 0.02f;
+            cc.Move(Vector3.down * drop);
+            if (!cc.isGrounded) cc.Move(Vector3.up * drop);
+        }
         // 벽·플레이어에 막혀 STALKER_STUCK_S 동안 못 가면 도착으로 친다 (무한히 미는 것을 막는 그물)
         stuck = cc.velocity.sqrMagnitude < 0.01f ? stuck + dt : 0f;
         if (stuck < Tuning.STALKER_STUCK_S)

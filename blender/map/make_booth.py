@@ -7,12 +7,14 @@
 좌표: 평면도 (x, y) = Blender (X, Y), 높이 = Blender Z. 단위 m.
 만드는 법: 굴마다 중심선을 따라 쓸어 낸 "공기" 덩어리(바닥 평평·벽·낮은 아치) + 방은 상자 → 전부 합쳐 복셀 리메시(이음새 없는 한 그물)
   → 면 뒤집기(안에서 보는 동굴) → 벽만 바위 쪽으로 파는 잡음(바닥·개구멍·대피소는 조금) → 상자 투영 UV → 40 m 칸 덩어리로 나눔.
-노드: SHL_Booth_<칸>(보임) · COL_Booth_<칸>(충돌, 같은 그물) · PRP_*(갱목·돌무더기·울타리) · BLK_1..8(부스 막힘 돌무더기, 1~4 서쪽 · 5~8 동쪽)
+노드: SHL_Booth_<칸>(보임) · COL_Booth_<칸>(충돌, 같은 그물) · PRP_*(갱목·돌무더기·울타리) · BLK_<묶음>_<i>(부스 막힘 돌무더기, 묶음 1 서쪽 · 2 동쪽)
   · SLOT_Pocket_1..30 · SLOT_GapBig_1..8 · SLOT_GapSmall_* · SLOT_Light_* · SLOT_DeadLight_* · SLOT_Crawl_<i>_A/B · SLOT_Niche_<i>
-  · SPAWN_Player · LOOK_Player · SPAWN_Stalker · LOOK_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox.
+  · SLOT_Mouth_<굴>_<0|1>(다른 굴·방에 붙은 끝) + SLOT_In_<굴>_<0|1>(그 끝에서 굴 따라 2.5 m 안) · SLOT_Mid_<굴>(굴 길이 절반) — Unity 검사가 입구·비탈·곁길 자리를 여기서 읽는다
+  · SLOT_Home_A/B(정거장 광장 네모의 두 모서리) · SPAWN_Player · LOOK_Player · SPAWN_Stalker · LOOK_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox.
 자기 검사: 길 위 0.5 m 마다 폭 ≥ 1.9 · 천장 ≥ 2.7 · 바닥이 설계 ±0.2 m, 2 m 마다 26 방향 광선이 벽에 맞음(구멍 없음), 광맥 30곳이 벽에 붙음,
   개구멍 폭 0.75~1.15 · 대피소 폭 0.8~1.15 m(사람은 들어가고 괴물 1.2 m 는 못 들어감), 갈림 바닥 높이 맞음, 삼각형 ≤ 120만.
 사보타주: SABOTAGE=holeroof(천장에 구멍) · narrow(①–② 아래 줄을 1.2 m 로) · step(비탈 갈림 받침 없앰) · widecrawl(개구멍 1.6 m) → FAIL.
+  SABOTAGE=unitywide: 개구멍(1.6 × 2.4 m)·대피소(1.6 × 2.6 m)를 괴물이 들어가는 크기로 넓힌 맵을 자기 검사(폭)를 건너뛰고 내보낸다 — Unity 검사 booth_crawl · booth_niche 가 FAIL 하는지 보는 용도. 끝나면 진짜 맵으로 다시 만든다.
 빠른 확인 FAST=1(렌더 안 함)."""
 import bpy, bmesh, os, sys, math, random, json
 import numpy as np
@@ -34,7 +36,8 @@ CHUNK_M = 40.0                                     # 덩어리 = 40 m 칸 (안 �
 
 # ---- 표 (booth_table.py)
 if SAB == "step": bt.LANDING = 0.0                 # 사보타주: 비탈 갈림에 받침 없음
-if SAB == "widecrawl": bt.CRAWL_W = 1.6
+if SAB in ("widecrawl", "unitywide"): bt.CRAWL_W = 1.6
+if SAB == "unitywide": bt.NICHE_W, bt.NICHE_H, bt.CRAWL_H = 1.6, 2.6, 2.4   # 괴물(1.2 × 2.1 m)이 들어가는 크기 — 넓히기만 하면 높이에 막혀 버그가 아니다
 B = bt.build()
 bad = bt.check_junction_floors(B)
 assert not bad, "FAIL: 굴이 만나는 자리 바닥 높이가 어긋남 %s" % bad[:6]
@@ -255,7 +258,7 @@ assert not leaks, "FAIL: 맵에 구멍 (광선이 %d m 안에서 벽에 안 맞�
 assert not no_floor, "FAIL: 바닥이 없거나 설계 높이에서 0.2 m 넘게 어긋난 곳 (턱·구덩이)"
 assert worst_w[0] >= MIN_W, "FAIL: 가장 좁은 곳 %.2f m < %.1f" % (worst_w[0], MIN_W)
 assert worst_h[0] >= MIN_H, "FAIL: 가장 낮은 천장 %.2f m < %.1f" % (worst_h[0], MIN_H)
-assert not narrow_bad, "FAIL: 개구멍·대피소 폭이 사람/괴물 기준 밖 %s" % narrow_bad[:4]
+assert not narrow_bad or SAB == "unitywide", "FAIL: 개구멍·대피소 폭이 사람/괴물 기준 밖 %s" % narrow_bad[:4]
 assert all(p is not None for p in pocket_pts), "FAIL: 벽에 안 붙은 광맥 자리 %s" % [i + 1 for i, p in enumerate(pocket_pts) if p is None]
 
 # ================= 5. 덩어리로 나눔 (SHL · COL 은 같은 그물) — 40 m 칸. 칸마다 임시 재질을 붙여 "재질로 나누기"(한 번에)
@@ -317,7 +320,7 @@ fe = B["fake_end"]; fp = next(t for t in TUNNELS if t[0] == "fake_exit")[1]
 fdeg = math.degrees(math.atan2(fe[1] - fp[-2][1], fe[0] - fp[-2][0]))
 rubble("PRP_Rubble_FakeExit", Vector((fe[0], fe[1], fe[2])), fdeg, 3.6, 1.8, 3.2)               # 가짜 출구 끝 — 무너짐 (방향 = 굴 방향, 폭은 가로)
 for i, (g, bx, by, bz, deg, bw, bh) in enumerate(BLOCKS, 1):
-    rubble("BLK_%d" % i, Vector((bx, by, bz)), deg, bw + 0.6, 1.6, bh)
+    rubble("BLK_%d_%d" % (g, i), Vector((bx, by, bz)), deg, bw + 0.6, 1.6, bh)
 rubble("PRP_Rubble_Goaf", Vector(((Z2["x0"] + Z2["x1"]) / 2, Z2["y1"] + 3.2, bt.SEAM)), 90, Z2["x1"] - Z2["x0"], 3.0, 3.4, n=90)
 bm = bmesh.new()                                             # 채굴적 앞 울타리 + 경고판
 x = Z2["x0"] + 0.4
@@ -365,7 +368,16 @@ for name, pts, h, _, _ in TUNNELS:
         ci += 1; empty("SLOT_Crawl_%d_A" % ci, pts[0][:3]); empty("SLOT_Crawl_%d_B" % ci, pts[-1][:3])
     elif KIND[name] == "niche":
         ni += 1; a, b = pts[0], pts[-1]; empty("SLOT_Niche_%d" % ni, (a[0] + (b[0] - a[0]) * 0.8, a[1] + (b[1] - a[1]) * 0.8, a[2]))
+for name, pts, h, _, _ in TUNNELS:                              # 검사용: 붙은 끝 · 2.5 m 안 · 가운데
+    if KIND[name] != "tunnel": continue
+    L = bt.seg_len(pts)
+    for k, (end, s_in) in enumerate(((pts[0], min(2.5, L)), (pts[-1], max(L - 2.5, 0.0)))):
+        if not near_other(name, end): continue
+        empty("SLOT_Mouth_%s_%d" % (name, k), end[:3])
+        q = bt.point_at(pts, s_in); empty("SLOT_In_%s_%d" % (name, k), (*q, bt.proj(pts, q)[2]))
+    q = bt.point_at(pts, L / 2); empty("SLOT_Mid_%s" % name, (*q, bt.proj(pts, q)[2]))
 empty("SPAWN_Player", B["spawn_player"]); empty("LOOK_Player", B["look_player"])
+hx0_, hx1_, hy0_, hy1_ = B["home_rect"]; empty("SLOT_Home_A", (hx0_, hy0_, 0.0)); empty("SLOT_Home_B", (hx1_, hy1_, 0.0))   # 정거장 광장 네모 (검사 booth_return 의 "집")
 empty("SPAWN_Stalker", B["spawn_stalker"]); empty("LOOK_Stalker", B["look_stalker"])
 empty("SLOT_Prop_Cart", B["cart"]); empty("SLOT_Prop_Lunchbox", B["lunchbox"])
 
@@ -378,9 +390,9 @@ names = [n_.get("name", "") for n_ in doc["nodes"]]
 cnt = lambda pre: sum(n_.startswith(pre) for n_ in names)
 print("CHECK booth export: %s (%d KB bin) · images %d missing %d · SHL %d COL %d pockets %d gapBig %d gapSmall %d lights %d dead %d blocks %d crawls %d niches %d"
       % (os.path.basename(OUT), os.path.getsize(OUT[:-5] + ".bin") // 1024, len(uris), len(missing), cnt("SHL_"), cnt("COL_"), cnt("SLOT_Pocket_"),
-         cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")))
+         cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d" % cnt("SLOT_Mouth_"))
 assert not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
-assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == 8, "FAIL: 노드 수"
+assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS), "FAIL: 노드 수"
 
 # ================= 9. 그림: 위에서 본 모양 · 1인칭
 if not FAST:
@@ -394,7 +406,7 @@ if not FAST:
         for v in bm.verts: v.co += Vector(p) + Vector((0, 0, 14))
         o = new_obj("MARK", bm); o.color = col; return o
     marks = [marker(p, (0.95, 0.5, 0.1, 1)) for p in pocket_pts] + [marker(p, (0.85, 0.15, 0.1, 1), 1.1) for p in GAP_BIG] \
-        + [marker((x, y, fz), (1.0, 0.85, 0.3, 1), 0.6) for x, y, fz, _ in LIGHTS] + [marker(B["spawn_player"], (0.3, 0.9, 0.4, 1), 1.3)]
+        + [marker((x, y, fz), (1.0, 0.85, 0.3, 1), 0.6) for x, y, fz, _ in LIGHTS] + [marker(B["spawn_player"], (0.3, 0.9, 0.4, 1), 1.3)]         + [marker((bx, by, bz), (0.2, 0.45, 0.95, 1) if g == 1 else (0.7, 0.25, 0.85, 1), 1.2) for g, bx, by, bz, *_ in BLOCKS]   # 막힘: 파랑 = 묶음 1(F5) · 보라 = 묶음 2(F6)
     sc.render.engine = "BLENDER_WORKBENCH"
     sh = sc.display.shading; sh.light = "STUDIO"; sh.color_type = "OBJECT"; sh.show_backface_culling = True; sh.show_cavity = True
     sc.world = bpy.data.worlds.new("W") if sc.world is None else sc.world

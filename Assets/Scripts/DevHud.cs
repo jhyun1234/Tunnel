@@ -5,12 +5,14 @@ using UnityEngine.Rendering;
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
 // 시작할 때 꺼져 있다(UI-1d) — F1 로 켠다. 손잡이 키는 꺼져 있어도 먹는다.
 // V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · 9 괴물을 내 앞에 세움 · N 선 괴물의 동작 차례로 · U 배회 걸음 A/B/C (3D-③) · I M 목 붉기 −/+ · Q R 목 밝기 ÷× 1.15 · Z X 세운 괴물 목 길이 −/+ · C B 목 빼는 시간 −/+ (3D-③b M1e) · F1 표시 끄기
-// MAP1 부스 맵: 숫자패드 − + 켜진 전등 밝기 ÷×1.25 · F5~F8 막힘 스위치 1~4 켜기/끄기 (누르면 표시가 켜진다)
+// 부스 맵: 숫자패드 − + 켜진 전등 밝기 ÷×1.25 · F5 F6 막힘 묶음 서쪽·동쪽 켜기/끄기 (누르면 표시가 켜진다)
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
     public Light[] boothLights = new Light[0];             // MAP1: 켜진 전등 (BuildM1.PlaceBoothLights)
-    public GameObject[] boothBlocks = new GameObject[0];   // MAP1: 막힘 스위치 돌무더기 BLK_1..4
+    public GameObject[] boothBlocks = new GameObject[0];   // MAP2: 막힘 돌무더기 BLK_<묶음>_<i> (묶음 1 서쪽 · 2 동쪽)
+    public static int BlockGroup(GameObject b) => b.name[4] - '0';   // "BLK_2_11" → 2
+    bool GroupOn(int g) => System.Array.Exists(boothBlocks, b => BlockGroup(b) == g && b.activeSelf);
     public Player player;
     public Volume volume;
     public Stalker stalker;
@@ -132,13 +134,18 @@ public class DevHud : MonoBehaviour
             foreach (var l in boothLights) l.intensity *= m;
             show = true;
         }
-        var fk = new[] { kb.f5Key, kb.f6Key, kb.f7Key, kb.f8Key };
-        for (int i = 0; i < boothBlocks.Length && i < fk.Length; i++)
-            if (fk[i].wasPressedThisFrame) { boothBlocks[i].SetActive(!boothBlocks[i].activeSelf); show = true; }
+        var fk = new[] { kb.f5Key, kb.f6Key };
+        for (int g = 1; g <= fk.Length; g++)
+            if (fk[g - 1].wasPressedThisFrame)
+            {
+                bool on = !GroupOn(g);
+                foreach (var b in boothBlocks) if (BlockGroup(b) == g) b.SetActive(on);
+                show = true;
+            }
     }
 
     string BoothLine() => boothLights.Length == 0 ? "" :
-        $"\nbooth lights {boothLights[0].intensity:0.00} (BOOTH_LIGHT_ENERGY {Tuning.BOOTH_LIGHT_ENERGY:0.00}) [num - +]   blocks {string.Join(" ", System.Array.ConvertAll(boothBlocks, b => b.activeSelf ? "X" : "o"))} [F5 F6 F7 F8] (X = 막힘: 크로스컷2 · 크로스컷3 · 기둥 사이 동쪽 · 운반갱 45 m)";
+        $"\nbooth lights {boothLights[0].intensity:0.00} (BOOTH_LIGHT_ENERGY {Tuning.BOOTH_LIGHT_ENERGY:0.00}) [num - +]   blocks west {(GroupOn(1) ? "X" : "o")} east {(GroupOn(2) ? "X" : "o")} [F5 F6] (X = 막힘: 서쪽 ① 채탄장·바깥 고리 · 동쪽 ③ 노보리·바깥 고리 — 둘 다 X = 가운데만)";
 
     [System.NonSerialized] public bool walkPreview;        // U: 세운 괴물이 걸어오기를 되풀이 (검사도 본다)
     [System.NonSerialized] public bool previewOn = true;   // 사보타주 nopreview 가 끈다 (고치기 전: U 가 세운 괴물에 안 먹던 상태)
