@@ -223,31 +223,8 @@ def room_of(m, q):
     return None
 
 def route_events(m, routes, others):
-    """길마다 (자리 s, 갈림?) — 다른 길·방·숨을 곳 입구가 닿는 자리와 엇갈리는 자리"""
-    out = {}
-    for n, pts, h, tb, wk, lz, kind in routes:
-        L = seg_len(pts); ev = []
-        for end, s in ((pts[0], 0.0), (pts[-1], L)):
-            q = np.array(end[:2]); hit = room_of(m, q) is not None
-            for o in others:
-                if o[0] != n and proj(o[1], q)[0] < o[1][0][3] / 2 + 0.6: hit = True
-            ev.append((s, hit))
-        for o in others:
-            if o[0] == n: continue
-            for end in (o[1][0], o[1][-1]):
-                dist, s = proj(pts, np.array(end[:2]))
-                if dist < pts[0][3] / 2 + 0.8 and 0.3 < s < L - 0.3: ev.append((s, True))
-            s0 = 0.0
-            for a, b in zip(pts, pts[1:]):
-                A, B = np.array(a[:2]), np.array(b[:2]); dA = B - A
-                for c, e in zip(o[1], o[1][1:]):
-                    C, E = np.array(c[:2]), np.array(e[:2]); dC = E - C; den = dA[0] * dC[1] - dA[1] * dC[0]
-                    if abs(den) < 1e-9: continue
-                    t = ((C[0] - A[0]) * dC[1] - (C[1] - A[1]) * dC[0]) / den; u = ((C[0] - A[0]) * dA[1] - (C[1] - A[1]) * dA[0]) / den
-                    if 0 < t < 1 and 0 < u < 1: ev.append((s0 + t * np.linalg.norm(dA), True))
-                s0 += np.linalg.norm(dA)
-        out[n] = sorted(ev)
-    return out
+    """booth_table.route_events 와 같은 것 (한 곳에만)"""
+    return bt.route_events(m["T"], m["R"], routes, others)
 
 def wander(m, runs=3000, cap=3000.0, seed=1):
     """길 잃은 사람: 맵 아무 데서나 시작해 되돌아서지 않고 갈림마다 아무 쪽이나 골라 계속 걷는다(개구멍도 지나감, 막다른 곳에서만 돌아선다).
@@ -307,109 +284,17 @@ def measure(m):
     return r
 
 
-# ======================= MAP2 v4 — 사용자 손그림(09-24)을 옮김: 케이지 가운데 · 위 큰길 · 위 넓은 구역 셋 · 맨 위 활 굴 · 양쪽 가장자리 굴(바깥 고리) ·
-# 아래 작은 구역 둘 · 아래 방 셋(충전실·펌프실·컴프레서실) · 빨간 점 8 = 큰 틈(괴물). 그림 좌표(픽셀)를 그대로 적고 F 로 m 로 바꾼다.
-F = 0.07                                                                     # m / 그림 픽셀 (크기를 v3 와 비슷하게 맞춘 값)
-CX, CY = 910, 660                                                            # 케이지 = (0, 0)
-def m_(px, py): return ((px - CX) * F, (CY - py) * F)
-def pl(name, pxs, w, h, z, lz, kind="tunnel", walk=True, timber=True):
-    zs = z if isinstance(z, list) else [z] * len(pxs)
-    return (name, [(*m_(px, py), zz, w) for (px, py), zz in zip(pxs, zs)], h, timber, walk, lz, kind)
-def box(name, px0, px1, py0, py1, fz, h, lz):
-    (x0, y1), (x1, y0) = m_(px0, py0), m_(px1, py1); return (name, x0, x1, y0, y1, fz, h, lz)
-T4, R4, PIL4 = [], [], []
-MAINZ = 0.5
-T4.append(pl("main", [(55,522),(205,520),(400,520),(585,528),(925,528),(1115,535),(1465,540),(1540,535),(1665,522),(1855,515)], 4.0, 3.4, MAINZ, "D"))
-T4 += [pl("link_nw", [(800,640),(700,620),(640,580),(585,528)], 3.3, 3.2, [0,0.2,0.4,MAINZ], "L"),
-       pl("link_ne", [(1020,650),(1100,620),(1115,580),(1115,535)], 3.3, 3.2, [0,0.2,0.4,MAINZ], "L"),
-       pl("link_e",  [(990,712),(1100,740),(1250,735),(1400,700),(1460,620),(1465,540)], 3.3, 3.2, [0,0,0,0,0.3,MAINZ], "D"),
-       pl("link_w",  [(810,690),(670,690),(520,710),(430,740),(345,775)], 3.3, 3.2, 0, "D"),
-       pl("south",   [(910,738),(925,920)], 3.3, 3.2, 0, "L"),
-       pl("south_pump", [(925,920),(915,1090)], 3.0, 3.2, 0, "L"),
-       pl("south_w", [(925,920),(790,930),(500,930),(365,957)], 3.0, 3.2, 0, "L"),
-       pl("south_e", [(925,920),(1120,915),(1250,945),(1340,1050),(1352,1105)], 3.0, 3.2, 0, "L"),
-       pl("to_charge", [(365,957),(390,1070)], 3.0, 3.2, 0, "L"),
-       pl("bottom_w", [(20,945),(205,952),(365,960)], 3.0, 3.2, 0, "K"),
-       pl("bottom_e", [(1245,952),(1630,948),(1940,945)], 3.0, 3.2, 0, "K")]
-# 넓은 구역 (그림의 동그라미) — 안쪽은 구역마다 다른 짜임
-def zone_grid(tag, px0, px1, py0, py1, nc, nr, fz, lz, a=3.0):
-    (x0, y1), (x1, y0) = m_(px0, py0), m_(px1, py1)
-    px = (x1 - x0 - a) / nc; py_ = (y1 - y0 - a) / nr
-    R4.extend([("room_c", x0 + i * px, x0 + i * px + a, y0, y1, fz, 3.0, lz) for i in range(nc + 1)])
-    R4.extend([("room_r", x0, x1, y0 + j * py_, y0 + j * py_ + a, fz, 3.0, lz) for j in range(nr + 1)])
-    PIL4.extend([(x0 + a + i * px, x0 + (i + 1) * px, y0 + a + j * py_, y0 + (j + 1) * py_) for i in range(nc) for j in range(nr)])
-    return x0, x1, y0, y1
-def zone_tunnels(tag, px0, px1, py0, py1, slope_deg, cols, rows, wc, wr, lz):
-    (x0, y1), (x1, y0) = m_(px0, py0), m_(px1, py1)
-    z = lambda y: SEAM + (y - y0) * math.tan(math.radians(slope_deg))
-    xs = [x0 + (x1 - x0) * f for f in cols]; ys = [y0 + (y1 - y0) * f for f in rows]
-    for i, x in enumerate(xs): T4.append(("%s_col%d" % (tag, i), [(x, ys[0], z(ys[0]), wc), (x, ys[-1], z(ys[-1]), wc)], 2.9, True, True, lz, "tunnel"))
-    for j, y in enumerate(ys): T4.append(("%s_row%d" % (tag, j), [(xs[0], y, z(y), wr), (xs[-1], y, z(y), wr)], 2.9, True, True, lz, "tunnel"))
-    return x0, x1, y0, y1
-Z1 = zone_tunnels("W_z1", 240, 500, 105, 385, 15, (0.06, 0.5, 0.94), (0.05, 0.5, 0.95), 2.6, 2.4, "K")          # ① 채탄장: 15° 오르막 + 곁굴, 끝을 뒤로 이음
-Z2 = zone_grid("z2", 770, 1090, 110, 390, 3, 2, SEAM, "K")                                                     # ② 기둥 사이: 기둥 6 (4 × 6 m)
-R4.append(("goaf", Z2[0], Z2[1], Z2[3] - 0.2, Z2[3] + 5.5, SEAM, 3.4, "K"))                                      # 채굴적 — 그것이 사는 곳
-Z3 = zone_tunnels("E_z3", 1375, 1650, 160, 390, 25, (0.06, 0.5, 0.94), (0.06, 0.5, 0.94), 2.6, 2.6, "K")         # ③ 노보리: 25° 오르막 셋 + 가로굴
-Z4 = zone_grid("z4", 100, 345, 705, 832, 2, 1, 0.3, "K")                                                       # 아래 작은 구역: 기둥 2
-Z5 = zone_grid("z5", 1545, 1752, 700, 822, 2, 1, 0.3, "K")
-T4 += [pl("v_z1", [(400,520),(400,385)], 3.0, 3.2, [MAINZ,SEAM], "K"), pl("v_z2", [(925,528),(925,390)], 3.0, 3.2, [MAINZ,SEAM], "K"),
-       pl("v_z3", [(1540,535),(1540,390)], 3.0, 3.2, [MAINZ,SEAM], "K"),
-       pl("v_z4a", [(205,520),(205,705)], 3.0, 3.2, [MAINZ,0.3], "K"), pl("v_z4b", [(205,832),(205,952)], 3.0, 3.2, [0.3,0], "K"),
-       pl("v_z5a", [(1665,522),(1665,705)], 3.0, 3.2, [MAINZ,0.3], "K"), pl("v_z5b", [(1615,798),(1630,948)], 3.0, 3.2, [0.3,0], "K"),
-       pl("link12a", [(500,215),(770,215)], 2.8, 3.0, [7.0,SEAM], "K"), pl("link12b", [(500,300),(770,300)], 2.8, 3.0, [5.0,SEAM], "K"),   # 그림의 두 줄
-       pl("link23", [(1090,258),(1375,250)], 2.8, 3.0, [SEAM,5.5], "K")]
-T4 += [pl("T_arc", [(245,110),(300,55),(600,18),(1000,10),(1400,30),(1700,90),(1765,160),(1760,210),(1700,260),(1650,275)], 3.0, 3.0,
-          [8.5,8.8,9.2,9.4,9.4,9.2,8.6,7.8,6.8,6.2], "K"),                                                   # 맨 위 활 굴 = 위 편(채탄장 꼭대기 ↔ 노보리 가운데)
-       pl("W_spur", [(255,370),(150,380),(40,390),(22,383)], 2.6, 2.9, SEAM, "K"), pl("E_spur", [(1640,370),(1750,352),(1900,282),(1925,270)], 2.6, 2.9, SEAM, "K"),
-       pl("W_edge", [(262,385),(200,410),(120,460),(55,522),(60,600),(20,750),(5,900),(20,945),(80,1010),(200,1100),(300,1150)], 3.0, 3.2,
-          [SEAM,1.2,0.8,MAINZ,0.4,0.2,0,0,0,0,0], "K"),
-       pl("E_edge", [(1630,385),(1700,420),(1855,515),(1900,590),(1945,700),(1945,900),(1940,945),(1850,1000),(1700,1080),(1490,1165)], 3.0, 3.2,
-          [SEAM,1.2,MAINZ,0.4,0.2,0,0,0,0,0], "K")]
-# 곁길(지선): 긴 굴이 바위 하나를 두고 잠깐 두 갈래로 — 짧은 고리. 실제 운반갱 지선(광차 대기 곁선)
-def siding(name, pxa, pxb, off_m, lz):
-    (ax, ay), (bx, by) = m_(*pxa), m_(*pxb); L = math.hypot(bx - ax, by - ay); nx, ny = -(by - ay) / L, (bx - ax) / L
-    p = lambda f, o: (ax + (bx - ax) * f + nx * o, ay + (by - ay) * f + ny * o)
-    T4.append((name, [(*p(0, 0), 0.3, 3.0), (*p(0.25, off_m), 0.3, 3.0), (*p(0.75, off_m), 0.3, 3.0), (*p(1, 0), 0.3, 3.0)], 3.0, True, True, lz, "tunnel"))
-siding("sd_main_w", (585,528), (800,528), 7.0, "D"); siding("sd_main_e", (1150,536), (1400,540), 7.0, "D")
-siding("sd_arc_w", (620,17), (900,11), 7.0, "K"); siding("sd_arc_e", (1100,15), (1380,29), 7.0, "K")
-siding("sd_edge_w", (60,600), (20,750), -7.0, "K"); siding("sd_edge_e", (1945,700), (1945,880), 7.0, "K")
-siding("sd_bottom_e", (1300,952), (1580,948), -7.0, "K"); siding("sd_link_e", (1250,735), (1400,700), -7.0, "D")
-R4 += [box("plaza", 800, 1020, 598, 738, 0, 4.5, "L"), box("charge", 300, 520, 1070, 1190, 0, 3.6, "L"), box("pump", 790, 1030, 1090, 1225, 0, 3.8, "L"),
-       box("comp", 1240, 1480, 1105, 1215, 0, 3.6, "L")]
-FAKE4 = [(*m_(1000, 10), 9.4, 3.0), (*m_(1010, -60), 9.4 + 5.2 * math.tan(math.radians(25)), 3.0), (*m_(1030, -250), 9.4 + 19.5 * math.tan(math.radians(25)), 3.0)]
-T4.append(("fake_exit", FAKE4, 3.2, True, True, "K", "tunnel"))                                               # 가짜 출구 — 활 굴 꼭대기에서 더 올라가는 사갱, 끝은 무너짐
-CRAWL4 = [("c_plaza", [(910,598),(910,530)]), ("c_link12", [(640,217),(640,298)]), ("c_z4", [(100,770),(22,770)]), ("c_z5", [(1560,720),(1470,705)]),
-          ("c_charge", [(330,1070),(300,965)]), ("c_comp", [(1460,1105),(1460,955)]), ("c_z2", [(1080,390),(1115,538)]), ("c_z1", [(260,380),(240,515)])]
-for n, pxs in CRAWL4: T4.append(pl(n, pxs, 0.9, 1.3, 0, "K", "crawl", walk=False, timber=False))
-MAP2_V4 = dict(T=T4, R=R4, small_gaps=[m_(768, 250), m_(1092, 330), m_(1025, 1160)], home_rooms=("plaza",),
-               home_rect=(m_(800, 0)[0], m_(1020, 0)[0], m_(0, 738)[1], m_(0, 598)[1]))
-# 긴 굴에 좁은 대피소를 자동으로 — 갈림·숨을 곳 사이가 13 m 를 넘지 않게
-def auto_niches(m, maxgap=12.5):
-    walkT = [t for t in m["T"] if t[4]]; others = [t for t in m["T"] if t[6] != "tunnel" or t[4]]
-    ev = route_events(m, walkT, others); added = []
-    for n, pts, *_ in walkT:
-        e = ev[n]
-        for (s0, j0), (s1, j1) in zip(e, e[1:]):
-            L = s1 - s0; k = math.ceil(L / maxgap) - 1 if (j0 and j1) else (math.ceil(L / maxgap) if L > 9 else 0)
-            for i in range(1, k + 1):
-                s_want = s0 + L * i / (k + 1) if (j0 and j1) else s0 + L * i / (k + 0.5)
-                done = False
-                for ds in (0, 1.5, -1.5, 3, -3):                               # 다른 굴·방과 부딪히면 앞뒤로 옮겨 본다
-                    s = min(max(s_want + ds, s0 + 1.0), s1 - 1.0)
-                    (x, y) = point_at(pts, s); (x2, y2) = point_at(pts, min(s + 0.5, seg_len(pts))); (x1, y1) = point_at(pts, max(s - 0.5, 0))
-                    dx, dy = x2 - x1, y2 - y1; L2 = math.hypot(dx, dy) or 1; w = pts[0][3]
-                    for side in ((1, -1) if len(added) % 2 == 0 else (-1, 1)):
-                        nx, ny = -dy / L2 * side, dx / L2 * side
-                        tips = [np.array((x + nx * (w / 2 + r), y + ny * (w / 2 + r))) for r in (0.8, 1.6, 2.4, 3.2)]
-                        if all(room_of(m, tp) is None for tp in tips) and all(proj(o[1], tp)[0] > o[1][0][3] / 2 + 1.0 for o in walkT if o[0] != n for tp in tips):
-                            added.append(("niche_a%d" % len(added), niche(x, y, nx, ny, w), 2.2, False, False, "K", "niche")); done = True; break
-                    if done: break
-    m["T"] = m["T"] + added
-    return len(added)
-NA = auto_niches(MAP2_V4)
-V4_MARK = dict(gap_big=[m_(430,150), m_(945,112), m_(1420,355), m_(20,380), m_(1925,270), m_(345,780), m_(20,950), m_(1940,945)],
-               blocks=[(1, m_(400,450)), (1, m_(720,300)), (1, m_(130,521)), (1, m_(60,948)), (2, m_(1540,460)), (2, m_(1300,252)), (2, m_(1800,517)), (2, m_(1880,946))],
-               monster=m_(930, 70))
+# ======================= MAP2 v4 — 사용자 손그림(09-24). 표는 booth_table.py 한 곳에 (make_booth.py 도 같은 것을 읽는다)
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import booth_table as bt
+B4 = bt.build()
+m_ = bt.m_
+MAP2_V4 = dict(T=B4["T"], R=B4["R"], small_gaps=[g[:2] for g in B4["gap_small"]], home_rooms=("plaza",), home_rect=B4["home_rect"])
+PIL4 = B4["PILLARS"]; Z1 = tuple(B4["Z"]["Z1"][k] for k in ("x0", "x1", "y0", "y1")); Z3 = tuple(B4["Z"]["Z3"][k] for k in ("x0", "x1", "y0", "y1"))
+FAKE4 = next(t for t in B4["T"] if t[0] == "fake_exit")[1]
+NA = sum(1 for t in B4["T"] if t[6] == "niche")
+V4_MARK = dict(gap_big=[g[:2] for g in B4["gap_big"]], blocks=[(b[0], b[1:3]) for b in B4["blocks"]], monster=B4["spawn_stalker"][:2])
 
 # ======================= 결과
 M = {}

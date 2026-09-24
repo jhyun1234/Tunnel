@@ -39,3 +39,4 @@ crashlytics-build.properties
 
 # Blender 동작 스크립트 실행 기록 (다시 돌리면 생긴다)
 /blender/**/*.log
+__pycache__/
