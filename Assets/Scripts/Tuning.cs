@@ -114,7 +114,7 @@ public static class Tuning
     public const string BOOTH_SCENE = "Booth";                  // 인트로 "시작"이 가는 씬 (42 m 복도 M1_Tunnel 은 검사용으로만)
     public static readonly bool[] BOOTH_BLOCKS = { false, false, false, false };   // 부스 막힘 스위치(BLK_1..4 = 크로스컷 2 · 크로스컷 3 · 기둥 사이 동쪽 · 운반갱 45 m). 판정 때 F5~F8 로 정한다
     public static readonly Color BOOTH_LIGHT_COLOR = new Color(1f, 0.72f, 0.42f);   // 켜진 전등 (백열등)
-    public const float BOOTH_LIGHT_ENERGY = 25f;                // 제안값 — 판정 때 숫자패드 −/+ 로 정한다 (4 는 전등 아래도 거의 안 보였다, 첫 부스 검사 09-24)
+    public const float BOOTH_LIGHT_ENERGY = 60.5f;              // 사용자 판정 09-24 (숫자패드 −/+, 제안값 25). 부스 씬을 만들 때 박힌다 — 바꾸면 MakeBooth -force
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
     public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 부스 천장 2.7~3.2 m(09-24 +0.5 m 전 2.2~2.7 에 맞춘 값) (복도는 STALKER_H 2.8 그대로)
     // 천장 밑 숙이기 (MAP1, 사용자 09-24 "실제 크기 지키고 괴물이 숙여 다니게"): 머리 꼭대기가 그 자리 천장 − STOOP_MARGIN 밑에 오게
