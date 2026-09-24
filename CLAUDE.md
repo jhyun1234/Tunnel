@@ -30,6 +30,7 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 
 - 감각 수치(이동·램프·안개·괴물)는 Godot `Tuning.gd` 값이 출발점이다. 옮길 때 이름을 유지해 대조할 수 있게 한다.
 - 이 저장소는 **Public**이다. API 키·토큰·개인 경로 밖 비밀을 커밋하지 않는다.
+- 참고로 받은 다른 게임의 영상·캡처는 `build/refs/`(커밋 안 됨)에만 둔다. 저작권 — 공개 저장소에 올리지 않는다.
 - 에셋을 넣기 전에 출처를 확인한다. Hunyuan 2.0·2.1 산출물(`Documents/MineTunnel/mesh/*_s50_o512.glb`, `miner_painted.glb`, `blender/mixamo_v2_hunyuan/`)은 넣지 않는다 — 라이선스가 한국 제외.
 - 괴물 `miner_rigged.glb`(md5 `16442855…`)는 TRELLIS.2(MIT) 산출물로 확인됨(2026-09-14, 몸·머리 base color 텍스처가 `trellis2_v1.glb`·`trellis2_head_512.glb`와 바이트 일치, 갱목·쇠는 Blender 기본 도형 + Poly Haven CC0). GLB를 다시 뽑으면 다시 확인한다.
 - Mixamo 원본 FBX는 저장소에 올리지 않는다. GLB에 구워 넣은 클립만 된다.
