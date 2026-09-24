@@ -15,7 +15,8 @@
   개구멍 폭 0.75~1.15 · 대피소 폭 0.8~1.15 m(사람은 들어가고 괴물 1.2 m 는 못 들어감), 갈림 바닥 높이 맞음, 삼각형 ≤ 120만.
 사보타주: SABOTAGE=holeroof(천장에 구멍) · narrow(①–② 아래 줄을 1.2 m 로) · step(비탈 갈림 받침 없앰) · widecrawl(개구멍 1.6 m) → FAIL.
   SABOTAGE=unitywide: 개구멍(1.6 × 2.4 m)·대피소(1.6 × 2.6 m)를 괴물이 들어가는 크기로 넓힌 맵을 자기 검사(폭)를 건너뛰고 내보낸다 — Unity 검사 booth_crawl · booth_niche 가 FAIL 하는지 보는 용도. 끝나면 진짜 맵으로 다시 만든다.
-빠른 확인 FAST=1(렌더 안 함)."""
+빠른 확인 FAST=1(렌더 안 함).
+R2B=1: R2b 바위 틈을 넣은 미리보기(차례 3 — 자리·모양을 먼저 보인다). Assets 를 안 건드리고 build/check_r2b/ 에 맵·그림을 낸다."""
 import bpy, bmesh, os, sys, math, random, json
 import numpy as np
 from mathutils import Vector
@@ -26,11 +27,12 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import booth_table as bt
 PIECES = os.path.join(ROOT, "Assets", "Tunnel", "Pieces")
-OUT = os.path.join(PIECES, "booth_map.gltf")
-CHECK = os.path.join(ROOT, "build", "check_map2")
+R2B = os.environ.get("R2B", "") == "1"
+OUT = os.path.join(ROOT, "build", "check_r2b", "booth_map.gltf") if R2B else os.path.join(PIECES, "booth_map.gltf")
+CHECK = os.path.join(ROOT, "build", "check_r2b" if R2B else "check_map2")
 SAB = os.environ.get("SABOTAGE", "")
 FAST = os.environ.get("FAST", "") == "1"
-VOXEL, CARVE, FLOOR_CARVE, NARROW_CARVE = 0.2, 0.30, 0.06, 0.03   # 복셀 · 벽을 바위 쪽으로 파는 깊이(최대) · 바닥 · 개구멍·대피소 (넓어지면 괴물이 들어간다)
+VOXEL, CARVE, FLOOR_CARVE, NARROW_CARVE, CREV_CARVE = 0.2, 0.30, 0.06, 0.03, 0.06   # 복셀 · 벽을 바위 쪽으로 파는 깊이(최대) · 바닥 · 개구멍·대피소 (넓어지면 괴물이 들어간다)
 MIN_W, MIN_H, SEAL_M, TRI_MAX = 1.9, 2.7, 200.0, 1_200_000   # 구멍 광선 200 m — 큰길이 130 m 로 거의 곧다
 CHUNK_M = 40.0                                     # 덩어리 = 40 m 칸 (안 보이는 칸은 안 그린다)
 
@@ -38,7 +40,7 @@ CHUNK_M = 40.0                                     # 덩어리 = 40 m 칸 (안 �
 if SAB == "step": bt.LANDING = 0.0                 # 사보타주: 비탈 갈림에 받침 없음
 if SAB in ("widecrawl", "unitywide"): bt.CRAWL_W = 1.6
 if SAB == "unitywide": bt.NICHE_W, bt.NICHE_H, bt.CRAWL_H = 1.6, 2.6, 2.4   # 괴물(1.2 × 2.1 m)이 들어가는 크기 — 넓히기만 하면 높이에 막혀 버그가 아니다
-B = bt.build()
+B = bt.build(crevices=R2B)
 bad = bt.check_junction_floors(B)
 assert not bad, "FAIL: 굴이 만나는 자리 바닥 높이가 어긋남 %s" % bad[:6]
 TUNNELS = [(n, pts, h, tb, walk) for n, pts, h, tb, walk, lz, kind in B["T"]]
@@ -185,12 +187,12 @@ co = np.empty(len(cave_me.vertices) * 3); cave_me.vertices.foreach_get("co", co)
 nz = np.empty(len(cave_me.vertices) * 3); cave_me.vertices.foreach_get("normal", nz); nz = nz.reshape(-1, 3)[:, 2]
 weight = np.where(nz > 0.6, FLOOR_CARVE / CARVE, 1.0)
 for n, pts, h, _, _ in TUNNELS:                               # 개구멍·대피소 둘레는 거의 안 판다 — 넓어지면 괴물(1.2 m)이 들어간다
-    if KIND[n] == "tunnel": continue
+    if KIND[n] in ("tunnel", "crevice_room"): continue          # 바위 틈 안쪽 방은 굴처럼 판다
     for a, b in zip(pts, pts[1:]):
         A, Bv = np.array(a[:2]), np.array(b[:2]); d = Bv - A; L2 = max(float(d @ d), 1e-9)
         t = np.clip(((co[:, :2] - A) @ d) / L2, 0, 1); dist = np.linalg.norm(co[:, :2] - (A + t[:, None] * d), axis=1)
         zf = a[2] + (b[2] - a[2]) * t
-        weight = np.where((dist < a[3] / 2 + 0.35) & (co[:, 2] < zf + h + 0.3), np.minimum(weight, NARROW_CARVE / CARVE), weight)
+        weight = np.where((dist < a[3] / 2 + 0.35) & (co[:, 2] < zf + h + 0.3), np.minimum(weight, (CREV_CARVE if KIND[n] == "crevice" else NARROW_CARVE) / CARVE), weight)
 for w in np.unique(weight): vg.add(np.nonzero(weight == w)[0].tolist(), float(w), "REPLACE")
 tex = bpy.data.textures.new("rocknoise", type="CLOUDS"); tex.noise_scale = 0.9; tex.noise_depth = 3
 dm = cave.modifiers.new("carve", "DISPLACE"); dm.texture = tex; dm.texture_coords = "GLOBAL"
@@ -227,6 +229,7 @@ for name, pts, h, _, walk in TUNNELS:
             t = i / n
             if kind == "tunnel" and L * min(t, 1 - t) < 1.2 and (t < 0.5 and a is pts[0] and not near_other(name, a) or t > 0.5 and b is pts[-1] and not near_other(name, b)): continue   # 진짜 막다른 끝 1.2 m 만 뺀다
             P = A.lerp(B_, t); zo = 0.6 if kind == "crawl" else 1.0; o = P + Vector((0, 0, zo)); samples += 1
+            if kind.startswith("crevice"): continue            # 바위 틈: 틈 벽 바위를 세운 뒤 아래(6b)에서 잰다
             if kind != "tunnel":                                 # 개구멍·대피소: 바위 속 구간의 폭이 사람은 들어가고 괴물은 못 들어가는가
                 inside = bt.room_of(B["R"], (P.x, P.y)) or any(bt.proj(pts2, (P.x, P.y))[0] < pts2[0][3] / 2 + 0.5 for n2, pts2, _, _, wk in TUNNELS if wk)
                 if not inside and L * t < L - 0.3:
@@ -286,7 +289,7 @@ def inside_other(name, p, margin=0.1):
     if any(x0 - margin < p.x < x1 + margin and y0 - margin < p.y < y1 + margin for _, x0, x1, y0, y1, _, _ in ROOMS): return True
     return any(n2 != name and bt.proj(pts2, q)[0] < max(pts2[0][3], pts2[-1][3]) / 2 + margin for n2, pts2, *_ in TUNNELS if KIND[n2] == "tunnel")
 tmb = {}
-MOUTHS = [Vector((pts[0][0], pts[0][1], 0)) for n, pts, *_ in TUNNELS if KIND[n] != "tunnel"] +          [Vector((pts[-1][0], pts[-1][1], 0)) for n, pts, *_ in TUNNELS if KIND[n] == "crawl"]      # 개구멍·대피소 입구 — 앞에 갱목을 세우지 않는다 (09-24 캡처: 대피소를 기둥이 가렸다)
+MOUTHS = [Vector((pts[0][0], pts[0][1], 0)) for n, pts, *_ in TUNNELS if KIND[n] != "tunnel"] +          [Vector((pts[-1][0], pts[-1][1], 0)) for n, pts, *_ in TUNNELS if KIND[n] in ("crawl", "crevice")]      # 개구멍·대피소 입구 — 앞에 갱목을 세우지 않는다 (09-24 캡처: 대피소를 기둥이 가렸다)
 for name, pts, h, timber, _ in TUNNELS:
     if not timber: continue
     for a, b in zip(pts, pts[1:]):
@@ -331,11 +334,68 @@ for zz in (0.5, 1.1):
 box_verts(bm, Vector(((Z2["x0"] + Z2["x1"]) / 2, Z2["y1"] - 0.2, bt.SEAM + 1.25)), X, Y, Z, 0.45, 0.02, 0.28)
 o = new_obj("PRP_Fence", bm, M_TIMB); box_uv(o.data, UV_WALL * 2)
 
+# ---- 6b. R2b 바위 틈: 틈 양쪽 벽 바위(안쪽 면 들쭉날쭉 — 틈 폭 0.45~0.55 m 를 지킨다) + 입구 양쪽 큰 바위 더미
+CREVS = B.get("crevices", [])
+def rock_lump(bm, c, ax, r, fix):
+    """울퉁불퉁 모난 바위 한 덩이: 공을 방향마다 다르게 부풀리고(0.7~1.2) 축마다 늘인다 — ax = (옆, 앞뒤, 위) 배율 벡터 셋"""
+    m = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=1.0); ph_ = [rnd.random() * 6.283 for _ in range(4)]   # 면이 큰 공 = 모난 바위
+    for vv in m["verts"]:
+        q = vv.co.normalized(); k = 0.92 + 0.16 * math.sin(3 * q.x + ph_[0]) + 0.12 * math.sin(4 * q.y + ph_[1]) + 0.1 * math.sin(5 * q.z + ph_[2]) + 0.08 * math.sin(9 * (q.x + q.z) + ph_[3])
+        vv.co = fix(c + ax[0] * (q.x * r[0] * k) + ax[1] * (q.y * r[1] * k) + ax[2] * (q.z * r[2] * k))   # 바로 고친다 — 다음 공을 만들면 앞 공의 점 참조가 끊긴다
+def boulders(bm, M, d, l, z):
+    """입구 양쪽 큰 바위 둘씩 + 틈 위를 덮는 바위 하나 (d = 굴 쪽에서 틈 안쪽 방향). 굴 쪽으로 0.5 m 까지만 나오고, 틈 폭 안으로는 안 들어온다"""
+    M0 = Vector((M.x, M.y, 0))
+    def fixer(sgn):
+        def fix(co):
+            rel = co - M0; lat = rel.dot(l); fwd = rel.dot(d)
+            if sgn and sgn * lat < bt.CREV_W / 2 + 0.02: co = co + l * (sgn * (bt.CREV_W / 2 + 0.02) - lat)   # 틈 안으로 삐져나온 곳은 밀어낸다
+            if fwd < -0.5: co = co + d * (-0.5 - fwd)                                                          # 굴 쪽으로 0.5 m 까지만
+            if not sgn and co.z < z + 2.05: co = Vector((co.x, co.y, z + 2.05))                                # 위 바위 밑면 2.05 m
+            return co
+        return fix
+    for sgn in (-1, 1):
+        for u, v, r, hz in ((0.37, -0.05, (0.45, 0.45, 1.2), 1.1), (1.0, 0.0, (0.45, 0.4, 0.65), 0.5)):   # 큰 바위가 파낸 입구 가장자리(틈 밖 0.25~0.5 m)를 덮는다
+            rock_lump(bm, M0 + l * (sgn * (bt.CREV_W / 2 + u)) + d * v + Z * (z + hz), (l, d, Z), r, fixer(sgn))
+    rock_lump(bm, M0 + d * 0.0 + Z * (z + bt.CREV_H + 0.2), (l, d, Z), (0.95, 0.45, 0.45), fixer(0))       # 위 바위
+crev_objs = []
+for i, (name, kind, mouth, end, n) in enumerate(CREVS, 1):         # 틈은 동굴 그물에 파여 있다(위 1.) — 여기서는 입구 바위만
+    pts = next(t for t in TUNNELS if t[0] == name)[1]
+    def inside_walk(q):                                          # 이 자리가 걷는 굴·방 안인가
+        return any(r[1] <= q[0] <= r[2] and r[3] <= q[1] <= r[4] for r in B["R"]) or any(bt.proj(t_[1], q)[0] < t_[1][0][3] / 2 for t_ in TUNNELS if t_[4])   # 방은 여유 없이 (room_of 의 0.5 m 여유로 입구 바위가 벽 속에 묻혔다)
+    L = bt.seg_len(pts); ss = [k * 0.05 for k in range(int(L / 0.05) + 1)]
+    rock = [s_ for s_ in ss if not inside_walk(bt.point_at(pts, s_))]
+    ra, rb = rock[0], (rock[-1] if kind == "through" else bt.CREV_SLIT)
+    bm = bmesh.new()
+    for s_, sgn_ in ((ra, 1),) + (((rb, -1),) if kind == "through" else ()):   # 입구마다: 굴 쪽에서 틈 안쪽 방향
+        q0, q1 = Vector((*bt.point_at(pts, s_), 0)), Vector((*bt.point_at(pts, min(max(s_ + 0.3 * sgn_, 0), L)), 0))
+        d_ = (q1 - q0).normalized(); z_ = bt.proj(pts, (q0.x, q0.y))[2]
+        boulders(bm, q0, d_, Vector((-d_.y, d_.x, 0)), z_)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    o = new_obj("PRP_Crevice_%d" % i, bm, M_WALL); box_uv(o.data, UV_WALL)             # 벽과 같은 바위 겉 — 덧붙인 돌처럼 안 보이게
+    for pl_ in o.data.polygons: pl_.use_smooth = False                # 모난 바위
+    crev_objs.append((o, name, kind, pts, ra, rb))
+
 # 울타리 충돌까지 넣고 걷는 길 폭을 다시 잰다 — Unity 는 울타리에 충돌을 붙인다
 deps = bpy.context.evaluated_depsgraph_get()
 def world_bvh(o_):
     b_ = bmesh.new(); b_.from_object(o_, deps); b_.transform(o_.matrix_world); t_ = BVHTree.FromBMesh(b_); b_.free(); return t_
-prop_bvh = [world_bvh(bpy.data.objects["PRP_Fence"])]
+prop_bvh = [world_bvh(bpy.data.objects["PRP_Fence"])] + [world_bvh(c[0]) for c in crev_objs]
+crev_bad = []                                                # 틈 폭 0.4~0.6 m (바위 틈 벽 사이, 높이 0.5 · 1.0 · 1.5 m) · 막힌 틈 숨는 자리 바닥·천장
+crev_w = []
+for o_, name, kind, pts, ra, rb in crev_objs:                # 틈 속(입구 0.3 m 안쪽부터): 가운데 선에서 양옆 벽까지 (동굴 그물 = ray)
+    for s in [ra + 0.3 + (rb - 0.3 - ra - 0.3) * k / 10 for k in range(11)]:
+        q = bt.point_at(pts, s); q2 = bt.point_at(pts, s + 0.05); dd = Vector((q2[0] - q[0], q2[1] - q[1], 0)).normalized(); ll = Vector((-dd.y, dd.x, 0))
+        for hz in (0.5, 1.0, 1.5):
+            P = Vector((q[0], q[1], bt.proj(pts, q)[2] + hz))
+            w = sum(h_ if h_ is not None else 9 for h_ in (ray(P, ll * sg, 1.0) for sg in (-1, 1))); crev_w.append(w)
+            if not 0.4 <= w <= 0.62: crev_bad.append((name, round(s, 1), hz, round(w, 2)))
+for name, kind, mouth, end, n in CREVS:
+    if kind != "closed": continue
+    H = Vector(end) + Z * 1.0; dn, up = ray(H, -Z, 2.0), ray(H, Z, 3.0)
+    if dn is None or up is None or abs(dn - 1.0) > 0.2 or up + 1.0 < 2.0: crev_bad.append((name, "hide spot floor/ceiling", dn, up))
+print("CHECK booth crevices: %d (through %d · closed %d) · crack width %.2f~%.2f m · problems %d %s" % (len(CREVS), sum(c[1] == "through" for c in CREVS), sum(c[1] == "closed" for c in CREVS),
+      min(crev_w or [0]), max(crev_w or [0]), len(crev_bad), crev_bad[:6]))
+assert not crev_bad, "FAIL: 바위 틈 폭(0.4~0.6 m) · 숨는 자리"
 def ray_all(o, d, far):
     best = ray(o, d, far)
     for t_ in prop_bvh:
@@ -376,6 +436,8 @@ for name, pts, h, _, _ in TUNNELS:                              # 검사용: 붙
         empty("SLOT_Mouth_%s_%d" % (name, k), end[:3])
         q = bt.point_at(pts, s_in); empty("SLOT_In_%s_%d" % (name, k), (*q, bt.proj(pts, q)[2]))
     q = bt.point_at(pts, L / 2); empty("SLOT_Mid_%s" % name, (*q, bt.proj(pts, q)[2]))
+for i, (name, kind, mouth, end, n) in enumerate(CREVS, 1):   # R2b: 입구 벽 점 · 숨는 자리(막힌) / 반대편 끝(뚫린)
+    empty("SLOT_Crevice_%d_Mouth" % i, mouth); empty("SLOT_Crevice_%d_%s" % (i, "Hide" if kind == "closed" else "Out"), end)
 empty("SPAWN_Player", B["spawn_player"]); empty("LOOK_Player", B["look_player"])
 hx0_, hx1_, hy0_, hy1_ = B["home_rect"]; empty("SLOT_Home_A", (hx0_, hy0_, 0.0)); empty("SLOT_Home_B", (hx1_, hy1_, 0.0))   # 정거장 광장 네모 (검사 booth_return 의 "집")
 empty("SPAWN_Stalker", B["spawn_stalker"]); empty("LOOK_Stalker", B["look_stalker"])
@@ -391,7 +453,7 @@ cnt = lambda pre: sum(n_.startswith(pre) for n_ in names)
 print("CHECK booth export: %s (%d KB bin) · images %d missing %d · SHL %d COL %d pockets %d gapBig %d gapSmall %d lights %d dead %d blocks %d crawls %d niches %d"
       % (os.path.basename(OUT), os.path.getsize(OUT[:-5] + ".bin") // 1024, len(uris), len(missing), cnt("SHL_"), cnt("COL_"), cnt("SLOT_Pocket_"),
          cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d" % cnt("SLOT_Mouth_"))
-assert not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
+assert R2B or not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
 assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS), "FAIL: 노드 수"
 
 # ================= 9. 그림: 위에서 본 모양 · 1인칭
@@ -406,7 +468,8 @@ if not FAST:
         for v in bm.verts: v.co += Vector(p) + Vector((0, 0, 14))
         o = new_obj("MARK", bm); o.color = col; return o
     marks = [marker(p, (0.95, 0.5, 0.1, 1)) for p in pocket_pts] + [marker(p, (0.85, 0.15, 0.1, 1), 1.1) for p in GAP_BIG] \
-        + [marker((x, y, fz), (1.0, 0.85, 0.3, 1), 0.6) for x, y, fz, _ in LIGHTS] + [marker(B["spawn_player"], (0.3, 0.9, 0.4, 1), 1.3)]         + [marker((bx, by, bz), (0.2, 0.45, 0.95, 1) if g == 1 else (0.7, 0.25, 0.85, 1), 1.2) for g, bx, by, bz, *_ in BLOCKS]   # 막힘: 파랑 = 묶음 1(F5) · 보라 = 묶음 2(F6)
+        + [marker((x, y, fz), (1.0, 0.85, 0.3, 1), 0.6) for x, y, fz, _ in LIGHTS] + [marker(B["spawn_player"], (0.3, 0.9, 0.4, 1), 1.3)]         + [marker((bx, by, bz), (0.2, 0.45, 0.95, 1) if g == 1 else (0.7, 0.25, 0.85, 1), 1.2) for g, bx, by, bz, *_ in BLOCKS] \
+        + [marker(p_, (0.1, 0.85, 0.85, 1) if k_ == "through" else (0.95, 0.2, 0.75, 1), 1.0) for _, k_, m_, e_, _ in CREVS for p_ in ((m_, e_) if k_ == "through" else (m_,))]   # 막힘: 파랑 = 묶음 1(F5) · 보라 = 묶음 2(F6) · 바위 틈: 청록 = 뚫린 · 분홍 = 막힌
     sc.render.engine = "BLENDER_WORKBENCH"
     sh = sc.display.shading; sh.light = "STUDIO"; sh.color_type = "OBJECT"; sh.show_backface_culling = True; sh.show_cavity = True
     sc.world = bpy.data.worlds.new("W") if sc.world is None else sc.world
@@ -440,6 +503,15 @@ if not FAST:
              ("fp_7_crawl", eye((crawl0[0][0] - 3.0, crawl0[0][1], crawl0[0][2] + 0.4)), (crawl0[0][0], crawl0[0][1] - 1.6, crawl0[0][2] + 0.5)),   # ①–② 윗줄에서 아랫줄로 가는 개구멍 입구
              ("fp_8_niche", eye(((niche0[0][0] * 3 - niche0[-1][0] * 1) / 2, (niche0[0][1] * 3 - niche0[-1][1]) / 2, niche0[0][2])), (niche0[-1][0], niche0[-1][1], niche0[0][2] + 1.2)),   # 좁은 대피소
              ("fp_9_south_lit", eye((sp[0], sp[1] - 8, 0)), (0.0, -30.0, 1.2))]                                # 불 켜진 아랫길 → 펌프실
+    if R2B:                                                        # 바위 틈 1인칭: 뚫린 틈(광장 → 큰길) · 막힌 틈(큰길) 밖에서 · 숨는 자리에서 밖을 · ② 기둥 사이 벽의 막힌 틈 · ①–② 사이 뚫린 틈
+        cv = {c[0]: c for c in CREVS}
+        def outside(nm_, back=3.2, side=0.0):
+            _, k_, m_, e_, n_ = cv[nm_]; n_ = Vector((n_[0], n_[1], 0)); l_ = Vector((-n_.y, n_.x, 0)); M = Vector(m_)
+            return eye(M - n_ * back + l_ * side), (M.x + n_.x * 1.5, M.y + n_.y * 1.5, M.z + 1.1)
+        def hide(nm_):
+            _, k_, m_, e_, n_ = cv[nm_]; return eye(Vector(e_) + Vector((n_[0], n_[1], 0)) * 0.3, 1.6), (m_[0] - n_[0] * 2, m_[1] - n_[1] * 2, m_[2] + 1.2)
+        SHOTS = [("r2b_1_through_plaza", *outside("c_plaza", 3.0, 1.0)), ("r2b_2_closed_main", *outside("cr_main_a", 1.7, 1.2)), ("r2b_3_closed_main_far", *outside("cr_main_a", 1.7, -4.5)),
+                 ("r2b_4_hide_looking_out", *hide("cr_main_a")), ("r2b_5_closed_pillars", *outside("cr_z2e", 2.6, 0.8)), ("r2b_6_through_link12", *outside("c_link12", 1.0, 0.0))]
     for nm, eye_, at in SHOTS:
         cam.location = eye_; q = (Vector(at) - Vector(eye_)).to_track_quat("-Z", "Y"); cam.rotation_euler = q.to_euler()
         lamp.location = Vector(eye_) + Vector((0, 0, 0.1)); lamp.rotation_euler = q.to_euler()
