@@ -55,7 +55,7 @@ public class Intro : MonoBehaviour
         if (only == "" || only == "intro")
             StartCoroutine(CheckIntro());
         else
-            StartGame();
+            SceneManager.LoadScene(only == "booth" ? Tuning.BOOTH_SCENE : "M1_Tunnel");   // 한 구간만: 부스 검사는 부스 맵, 나머지는 복도
     }
 
     void Update()
@@ -109,7 +109,7 @@ public class Intro : MonoBehaviour
             items[i].color = i == sel ? Color.white : new Color(0.45f, 0.45f, 0.45f);
     }
 
-    void StartGame() => SceneManager.LoadScene("M1_Tunnel");
+    void StartGame() => SceneManager.LoadScene(Tuning.BOOTH_SCENE);   // MAP1: 사람은 부스 맵으로 (42 m 복도 M1_Tunnel 은 검사용)
 
     // 검사 (지침 1-1): ① 0.5 s 에 로고만 보이고, 키를 눌러도 INTRO_LOGO_MIN_S 전엔 안 넘어간다 ② 그 뒤 키 → 메뉴 ③ 소리 크기 좌우 5칸 = 0.5 → 다시 1.0 ④ 시작 → 갱도(M1Check 가 이어서)
     IEnumerator CheckIntro()
@@ -136,7 +136,7 @@ public class Intro : MonoBehaviour
         M1Check.Check("intro_volume_setting_applies", sel == VolumeItem && Mathf.Approximately(half, 0.5f) && Mathf.Approximately(AudioListener.volume, 1f),
             $"selected {sel} (want {VolumeItem}), after 5 left {half:F2} (want 0.50), after 5 right {AudioListener.volume:F2} (want 1.00)");
         yield return Press(kb, Key.UpArrow);
-        yield return Press(kb, Key.Enter);                     // 시작 → M1_Tunnel
+        yield return Press(kb, Key.Enter);                     // 시작 → 부스 맵 (사람 길). 부스 검사 뒤 복도로 넘어간다
     }
 
     static void Snap(string name)

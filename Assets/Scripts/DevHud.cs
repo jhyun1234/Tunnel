@@ -5,9 +5,12 @@ using UnityEngine.Rendering;
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
 // 시작할 때 꺼져 있다(UI-1d) — F1 로 켠다. 손잡이 키는 꺼져 있어도 먹는다.
 // V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · 9 괴물을 내 앞에 세움 · N 선 괴물의 동작 차례로 · U 배회 걸음 A/B/C (3D-③) · I M 목 붉기 −/+ · Q R 목 밝기 ÷× 1.15 · Z X 세운 괴물 목 길이 −/+ · C B 목 빼는 시간 −/+ (3D-③b M1e) · F1 표시 끄기
+// MAP1 부스 맵: 숫자패드 − + 켜진 전등 밝기 ÷×1.25 · F5~F8 막힘 스위치 1~4 켜기/끄기 (누르면 표시가 켜진다)
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
+    public Light[] boothLights = new Light[0];             // MAP1: 켜진 전등 (BuildM1.PlaceBoothLights)
+    public GameObject[] boothBlocks = new GameObject[0];   // MAP1: 막힘 스위치 돌무더기 BLK_1..4
     public Player player;
     public Volume volume;
     public Stalker stalker;
@@ -49,6 +52,7 @@ public class DevHud : MonoBehaviour
         if (kb.equalsKey.wasPressedThisFrame) lamp.energy *= 1.25f;
         if (kb.minusKey.wasPressedThisFrame) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;
+        BoothKeys(kb);
         if ((kb.digit0Key.wasPressedThisFrame || kb.numpad0Key.wasPressedThisFrame) && stalker != null) stalker.enabled = !stalker.enabled;
         // 9 = 판정용: 괴물 행동을 끄고 내 앞 2.5 m 에 나를 보게 세운다 (사용자 09-17 "계속 접근해서 확인할 수 없다"). 0 으로 다시 켠다
         if ((kb.digit9Key.wasPressedThisFrame || kb.numpad9Key.wasPressedThisFrame) && stalker != null)
@@ -119,6 +123,23 @@ public class DevHud : MonoBehaviour
         }
     }
 
+    // MAP1 판정 손잡이: 받은 숫자를 Tuning.BOOTH_LIGHT_ENERGY · BOOTH_BLOCKS 에
+    void BoothKeys(Keyboard kb)
+    {
+        if (boothLights.Length > 0 && (kb.numpadMinusKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame))
+        {
+            float m = kb.numpadPlusKey.wasPressedThisFrame ? 1.25f : 1f / 1.25f;
+            foreach (var l in boothLights) l.intensity *= m;
+            show = true;
+        }
+        var fk = new[] { kb.f5Key, kb.f6Key, kb.f7Key, kb.f8Key };
+        for (int i = 0; i < boothBlocks.Length && i < fk.Length; i++)
+            if (fk[i].wasPressedThisFrame) { boothBlocks[i].SetActive(!boothBlocks[i].activeSelf); show = true; }
+    }
+
+    string BoothLine() => boothLights.Length == 0 ? "" :
+        $"\nbooth lights {boothLights[0].intensity:0.00} (BOOTH_LIGHT_ENERGY {Tuning.BOOTH_LIGHT_ENERGY:0.00}) [num - +]   blocks {string.Join(" ", System.Array.ConvertAll(boothBlocks, b => b.activeSelf ? "X" : "o"))} [F5 F6 F7 F8] (X = 막힘: 크로스컷2 · 크로스컷3 · 기둥 사이 동쪽 · 운반갱 45 m)";
+
     [System.NonSerialized] public bool walkPreview;        // U: 세운 괴물이 걸어오기를 되풀이 (검사도 본다)
     [System.NonSerialized] public bool previewOn = true;   // 사보타주 nopreview 가 끈다 (고치기 전: U 가 세운 괴물에 안 먹던 상태)
 
@@ -140,10 +161,10 @@ public class DevHud : MonoBehaviour
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
             (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J])\nhead test {StalkerAnim.HeadTestName(an.headTest)} [G]  face {an.HeadYaw:0}° (max {an.headYawMax:0}° [T Y])  tilt {an.HeadTiltNow:0}° (listen {an.headTilt:0}° [O P])\nneck out {an.NeckOutNow * 100f * Tuning.STALKER_MODEL_SCALE:0} cm in game (model {an.NeckOutNow * 100f:0} of {an.neckWant * 100f:0} cm [Z X], max {Tuning.STALKER_NECK_OUT_MAX_M * 100f:0})  full out in {an.neckOutS:0.00} s [C B]{(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
             (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   neck red {lk.neckRed:0.0} [I M] bright x{lk.neckBright:0.00} [Q R]\n{LureLine(lk)}   [9] freeze monster in front of me · [0] on/off" : "");
-        GUI.Label(new Rect(10, 10, 900, 176),
+        GUI.Label(new Rect(10, 10, 1100, 200),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + BoothLine() + monster);
     }
 }

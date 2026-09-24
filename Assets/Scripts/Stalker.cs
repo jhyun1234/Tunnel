@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 // 괴물 (M3 귀·배회·조사·수색 + M4 눈·빛·alert·chase·catch + M5 체력·스턴·철수). Godot Stalker.gd 에서 옮겼다.
-// 천장 이동은 모델 뒤. 던진 곡괭이(M6)는 ThrownPick 이 Hit 을 부른다 — 휘두른 한 대와 같다. 길찾기 없음 — 직선 갱도라 목적지로 곧장 간다.
+// 천장 이동은 모델 뒤. 던진 곡괭이(M6)는 ThrownPick 이 Hit 을 부른다 — 휘두른 한 대와 같다.
+// 길: 부스 맵(MAP1, zMax ≤ zMin)은 길찾기 바닥(NavMesh)의 꺾는 점을 따라간다. 42 m 복도는 길찾기 바닥을 안 굽는다 — 길이 없으면 목적지로 곧장(옛 동작 그대로).
 // 귀: 1타 = 소리 쪽으로 한 칸만, STALKER_HEAR_CONFIRM_S 안에 같은 자리에서 한 번 더 = 그 자리까지 (설계서 v2 Step 5).
 // 눈: 램프 켜진 몸이 앞 원뿔 STALKER_EYE_DEG 안 STALKER_EYE_M 안, 시선이 안 가려야. 빛: 켜진 램프가 STALKER_LIGHT_M 안에 보이면 배회 속도로 다가간다.
 // 체력(설계서 v2 Step 6, 교차 검토): 곡괭이 한 대 25 + 스턴 1.5 s(포효 0.7 + 뒷걸음 0.8). 철수선 30 이하가 되는 순간 철수 —
@@ -17,7 +19,7 @@ public class Stalker : MonoBehaviour
     public Transform playerHead;
     public Player playerBody;
     public Headlamp lamp;
-    public float zMin, zMax;                       // 갱도 축 범위 — 씬 생성기가 넣는다
+    public float zMin, zMax;                       // 갱도 축 범위 — 씬 생성기가 넣는다. 부스 맵은 0·0 (= 길찾기)
     public Vector3 restartPos;                     // 잡힌 뒤 플레이어가 서는 자리 (복도 시작점)
     public Vector3 homePos;                        // 잡힌 뒤 괴물이 돌아가는 자리 (북쪽 끝)
     public Vector3[] cracks = new Vector3[0];      // 갈라진 틈 — 철수 뒤 재등장 자리
@@ -68,6 +70,23 @@ public class Stalker : MonoBehaviour
     bool hasTarget, lightChase;
     float pause, dwell, vy, stuck, alertLeft, unseen, catchT, stunLeft, investigateSpeed, retreatSide, noiseTime = -99f;
     readonly List<Vector3> spots = new List<Vector3>();
+    readonly List<Vector3> corners = new List<Vector3>();   // 길찾기 꺾는 점 ([0] = 출발)
+    NavMeshPath navPath;
+    int corner;
+    Vector3 climbDir;
+    float climbTop;
+    bool Nav => zMax <= zMin;
+    static readonly RaycastHit[] rayBuf = new RaycastHit[16];
+    // 제 몸(충돌 캡슐)을 빼고 가장 가까운 것. 캡슐 안에서 쏜 광선이 제 캡슐에 맞았다 (부스 첫 검사 09-24)
+    public static bool RayIgnore(Vector3 o, Vector3 d, float max, int mask, Collider self, out RaycastHit best)
+    {
+        int n = Physics.RaycastNonAlloc(o, d, rayBuf, max, mask, QueryTriggerInteraction.Ignore);
+        best = default; float bd = float.MaxValue; bool any = false;
+        for (int i = 0; i < n; i++)
+            if (rayBuf[i].collider != self && rayBuf[i].distance < bd) { bd = rayBuf[i].distance; best = rayBuf[i]; any = true; }
+        return any;
+    }
+    public Vector3 ClimbFacing => Nav && climbDir != Vector3.zero ? climbDir : Vector3.right * (transform.position.x >= 0f ? 1f : -1f);   // StalkerAnim: 벽타기 때 몸을 벽 정면으로
     readonly System.Random rng = new System.Random(Tuning.MAP_SEED + 200);
     readonly System.Random heardRng = new System.Random(Tuning.MAP_SEED + 201);   // "들었나?"는 제 난수로 — rng 를 같이 쓰면 수색 자리 차례가 바뀐다 (09-20: 옛 수색 검사가 램프에 들켜 빠졌다)
     static Texture2D blackTex;
@@ -279,18 +298,40 @@ public class Stalker : MonoBehaviour
         float d = (Tuning.STALKER_RETREAT_MIN_M + Tuning.STALKER_RETREAT_MAX_M) * 0.5f;
         retreatSide = transform.position.x >= 0f ? 1f : -1f;
         Vector3 spot = player.position + dir * d;
-        spot.x = retreatSide * Tuning.STALKER_LANE_X;
-        spot.y = transform.position.y;
-        spot.z = Mathf.Clamp(spot.z, zMin, zMax);
+        if (Nav)
+        {
+            if (NavMesh.SamplePosition(spot, out NavMeshHit h, Tuning.STALKER_RETREAT_MAX_M, NavMesh.AllAreas)) spot = h.position;
+        }
+        else
+        {
+            spot.x = retreatSide * Tuning.STALKER_LANE_X;
+            spot.y = transform.position.y;
+            spot.z = Mathf.Clamp(spot.z, zMin, zMax);
+        }
         retreatSpot = spot;
         SetTarget(spot);
         state = State.Retreat;
     }
 
-    // 벽에 붙어 오른다. TUNNEL_ARCH_Y 에 닿으면 사라진다
+    // 벽에 붙어 오른다. TUNNEL_ARCH_Y 에 닿으면 사라진다. 부스 맵: 가장 가까운 벽으로, 그 자리 천장까지
     void UpdateClimb(float dt)
     {
         Vector3 p = transform.position;
+        if (Nav)
+        {
+            if (climbDir == Vector3.zero) StartClimbNav();
+            p += climbDir * Mathf.Min(Tuning.STALKER_WALL_SPEED * dt, Mathf.Max(0f, WallDist(p) - Tuning.STALKER_R));
+            p.y += Tuning.STALKER_WALL_SPEED * dt;
+            transform.position = p;
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(climbDir), 5f * dt);
+            if (p.y < climbTop)
+                return;
+            climbDir = Vector3.zero;
+            state = State.Hidden;
+            hiddenLeft = Tuning.STALKER_REGEN_S;
+            foreach (var r in renderers) r.enabled = false;
+            return;
+        }
         p.x = Mathf.MoveTowards(p.x, retreatSide * (Tuning.TUNNEL_WALL_X - Tuning.STALKER_R), Tuning.STALKER_WALL_SPEED * dt);
         p.y += Tuning.STALKER_WALL_SPEED * dt;
         transform.position = p;
@@ -301,6 +342,22 @@ public class Stalker : MonoBehaviour
         hiddenLeft = Tuning.STALKER_REGEN_S;
         foreach (var r in renderers) r.enabled = false;
     }
+
+    // 부스 맵 벽타기: 8 방향 중 가장 가까운 벽 쪽, 오를 높이 = 그 자리 천장 − 캡슐 반쯤 (못 재면 2 m)
+    void StartClimbNav()
+    {
+        Vector3 at = transform.position + Vector3.up * 1.2f;
+        float best = 99f;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 d = Quaternion.Euler(0f, i * 45f, 0f) * Vector3.forward;
+            if (RayIgnore(at, d, 8f, RayMask, cc, out RaycastHit h) && h.distance < best) { best = h.distance; climbDir = d; }
+        }
+        if (climbDir == Vector3.zero) climbDir = transform.forward;
+        climbTop = transform.position.y + (RayIgnore(at, Vector3.up, 6f, RayMask, cc, out RaycastHit up) ? up.distance + 1.2f - 0.4f : 2f);
+    }
+
+    float WallDist(Vector3 p) => RayIgnore(new Vector3(p.x, transform.position.y + 1.2f, p.z), climbDir, 8f, RayMask, cc, out RaycastHit h) ? h.distance : 0f;
 
     // 숨어서 회복. 끝나면 플레이어에서 먼 틈에서 체력 100 으로 배회
     void UpdateHidden(float dt)
@@ -346,11 +403,20 @@ public class Stalker : MonoBehaviour
     // 눈에서 플레이어 머리까지 시선이 안 가리는가
     bool Clear()
     {
-        Vector3 eye = transform.position + Vector3.up * Tuning.STALKER_EYE_H;
+        Vector3 eye = transform.position + Vector3.up * EyeH();
         Vector3 to = playerHead.position - eye;
         if (!Physics.Raycast(eye, to.normalized, out RaycastHit hit, to.magnitude, RayMask, QueryTriggerInteraction.Ignore))
             return true;
         return hit.transform == player || hit.transform.IsChildOf(player);
+    }
+
+    // 눈 높이: 부스 맵은 천장이 2.2~2.7 m 라 STALKER_EYE_H(2.4)가 바위 속일 수 있다 — 그 자리 천장 밑 0.3 m 로 누른다
+    float EyeH()
+    {
+        if (!Nav) return Tuning.STALKER_EYE_H;
+        Vector3 at = transform.position + Vector3.up;
+        return RayIgnore(at, Vector3.up, Tuning.STALKER_EYE_H, RayMask, cc, out RaycastHit h)
+            ? Mathf.Min(Tuning.STALKER_EYE_H, 1f + h.distance - 0.3f) : Tuning.STALKER_EYE_H;
     }
 
     void StartAlert()
@@ -461,8 +527,19 @@ public class Stalker : MonoBehaviour
 
     void SetTarget(Vector3 t)
     {
-        t.x = Mathf.Clamp(t.x, -Tuning.STALKER_LANE_X, Tuning.STALKER_LANE_X);
-        t.z = Mathf.Clamp(t.z, zMin, zMax);
+        corners.Clear();
+        corner = 1;
+        if (Nav)
+        {
+            if (NavMesh.SamplePosition(t, out NavMeshHit h, 4f, NavMesh.AllAreas)) t = h.position;
+            if (NavMesh.CalculatePath(transform.position, t, NavMesh.AllAreas, navPath ??= new NavMeshPath()) && navPath.corners.Length > 1)
+                corners.AddRange(navPath.corners);           // 길이 없으면(바닥 밖) 곧장 — 막히면 STALKER_STUCK_S 그물
+        }
+        else
+        {
+            t.x = Mathf.Clamp(t.x, -Tuning.STALKER_LANE_X, Tuning.STALKER_LANE_X);
+            t.z = Mathf.Clamp(t.z, zMin, zMax);
+        }
         t.y = transform.position.y;
         target = t;
         hasTarget = true;
@@ -470,9 +547,11 @@ public class Stalker : MonoBehaviour
 
     Vector3 RandomNear(Vector3 center, float range)
     {
-        float x = (float)(rng.NextDouble() * 2.0 - 1.0) * Tuning.STALKER_LANE_X;
-        float z = center.z + (float)(rng.NextDouble() * 2.0 - 1.0) * range;
-        return new Vector3(x, center.y, z);
+        float u = (float)(rng.NextDouble() * 2.0 - 1.0), v = (float)(rng.NextDouble() * 2.0 - 1.0);
+        if (!Nav)
+            return new Vector3(u * Tuning.STALKER_LANE_X, center.y, center.z + v * range);
+        // ponytail: 네모 안 무작위 점을 바닥에 붙인다 — 벽 너머 다른 갱도에 붙으면 길이가 range 보다 길다. 배회 범위를 덩어리 단위로 묶을 때 고친다
+        return NavMesh.SamplePosition(center + new Vector3(u * range, 0f, v * range), out NavMeshHit h, range, NavMesh.AllAreas) ? h.position : center;
     }
 
     void Face(Vector3 at, float dt)
@@ -490,8 +569,19 @@ public class Stalker : MonoBehaviour
         float d = to.magnitude;
         if (d < Tuning.STALKER_ARRIVE_M)
             return true;
-        Vector3 dir = to / d;
-        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), 10f * dt);
+        if (Nav && state == State.Investigate && d < 3f && RayIgnore(transform.position + Vector3.up * 1.5f, to, Tuning.STALKER_WALL_STOP_M, RayMask, cc, out _))
+            return true;                                       // 광맥은 벽에 있다 — 벽 앞에서 멈춰 벽 쪽으로 더듬는다
+        while (corner < corners.Count - 1 && Flat(corners[corner] - transform.position) < 0.4f)
+            corner++;                                          // 꺾는 점에 닿으면 다음 점으로
+        if (corner < corners.Count - 1)
+        {
+            to = corners[corner] - transform.position;
+            to.y = 0f;
+            d = Mathf.Max(to.magnitude, speed * dt);           // 중간 점에서는 안 늦춘다
+        }
+        Vector3 dir = to / Mathf.Max(to.magnitude, 1e-4f);
+        Vector3 face = corners.Count > 1 ? Flat3(LookAhead(1.6f) - transform.position) : dir;   // 몸은 꺾는 점으로, 얼굴은 길 1.6 m 앞 — 숙인 머리가 몸보다 1 m 앞이라 모퉁이 안쪽 벽을 스쳤다 (09-24)
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(face.sqrMagnitude > 1e-4f ? face.normalized : dir), 10f * dt);
         vy = cc.isGrounded ? -1f : vy - Tuning.GRAVITY * dt;
         cc.Move((dir * Mathf.Min(speed, d / Mathf.Max(dt, 1e-4f)) + Vector3.up * vy) * dt);
         // 벽·플레이어에 막혀 STALKER_STUCK_S 동안 못 가면 도착으로 친다 (무한히 미는 것을 막는 그물)
@@ -500,6 +590,19 @@ public class Stalker : MonoBehaviour
             return false;
         stuck = 0f;
         return true;
+    }
+
+    // 길을 따라 지금 자리에서 dist 만큼 앞의 점
+    Vector3 LookAhead(float dist)
+    {
+        Vector3 at = transform.position;
+        for (int i = corner; i < corners.Count; i++)
+        {
+            float seg = Flat(corners[i] - at);
+            if (seg >= dist) return at + Flat3(corners[i] - at).normalized * dist;
+            dist -= seg; at = corners[i];
+        }
+        return at;
     }
 
     void Fall(float dt)

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.Rendering;
@@ -12,8 +13,9 @@ using UnityEngine.SceneManagement;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
+// -only booth 은 부스 맵(MAP1) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -251,7 +253,13 @@ public class M1Check : MonoBehaviour
         {
             var lk = stalker.GetComponentInChildren<StalkerLook>(); lk.eyeEmission = 0f; lk.Apply();
         }
-        Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} screen {Screen.width}x{Screen.height}");
+        Debug.Log($"CHECK start sabotage='{sabotage}' only='{only}' sweep={sweep} scene {SceneManager.GetActiveScene().name} screen {Screen.width}x{Screen.height}");
+        sabotageName = sabotage;
+        if (SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE)
+        {
+            StartCoroutine(BoothRun());
+            return;
+        }
         StartCoroutine(sweep ? (Array.IndexOf(args, "-bias") >= 0 ? BiasSweep() : Sweep()) : Run(fog));
     }
 
@@ -300,6 +308,298 @@ public class M1Check : MonoBehaviour
             yield break;
         }
         Finish();
+    }
+
+    // ================= MAP1 부스 한 층 맵 (제안서 docs/제안서_MAP1_부스_갱도_모양.md). 끝나면 전체 실행은 복도 씬으로 넘어간다
+    string sabotageName = "";
+
+    IEnumerator BoothRun()
+    {
+        var cc = player.GetComponent<CharacterController>();
+        stalker.enabled = false;
+        stalker.returnToIntro = false;
+        Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
+            $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
+        yield return new WaitForSeconds(1.5f);
+        yield return BoothStage(cc);
+        if (only == "")
+        {
+            SceneManager.LoadScene("M1_Tunnel");                // 복도 씬의 M1Check 가 나머지 구간을 잇는다 (fails 는 static)
+            yield break;
+        }
+        Finish();
+    }
+
+    Transform Slot(string name) => pieces.GetComponentsInChildren<Transform>(true).First(t => t.name == name);
+    static Vector3 OnNav(Vector3 p, float r = 4f) => NavMesh.SamplePosition(p, out NavMeshHit h, r, NavMesh.AllAreas) ? h.position : p;
+    static float PathLen(Vector3 a, Vector3 b)
+    {
+        var path = new NavMeshPath();
+        if (!NavMesh.CalculatePath(OnNav(a), OnNav(b), NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) return -1f;
+        float L = 0f;
+        for (int i = 1; i < path.corners.Length; i++) L += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+        return L;
+    }
+
+    IEnumerator BoothStage(CharacterController cc)
+    {
+        var kb = InputSystem.AddDevice<Keyboard>("BoothKeyboard");
+        var blocks = Enumerable.Range(1, 4).Select(i => Slot("BLK_" + i).gameObject).ToArray();
+        var model = stalker.transform.Find("Body/Model");
+        var scc = stalker.GetComponent<CharacterController>();
+        if (sabotageName == "blockcut")          // 크로스컷 1 한가운데 보이지 않는 기둥 — 길찾기 바닥은 그대로라 봇이 부딪힌다
+        {
+            var wall = new GameObject("SabotageWall").AddComponent<CapsuleCollider>();
+            wall.transform.position = OnNav(Slot("SLOT_DeadLight_5").position) + Vector3.up * 1.5f;
+            wall.radius = 1.7f; wall.height = 4f;
+        }
+        if (sabotageName == "blockleak") { blocks[0].GetComponent<Collider>().enabled = false; blocks[0].GetComponent<NavMeshObstacle>().enabled = false; }
+        if (sabotageName == "nonav") NavMesh.RemoveAllNavMeshData();
+        if (sabotageName == "tallcap") { scc.height = Tuning.STALKER_H; scc.center = Vector3.up * Tuning.STALKER_H * 0.5f; }
+        if (sabotageName == "bigmonster") model.GetComponent<StalkerAnim>().stoop = false;   // 숙이기 끔 = 선 키 그대로 (천장 밑 머리 검사가 잡는지)
+        if (sabotageName == "nocol") Slot("COL_Booth_haulB").GetComponent<Collider>().enabled = false;
+        foreach (var b in blocks) b.SetActive(false);             // 검사는 맵 전체에서 (스위치는 아래서 하나씩)
+        yield return null;
+        Vector3 spawn = OnNav(player.transform.position);
+        var pockets = FindObjectsByType<OrePocket>(FindObjectsSortMode.None).Select(pk => pk.transform.position).ToList();
+
+        // ---- 1. 걷기: 케이지 → 광맥 12곳 → 케이지. W 키로 걷고 방향만 봇이 돌린다. 걸으며 0.5 m 마다 폭·천장을 잰다
+        float faceA = PathLen(spawn, Slot("SLOT_Pocket_3").position), faceB = PathLen(spawn, Slot("SLOT_Pocket_10").position), faceC = PathLen(spawn, Slot("SLOT_Pocket_12").position);
+        int reached = 0; float walked = 0f, minW = 99f, minH = 99f, t0 = Time.time; string worstAt = "", lowAt = "";
+        var trail = new List<string> { "x,y,z" };
+        var todo = new List<Vector3>(pockets);
+        Vector3 at = spawn;
+        var legs = new List<Vector3>();
+        while (todo.Count > 0)                                        // 가까운 것부터 (길찾기 길이)
+        {
+            var next = todo.OrderBy(q => { float L = PathLen(at, q); return L < 0f ? 1e6f : L; }).First();
+            legs.Add(next); todo.Remove(next); at = next;
+        }
+        legs.Add(spawn);
+        foreach (var goal0 in legs)
+        {
+            Vector3 goal = OnNav(goal0);
+            var path = new NavMeshPath();
+            bool has = NavMesh.CalculatePath(OnNav(player.transform.position), goal, NavMesh.AllAreas, path) && path.corners.Length > 0;
+            var pts = has ? path.corners.ToList() : new List<Vector3> { goal };
+            float legLen = 0f; for (int i = 1; i < pts.Count; i++) legLen += Vector3.Distance(pts[i - 1], pts[i]);
+            float limit = Mathf.Max(legLen, Flat(goal - player.transform.position)) / Tuning.WALK_SPEED * 1.8f + 4f, t = 0f;
+            int ci = Mathf.Min(1, pts.Count - 1);
+            Vector3 last = player.transform.position; float sinceSample = 0f;
+            InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+            while (t < limit && Flat(goal - player.transform.position) > 0.9f)
+            {
+                while (ci < pts.Count - 1 && Flat(pts[ci] - player.transform.position) < 0.5f) ci++;
+                Vector3 to = Flat3(pts[ci] - player.transform.position);
+                if (to.sqrMagnitude > 1e-4f) player.transform.rotation = Quaternion.LookRotation(to);
+                yield return null;
+                t += Time.deltaTime;
+                Vector3 p = player.transform.position; float step = Flat(p - last); walked += step; sinceSample += step; last = p;
+                if (sinceSample >= 0.5f)
+                {
+                    sinceSample = 0f;
+                    Vector3 side = Vector3.Cross(Vector3.up, player.transform.forward).normalized, o = p + Vector3.up * 1.0f;
+                    float l = Stalker.RayIgnore(o, side, 20f, ~(1 << 2), cc, out RaycastHit hl) ? hl.distance : 20f;      // 제 캡슐은 뺀다 (안에서 쏜 광선이 맞았다)
+                    float r = Stalker.RayIgnore(o, -side, 20f, ~(1 << 2), cc, out RaycastHit hr) ? hr.distance : 20f;
+                    float up = Stalker.RayIgnore(p + Vector3.up * 0.2f, Vector3.up, 20f, ~(1 << 2), cc, out RaycastHit hu) ? hu.distance + 0.2f : 20f;
+                    if (l + r < minW) { minW = l + r; worstAt = $"({p.x:F1}, {p.z:F1})"; }
+                    if (up < minH) { minH = up; lowAt = $"({p.x:F1}, {p.y:F1}, {p.z:F1}) hit {(hu.collider != null ? hu.collider.name : "-")}"; }
+                    trail.Add($"{p.x:F2},{p.y:F2},{p.z:F2}");
+                }
+            }
+            InputSystem.QueueStateEvent(kb, new KeyboardState());
+            yield return null;
+            if (Flat(goal - player.transform.position) <= 0.9f) reached++;
+            else Debug.Log($"CHECK note booth walk: stuck {Flat(goal - player.transform.position):F1} m short of ({goal.x:F1}, {goal.y:F1}, {goal.z:F1}) at ({player.transform.position.x:F1}, {player.transform.position.y:F1}, {player.transform.position.z:F1}) after {t:F1} s (path {(has ? path.status.ToString() : "none")}, {pts.Count} corners)");
+        }
+        File.WriteAllLines(Path.Combine(outDir, "26_booth_walk_trail.csv"), trail);           // 봇이 걸은 자리 (위에서 본 그림으로 확인)
+        {
+            var navTri = NavMesh.CalculateTriangulation();
+            var obj = navTri.vertices.Select(v => $"v {v.x:F3} {v.y:F3} {v.z:F3}").ToList();
+            for (int i = 0; i < navTri.indices.Length; i += 3) obj.Add($"f {navTri.indices[i] + 1} {navTri.indices[i + 1] + 1} {navTri.indices[i + 2] + 1}");
+            File.WriteAllLines(Path.Combine(outDir, "26_booth_navmesh.obj"), obj);
+        }
+        bool lensOk = Mathf.Abs(faceA - 49f) <= 49f * 0.15f && Mathf.Abs(faceB - 73f) <= 73f * 0.15f && Mathf.Abs(faceC - 54f) <= 54f * 0.15f;
+        Check("booth_walk_route", reached == legs.Count && legs.Count == 13 && lensOk,
+            $"walked to {reached}/{legs.Count} stops (12 veins + back to the cage) in {Time.time - t0:F0} s, {walked:F0} m · path cage → face A {faceA:F0} m (49) · C {faceC:F0} m (54) · B {faceB:F0} m (73), ±15 %");
+        Check("booth_clearance", minW >= 1.9f && minH >= 2.2f, $"along the walked route: narrowest {minW:F2} m at {worstAt} (≥ 1.9) · lowest ceiling {minH:F2} m at {lowAt} (≥ 2.2)");
+
+        // ---- 1b. 입구마다 곧장 걸어 들어가기 — 사람처럼 갈림길에서 굴 쪽을 보고 W 만 누른다 (길찾기 봇은 둘러 가서 못 잡았다: 09-24 사용자 "크로스컷 1 로 못 들어간다")
+        {
+            static Vector3 B(float x, float y, float z = 0f) => new Vector3(-x, z, -y);         // Blender 평면도 (x, y, 높이) → Unity (glTF 가져오기가 180° 돈다)
+            var entries = new (string name, Vector2 from, Vector2 toward)[] {
+                ("crosscut 1", new Vector2(15.37f, -0.81f), new Vector2(23f, 9f)), ("crosscut 2", new Vector2(49.4f, -0.87f), new Vector2(57f, 10f)),
+                ("crosscut 3", new Vector2(28.7f, 1.54f), new Vector2(35f, -6f)), ("siding west", new Vector2(7.6f, 1.5f), new Vector2(12f, -3.2f)),
+                ("siding east", new Vector2(26.4f, 1.5f), new Vector2(22f, -3.2f)), ("noburi", new Vector2(33.7f, -4.5f), new Vector2(41f, -7f)),
+                ("stub 1", new Vector2(17.9f, 9.2f), new Vector2(18.3f, 14.4f)), ("pump room", new Vector2(60f, 1.3f), new Vector2(60f, -5f)),
+                ("pillar room", new Vector2(29.5f, 9.6f), new Vector2(40f, 9.5f)), ("wind door", new Vector2(33.9f, -2.8f), new Vector2(28.4f, -7.6f)) };
+            var eNotes = new List<string>(); bool eOk = true;
+            foreach (var (nm, from, toward) in entries)
+            {
+                Vector3 start = OnNav(B(from.x, from.y, 0.5f)), dir = Flat3(B(toward.x, toward.y) - B(from.x, from.y)).normalized;
+                Teleport(cc, start + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
+                yield return new WaitForSeconds(0.2f);
+                InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+                float t = 0f;
+                while (t < 2.5f) { player.transform.rotation = Quaternion.LookRotation(dir); yield return null; t += Time.deltaTime; }
+                InputSystem.QueueStateEvent(kb, new KeyboardState());
+                float prog = Vector3.Dot(Flat3(player.transform.position - start), dir);
+                string blocker = "";
+                if (prog < 3f)
+                {
+                    foreach (float hgt in new[] { 0.3f, 1.0f, 1.7f })
+                        if (Stalker.RayIgnore(player.transform.position + Vector3.up * hgt, dir, 1.0f, ~(1 << 2), cc, out RaycastHit bh))
+                            blocker += $" at {hgt:F1} m: {bh.collider.name} {bh.distance:F2} m";
+                    blocker += $" · feet y {player.transform.position.y:F2}";
+                }
+                eOk &= prog >= 3f;
+                eNotes.Add($"{nm} {prog:F1} m{(prog < 3f ? " BLOCKED" + blocker : "")}");
+                yield return null;
+            }
+            Check("booth_enter_tunnels", eOk, "walking straight in with W for 2.5 s (≥ 3 m): " + string.Join(" · ", eNotes));
+        }
+
+        // ---- 2. 막힘 스위치: 켜면 그 자리를 못 지나간다(길찾기가 돌아가거나 없음), 넷 다 켜도 열린 쪽 광맥 5곳 이상
+        var notes = new List<string>(); bool blocksOk = true;
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            Vector3 c = OnNav(blocks[i].transform.TransformPoint(blocks[i].GetComponent<MeshFilter>().sharedMesh.bounds.center));   // 꺼진 물체는 Renderer.bounds 가 비어 있다
+            Vector3 a = c, b = c; float best = 99f;
+            for (int k = 0; k < 8; k++)                              // 막힘 양쪽의 바닥 두 점: 꺼진 채로 곧게 이어지는 방향
+            {
+                Vector3 d = Quaternion.Euler(0f, k * 22.5f, 0f) * Vector3.forward;
+                Vector3 pa = c + d * 2.8f, pb = c - d * 2.8f;
+                if (!NavMesh.SamplePosition(pa, out NavMeshHit ha, 0.3f, NavMesh.AllAreas) || !NavMesh.SamplePosition(pb, out NavMeshHit hb, 0.3f, NavMesh.AllAreas)) continue;
+                float L = PathLen(ha.position, hb.position);
+                if (L > 0f && L / 5.6f < best) { best = L / 5.6f; a = ha.position; b = hb.position; }
+            }
+            float off = PathLen(a, b);
+            blocks[i].SetActive(true);
+            yield return new WaitForSeconds(0.3f);                   // 길찾기 바닥 파내기는 다음 프레임들에
+            float on = PathLen(a, b);
+            bool through = Physics.Linecast(a + Vector3.up, b + Vector3.up, out RaycastHit bh, ~(1 << 2), QueryTriggerInteraction.Ignore) && bh.collider.gameObject == blocks[i];
+            bool ok = off > 0f && off < 7f && (on < 0f || on > off + 5f) && through;
+            blocksOk &= ok;
+            notes.Add($"BLK_{i + 1}: across {off:F1} m off → {(on < 0f ? "no path" : on.ToString("F0") + " m around")} on · body blocks the line {through}");
+        }
+        int open = pockets.Count(q => PathLen(spawn, q) > 0f);
+        foreach (var b in blocks) b.SetActive(false);
+        yield return new WaitForSeconds(0.3f);
+        Check("booth_blocks", blocksOk && open >= 5, string.Join(" · ", notes) + $" · all four on: {open} veins still reachable (≥ 5)");
+
+        // ---- 3. 고리: 크로스컷 2 를 막아도 막장 B 에 간다(탄층 따라 돈다) · 기둥 하나를 16 m 안에 한 바퀴
+        blocks[0].SetActive(true); yield return new WaitForSeconds(0.3f);
+        float bViaSeam = PathLen(spawn, Slot("SLOT_Pocket_10").position);
+        blocks[0].SetActive(false); blocks[2].SetActive(true); yield return new WaitForSeconds(0.3f);
+        float bViaCut2 = PathLen(spawn, Slot("SLOT_Pocket_10").position);
+        blocks[2].SetActive(false); yield return new WaitForSeconds(0.3f);
+        var pk5 = Slot("SLOT_Pocket_5").position;
+        Vector3 pillar = pk5 + Flat3(pk5 - OnNav(pk5)).normalized * 1.2f; pillar.y = OnNav(pk5).y;
+        var ring = new[] { Vector3.forward, Vector3.right, Vector3.back, Vector3.left }.Select(d => OnNav(pillar + d * 2.45f, 0.6f)).ToArray();
+        float around = 0f; bool ringOk = true;
+        for (int i = 0; i < 4; i++) { float L = PathLen(ring[i], ring[(i + 1) % 4]); ringOk &= L > 0f && L < 6f; around += Mathf.Max(L, 0f); }
+        Check("booth_loop", bViaSeam > 0f && bViaCut2 > 0f && ringOk && around < 16f,
+            $"face B with crosscut 2 blocked {bViaSeam:F0} m (via the seam) · with the pillar-room east blocked {bViaCut2:F0} m (via crosscut 2) · once around a pillar {around:F1} m (< 16)");
+
+        // ---- 4. 구멍 없음: 길찾기 바닥 위 400 점, 26 방향 광선이 100 m 안에 다 맞는다
+        var tri = NavMesh.CalculateTriangulation(); var rnd = new System.Random(7); int leaks = 0, pts0 = 0; string leakAt = "";
+        var dirs = new List<Vector3>();
+        for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) if (x != 0 || y != 0 || z != 0) dirs.Add(new Vector3(x, y, z).normalized);
+        for (int n = 0; n < 400 && tri.indices.Length > 0; n++)
+        {
+            int k = rnd.Next(tri.indices.Length / 3) * 3;
+            Vector3 o = (tri.vertices[tri.indices[k]] + tri.vertices[tri.indices[k + 1]] + tri.vertices[tri.indices[k + 2]]) / 3f + Vector3.up * 1.0f;
+            pts0++;
+            foreach (var d in dirs)
+                if (!Physics.Raycast(o, d, 100f, ~(1 << 2), QueryTriggerInteraction.Ignore)) { leaks++; leakAt = $"({o.x:F1}, {o.y:F1}, {o.z:F1}) dir {d}"; break; }
+        }
+        Check("booth_sealed", pts0 >= 400 && leaks == 0, $"{pts0} floor points × 26 rays: {leaks} escaped the map {leakAt}");
+
+        // ---- 5. 괴물: 길찾기로 막장 셋까지 걸어서 닿는다. 걷는 동안(조사 걸음·첫 자리 더듬기) 머리 꼭대기와 그 자리 천장을 잰다
+        Teleport(cc, spawn + Vector3.up * 0.1f, 0f);
+        lamp.lampOn = false;
+        Vector3 home = OnNav(Slot("SPAWN_Stalker").position);
+        var head = stalker.GetComponentsInChildren<Transform>().First(b => b.name == "mixamorig:Head");
+        float minGap = 99f, tallest = 0f, maxDrop = 0f, maxPitch = 0f; int overRock = 0; string gapAt = "", tallAt = "", rockAt = ""; var arrive = new List<string>(); bool allReach = true;
+        stalker.enabled = true;
+        foreach (var face in new[] { "SLOT_Pocket_3", "SLOT_Pocket_12", "SLOT_Pocket_10" })
+        {
+            Vector3 goal = OnNav(Slot(face).position);
+            stalker.Teleport(home + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(Slot("LOOK_Stalker").position - home)).eulerAngles.y);   // 사람이 볼 시작 자세 그대로
+            yield return null;
+            bool pathOk = PathLen(home, goal) > 0f;
+            NoiseBus.Make(goal, 999f, "booth_test", null);
+            NoiseBus.Make(goal, 999f, "booth_test", null);               // 두 번 = 그 자리까지 (조사)
+            float t = 0f, limit = Mathf.Max(PathLen(home, goal), Flat(goal - home)) / Tuning.STALKER_SPEED_INVESTIGATE * 2f + 6f, searchT = 0f;
+            while (t < limit && searchT < 3f)
+            {
+                yield return null;
+                t += Time.deltaTime;
+                if (stalker.state == Stalker.State.Search) searchT += Time.deltaTime;
+                float feet = stalker.transform.position.y, top = head.position.y + 0.3f;   // 머리 뼈 + 0.3 m (모델 크기 1.5 의 머리 윗부분)
+                var sa = stalker.GetComponentInChildren<StalkerAnim>();
+                if (top - feet > tallest) { tallest = top - feet; tallAt = $"{stalker.state}/{sa?.Current}"; }
+                if (sa != null) { maxDrop = Mathf.Max(maxDrop, sa.StoopDrop); maxPitch = Mathf.Max(maxPitch, sa.StoopPitch); }
+                Vector3 hx = new Vector3(head.position.x, head.position.y, head.position.z);          // 머리 높이에서 — 발 높이에서 쏘면 오르막 앞은 바닥 속에서 출발한다 (09-24 헛 FAIL)
+                if (!Stalker.RayIgnore(hx, Vector3.down, head.position.y - feet + 1.0f, ~(1 << 2), scc, out RaycastHit fl)) { if (overRock++ == 0) rockAt = $"{stalker.state}/{stalker.GetComponentInChildren<StalkerAnim>()?.Current} head ({head.position.x:F1}, {head.position.y:F1}, {head.position.z:F1}) feet y {feet:F1}"; continue; }   // 머리가 바닥 위가 아니다(막다른 벽 쪽으로 숙여 벽 속) — 천장 재기에서 뺀다, 수만 센다
+                hx.y = fl.point.y + 0.3f;
+                if (Stalker.RayIgnore(hx, Vector3.up, 6f, ~(1 << 2), scc, out RaycastHit hc))
+                {
+                    float g = hc.point.y - top;
+                    if (g < minGap) { minGap = g; gapAt = $"{stalker.state}/{stalker.GetComponentInChildren<StalkerAnim>()?.Current} at ({head.position.x:F1}, {feet:F1}, {head.position.z:F1}) head top {top - feet:F2} m, ceiling {hc.point.y - feet:F2} m ({hc.collider.name})"; }
+                }
+            }
+            float miss = Flat(goal - stalker.transform.position);
+            if (miss >= 2.0f) Debug.Log($"CHECK note booth stalker stopped at ({stalker.transform.position.x:F1}, {stalker.transform.position.y:F1}, {stalker.transform.position.z:F1}) state {stalker.state}, goal ({goal.x:F1}, {goal.y:F1}, {goal.z:F1})");
+            bool ok = pathOk && miss < 2.0f && searchT > 0f;
+            allReach &= ok;
+            arrive.Add($"{face.Replace("SLOT_Pocket_", "vein ")}: {(ok ? "arrived" : "FAILED")} {miss:F1} m off in {t:F1} s (path {(pathOk ? "yes" : "none")})");
+        }
+        stalker.enabled = false;
+        int reachAll = pockets.Concat(stalker.cracks).Count(q => PathLen(home, q) > 0f);
+        Check("booth_stalker_reaches", allReach && reachAll == pockets.Count + stalker.cracks.Length, string.Join(" · ", arrive) + $" · paths from its lair to {reachAll}/{pockets.Count + stalker.cracks.Length} veins and big-gap spots");
+        Check("booth_stalker_fits", minGap >= 0.1f && overRock == 0, $"closest head top to the ceiling {minGap:F2} m (≥ 0.10): {gapAt} · tallest head top above its feet {tallest:F2} m ({tallAt}) · stoop up to hips −{maxDrop:F2} m, back {maxPitch:F0}° · frames with the head past a wall (not over floor) {overRock} {rockAt}");
+
+        // ---- 6. 빛 (램프 끔, 눈이 어둠에 다 익은 뒤): 켜진 전등 옆 벽이 전등을 끄면 확 어두워진다 · 꺼진 전등 옆 벽은 켜진 전등 옆보다 어둡다
+        var lit = FindObjectsByType<Light>(FindObjectsSortMode.None).Where(l => l.type == LightType.Point && l.name == "Lamp").OrderBy(l => Flat(l.transform.position - spawn)).ToArray();
+        var dead = GameObject.Find("BoothLights").transform.Cast<Transform>().Where(t => t.name == "DeadLamp").OrderBy(t => Flat(t.position - spawn)).ToArray();
+        float yaw = Quaternion.LookRotation(Flat3(Slot("LOOK_Player").position - spawn)).eulerAngles.y;
+        float WallYaw(Vector3 at)                                        // 가장 가까운 벽 쪽
+        {
+            float bestD = 99f, bestY = 0f;
+            for (int k = 0; k < 16; k++)
+            {
+                Vector3 d = Quaternion.Euler(0f, k * 22.5f, 0f) * Vector3.forward;
+                if (Physics.Raycast(at + Vector3.up * 1.5f, d, out RaycastHit h, 10f, ~(1 << 2), QueryTriggerInteraction.Ignore) && h.distance < bestD) { bestD = h.distance; bestY = k * 22.5f; }
+            }
+            return bestY;
+        }
+        Vector3 litAt = OnNav(lit[Mathf.Min(2, lit.Length - 1)].transform.position), deadAt = OnNav(dead[0].position);
+        Vector3 v1 = Vector3.zero, v2 = Vector3.zero, v3 = Vector3.zero;
+        var mid = new Rect(Screen.width * 0.25f, Screen.height * 0.25f, Screen.width * 0.5f, Screen.height * 0.5f);
+        yield return new WaitForSeconds(Tuning.DARK_ADAPT_TIME + 1f);
+        Teleport(cc, litAt + Vector3.up * 0.1f, WallYaw(litAt)); yield return Capture("26_booth_light_lit", v => v1 = v, mid);
+        foreach (var l in lit) l.enabled = false;
+        yield return Capture("26_booth_light_lit_off", v => v2 = v, mid);
+        foreach (var l in lit) l.enabled = true;
+        Teleport(cc, deadAt + Vector3.up * 0.1f, WallYaw(deadAt)); yield return Capture("26_booth_light_dead", v => v3 = v, mid);
+        Check("booth_light_zones", v1.x > 2f * v2.x && v1.x > 2f * v3.x, $"lamp off, wall beside a lit lamp {v1.x:F3} · same wall with the booth lights off {v2.x:F3} · wall beside a dead lamp {v3.x:F3} (lit > 2 × both)");
+
+        // ---- 7. fps (램프 켬): 정거장에서 운반갱 쪽 · 기둥 사이 · 크로스컷 3
+        lamp.lampOn = true;
+        var spots = new[] { (spawn, yaw, "station"), (OnNav(Slot("SLOT_GapBig_2").position), yaw + 180f, "pillars"), (OnNav(Slot("SLOT_DeadLight_6").position), yaw, "crosscut 3") };
+        float worst = 9999f; var fpsNotes = new List<string>();
+        foreach (var (pos, y, nm) in spots)
+        {
+            Teleport(cc, pos + Vector3.up * 0.1f, y);
+            yield return new WaitForSeconds(0.5f);
+            float f = 0f; yield return MeasureFps(2f, v => f = v);
+            worst = Mathf.Min(worst, f); fpsNotes.Add($"{nm} {f:F0}");
+        }
+        Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
+        yield return Capture("26_booth_station", _ => { });
+        Check("booth_fps", worst >= MinFps, $"fps {string.Join(" · ", fpsNotes)} (≥ {MinFps:F0})");
+        InputSystem.RemoveDevice(kb);
     }
 
     // UI-2 (지침 4-1 "플레이 종료 후 초기 상태로 자동 복귀"): 잡히면 CATCH_RESTART_S 뒤 Intro 씬으로. 씬이 바뀌면 이 컴포넌트는 사라지므로

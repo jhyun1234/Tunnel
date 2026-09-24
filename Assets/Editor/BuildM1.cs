@@ -4,7 +4,9 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
+using Unity.AI.Navigation;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
@@ -13,6 +15,11 @@ using UnityEngine.UI;
 public static class BuildM1
 {
     const string ScenePath = "Assets/Scenes/M1_Tunnel.unity";
+    const string BoothScenePath = "Assets/Scenes/" + Tuning.BOOTH_SCENE + ".unity";   // MAP1 부스 한 층 — MakeBooth 가 만든다, 인트로 "시작"이 여기로
+    const string BoothMapPath = "Assets/Tunnel/Pieces/booth_map.gltf";                  // blender/map/make_booth.py
+    const string BoothNavPath = "Assets/Scenes/Booth_NavMesh.asset";
+    const string BulbOnMatPath = "Assets/Settings/M9_BulbOn.mat";
+    const string BulbOffMatPath = "Assets/Settings/M9_BulbOff.mat";
     const string IntroScenePath = "Assets/Scenes/Intro.unity";   // UI-2 인트로 (지스타 지침 1-1) — MakeIntro 가 만든다, 빌드 0번
     const string FontPath = "Assets/Fonts/Pretendard-Regular.otf"; // 한글 글꼴 (OFL, 같은 폴더 LICENSE_Pretendard_OFL.txt)
     const string LogoUnivPath = "Assets/UI/logo_university.png";   // 회색 자리표시 — 센터가 주는 원본으로 바꾼다 (임의 변형 금지)
@@ -36,11 +43,19 @@ public static class BuildM1
     const string PlayerSoundDir = "Assets/Audio/Player";  // 발소리·착지 (Freesound CC0, SOURCES.txt)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
-    public static void MakeScene()
+    public static void MakeScene() => Make(false);
+    // MAP1: 같은 씬 생성기로 부스 맵을. 공유 에셋(볼륨 프로필·동작 상태기·재질)은 새로 만들지 않고 읽는다 — 새로 만들면 GUID 가 바뀌어 복도 씬 참조가 끊긴다
+    public static void MakeBooth() => Make(true);
+
+    static T LoadOr<T>(bool reuse, string path, Func<T> make) where T : UnityEngine.Object
+        => reuse && AssetDatabase.LoadAssetAtPath<T>(path) is T a ? a : make();
+
+    static void Make(bool booth)
     {
-        if (File.Exists(ScenePath) && !Environment.GetCommandLineArgs().Contains("-force"))
+        string scenePath = booth ? BoothScenePath : ScenePath;
+        if (File.Exists(scenePath) && !Environment.GetCommandLineArgs().Contains("-force"))
         {
-            Debug.LogError($"{ScenePath} 가 이미 있다 — 덮어쓰려면 -force");
+            Debug.LogError($"{scenePath} 가 이미 있다 — 덮어쓰려면 -force");
             EditorApplication.Exit(2);
             return;
         }
@@ -77,7 +92,7 @@ public static class BuildM1
         }
 
         AddFogFeature();
-        var profile = MakeProfile();
+        var profile = LoadOr(booth, ProfilePath, MakeProfile);
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
         // 공기 (LOOK_REFERENCE 4-3, 4-4). 태양·하늘·반사 없음 — 빛은 헤드램프 하나
@@ -91,8 +106,14 @@ public static class BuildM1
         RenderSettings.fogDensity = Tuning.FOG_DENSITY;
         RenderSettings.fogColor = Tuning.FOG_COLOR;
 
-        // 갱도: 조각의 COL_* 노드를 충돌로, 보이지 않게
-        var pieces = new GameObject("Pieces").transform;
+        // 갱도: 조각의 COL_* 노드를 충돌로, 보이지 않게. 부스 = 한 덩어리 맵 + 길찾기 바닥
+        Transform pieces;
+        GameObject[] blocks = new GameObject[0];
+        if (booth)
+            pieces = PlaceBoothMap(out blocks);
+        else
+        {
+        pieces = new GameObject("Pieces").transform;
         for (int i = 0; i < PieceCount; i++)
         {
             var kind = Tuning.MAP_GAP_BIG_PIECES.Contains(i) ? gapBig : Tuning.MAP_GAP_SMALL_PIECES.Contains(i) ? gapSmall : piece;
@@ -108,6 +129,7 @@ public static class BuildM1
         }
         EndWall(pieces, "End_S", -Tuning.GRID_CELL * 0.5f);
         EndWall(pieces, "End_N", (PieceCount - 0.5f) * Tuning.GRID_CELL);
+        }
 
         // 광맥 포켓: 조각의 SLOT_Pocket_* 자리마다 POCKET_CHANCE 로 (Godot PocketSpawner.gd). 통로 쪽 = 자리에서 조각 원점 쪽
         var rng = new System.Random(Tuning.MAP_SEED + 100);
@@ -117,9 +139,11 @@ public static class BuildM1
             if (rng.NextDouble() >= Tuning.POCKET_CHANCE)
                 continue;
             var pieceRoot = slot;
-            while (pieceRoot.parent != pieces)
+            while (pieceRoot.parent != pieces && pieceRoot.parent != null)
                 pieceRoot = pieceRoot.parent;
-            Vector3 outDir = pieceRoot.position - slot.position;
+            Vector3 outDir = pieceRoot.position - slot.position;             // 조각: 통로 쪽 = 조각 원점 쪽
+            if (booth && NavMesh.SamplePosition(slot.position, out NavMeshHit nh, 4f, NavMesh.AllAreas))
+                outDir = nh.position - slot.position;                          // 부스: 가장 가까운 걷는 바닥 쪽
             outDir.y = 0f;
             outDir.Normalize();
             var go = new GameObject("OrePocket");
@@ -137,6 +161,11 @@ public static class BuildM1
         // 플레이어
         var player = new GameObject("Player");
         player.transform.position = new Vector3(0f, 0.1f, 0f);
+        if (booth)
+        {
+            Vector3 sp = Find(pieces, "SPAWN_Player").position, lookAt = Find(pieces, "LOOK_Player").position;
+            player.transform.SetPositionAndRotation(sp + Vector3.up * 0.1f, Quaternion.LookRotation(Vector3.ProjectOnPlane(lookAt - sp, Vector3.up)));
+        }
         player.AddComponent<CharacterController>();
         var p = player.AddComponent<Player>();
         var head = new GameObject("Head").transform;
@@ -225,16 +254,17 @@ public static class BuildM1
 
         // M3 괴물. 북쪽 끝에서 시작. 충돌은 캡슐(R 0.6 · H 2.8) 그대로, 겉모습은 3D-① 모델
         var stalkerGo = new GameObject("Stalker");
-        stalkerGo.transform.position = new Vector3(0f, 0.1f, (PieceCount - 1) * Tuning.GRID_CELL);
+        stalkerGo.transform.position = booth ? Find(pieces, "SPAWN_Stalker").position + Vector3.up * 0.1f : new Vector3(0f, 0.1f, (PieceCount - 1) * Tuning.GRID_CELL);
+        float stalkerH = booth ? Tuning.BOOTH_STALKER_H : Tuning.STALKER_H;   // 부스: 실제 갱도 천장 2.2~2.7 m
         var scc = stalkerGo.AddComponent<CharacterController>();
         scc.radius = Tuning.STALKER_R;
-        scc.height = Tuning.STALKER_H;
-        scc.center = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
+        scc.height = stalkerH;
+        scc.center = new Vector3(0f, stalkerH * 0.5f, 0f);
         // Body = 캡슐 가운데 높이의 빈 축, 크기 1. 캡슐 크기(비균등)였던 것은 3D-③ 에서 1 로 — 납작해지기를 지웠고(사용자 09-18),
         // 비균등 부모 밑에서 모델을 벽타기로 90° 세우면 몸이 비스듬히 찌그러진다. 캡슐 렌더러(회갈색 자리표시)는 3D-① 에서 뗐다
         var body = new GameObject("Body");
         body.transform.SetParent(stalkerGo.transform);
-        body.transform.localPosition = new Vector3(0f, Tuning.STALKER_H * 0.5f, 0f);
+        body.transform.localPosition = new Vector3(0f, stalkerH * 0.5f, 0f);
         // 3D-①: 모델을 Body 밑에, STALKER_MODEL_SCALE 배 균등, 발이 괴물 뿌리(바닥)에 온다. 자리·기울기는 StalkerAnim 이 벽타기 때 바꾼다
         var model = Instance(monster, body.transform);
         model.name = "Model";
@@ -242,7 +272,7 @@ public static class BuildM1
         model.transform.localPosition = new Vector3(0f, -body.transform.localPosition.y, 0f);
         model.transform.localRotation = Quaternion.Euler(0f, Tuning.STALKER_MODEL_YAW, 0f);
         var animator = model.GetComponent<Animator>() ?? model.AddComponent<Animator>();
-        animator.runtimeAnimatorController = MakeStalkerAnimator();
+        animator.runtimeAnimatorController = LoadOr<RuntimeAnimatorController>(booth, StalkerAnimPath, MakeStalkerAnimator);
         animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;   // 화면 밖에서도 움직인다 — 검사가 순간이동시켜 찍는다
         foreach (var smr in model.GetComponentsInChildren<SkinnedMeshRenderer>())
             smr.updateWhenOffscreen = true;                          // 뼈가 움직여도 화면 사각형(ScreenRect)이 맞게
@@ -260,6 +290,11 @@ public static class BuildM1
             Debug.LogError("Assets/Shaders/ScaleNormal.shader 를 못 읽었다");
             EditorApplication.Exit(8);
         }
+        if (booth)
+        {
+            Vector3 lookS = Find(pieces, "LOOK_Stalker").position - stalkerGo.transform.position;
+            stalkerGo.transform.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(lookS, Vector3.up));
+        }
         var stalker = stalkerGo.AddComponent<Stalker>();
         stalker.player = player.transform;
         stalker.playerHead = head;
@@ -267,6 +302,15 @@ public static class BuildM1
         stalker.lamp = lamp;
         stalker.restartPos = player.transform.position;
         stalker.homePos = stalkerGo.transform.position;
+        if (booth)
+        {
+            stalker.cracks = pieces.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_GapBig_")).Select(t => t.position + Vector3.up * 0.1f).ToArray();   // 재등장 = 큰 틈 자리
+            stalker.zMin = stalker.zMax = 0f;                                                      // = 길찾기
+            PlaceBoothLights(pieces, hud);
+            hud.boothBlocks = blocks;
+        }
+        else
+        {
         // 갈라진 틈 2곳 (M5 재등장 자리) — 복도 양 끝 벽 아래, 자리표시 검은 판. 미로가 생기면 레벨 설계서 M3-e 자리로
         var crackMat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "M5_Crack", color = new Color(0.02f, 0.02f, 0.02f) };
         crackMat.SetFloat("_Smoothness", 0.1f);
@@ -289,6 +333,7 @@ public static class BuildM1
         stalker.cracks = cracks;
         stalker.zMin = -Tuning.GRID_CELL * 0.5f + Tuning.STALKER_R + 0.2f;
         stalker.zMax = (PieceCount - 0.5f) * Tuning.GRID_CELL - Tuning.STALKER_R - 0.2f;
+        }
         hud.stalker = stalker;
         check.stalker = stalker;
         hud.pickaxe = pickaxe;
@@ -313,10 +358,13 @@ public static class BuildM1
         thrown.player = p;
         pickaxe.thrown = thrown;
         // UI-1c: reach 안이면 머리가 빛난다 — Unlit (괴물 눈과 같은 방법, Lit 발광은 빌드에서 안 나온다)
-        var glowMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "M7_PickGlow", color = Tuning.PICK_GLOW_COLOR * Tuning.PICK_GLOW };
-        AssetDatabase.DeleteAsset(PickGlowMatPath);
-        AssetDatabase.CreateAsset(glowMat, PickGlowMatPath);
-        thrown.glowMaterial = glowMat;
+        thrown.glowMaterial = LoadOr(booth, PickGlowMatPath, () =>
+        {
+            var glowMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "M7_PickGlow", color = Tuning.PICK_GLOW_COLOR * Tuning.PICK_GLOW };
+            AssetDatabase.DeleteAsset(PickGlowMatPath);
+            AssetDatabase.CreateAsset(glowMat, PickGlowMatPath);
+            return glowMat;
+        });
         thrown.head = thrownMesh.GetComponentsInChildren<Renderer>().First(r => r.name == "PICK_Head");
         thrownGo.SetActive(false);
 
@@ -326,7 +374,7 @@ public static class BuildM1
         fx.orePrefab = ore;
         fx.chipMeshes = chips.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh).ToArray();
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
-        fx.dustMaterial = MakeDustMaterial();
+        fx.dustMaterial = LoadOr(booth, DustMatPath, MakeDustMaterial);
         fx.hitClips = hitClips;
         var noiseSound = mining.AddComponent<NoiseSound>();
         noiseSound.player = p;
@@ -339,19 +387,109 @@ public static class BuildM1
         miningHud.player = p;
         miningHud.pickaxe = pickaxe;
 
-        EditorSceneManager.SaveScene(scene, ScenePath);
-        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(IntroScenePath, true), new EditorBuildSettingsScene(ScenePath, true) };
+        EditorSceneManager.SaveScene(scene, scenePath);
+        EditorBuildSettings.scenes = new[] { IntroScenePath, ScenePath, BoothScenePath }.Where(File.Exists).Select(sp => new EditorBuildSettingsScene(sp, true)).ToArray();
         PlayerSettings.productName = "Tunnel";
         PlayerSettings.companyName = "jhyun1234";
         AssetDatabase.SaveAssets();
-        Debug.Log($"M1 scene saved: {ScenePath}");
+        Debug.Log($"M1 scene saved: {scenePath}");
+    }
+
+    static Transform Find(Transform root, string name) => root.GetComponentsInChildren<Transform>(true).First(t => t.name == name);
+
+    // MAP1: 부스 맵을 놓고 충돌을 붙이고, 막힘 스위치를 끈 채로 길찾기 바닥을 굽는다 (막힘은 NavMeshObstacle 이 켜질 때 파낸다)
+    static Transform PlaceBoothMap(out GameObject[] blocks)
+    {
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(BoothMapPath);
+        if (prefab == null)
+        {
+            Debug.LogError($"{BoothMapPath} 를 못 읽었다 (blender/map/make_booth.py)");
+            EditorApplication.Exit(10);
+        }
+        var map = Instance(prefab, null).transform;
+        map.name = "BoothMap";
+        foreach (var mf in map.GetComponentsInChildren<MeshFilter>(true))
+        {
+            string n = mf.name;
+            if (n.StartsWith("COL_"))
+            {
+                mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                UnityEngine.Object.DestroyImmediate(mf.GetComponent<MeshRenderer>());
+            }
+            else if (n.StartsWith("BLK_"))                                 // 돌무더기: 볼록 충돌 + 켜지면 길찾기 바닥을 파낸다
+            {
+                mf.gameObject.AddComponent<MeshCollider>().convex = true;
+                var ob = mf.gameObject.AddComponent<NavMeshObstacle>();
+                ob.shape = NavMeshObstacleShape.Box;
+                ob.center = mf.sharedMesh.bounds.center;
+                ob.size = mf.sharedMesh.bounds.size;
+                ob.carving = true;
+            }
+            else if (n == "PRP_Fence" || n == "PRP_WindDoor" || n == "PRP_Plate")   // 못 지나가는 것 — 울타리는 천장까지 막는다(넘어가지 않게)
+            {
+                var bc = mf.gameObject.AddComponent<BoxCollider>();
+                if (n == "PRP_Fence") { var c = bc.center; c.y += (2.4f - bc.size.y) * 0.5f; bc.center = c; bc.size = new Vector3(bc.size.x, 2.4f, Mathf.Max(bc.size.z, 0.3f)); }
+            }
+        }
+        blocks = Enumerable.Range(1, 4).Select(i => Find(map, "BLK_" + i).gameObject).ToArray();
+        foreach (var b in blocks) b.SetActive(false);
+        var surf = map.gameObject.AddComponent<NavMeshSurface>();
+        surf.collectObjects = CollectObjects.Children;
+        surf.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+        surf.BuildNavMesh();
+        AssetDatabase.DeleteAsset(BoothNavPath);
+        AssetDatabase.CreateAsset(surf.navMeshData, BoothNavPath);
+        for (int i = 0; i < blocks.Length; i++) blocks[i].SetActive(Tuning.BOOTH_BLOCKS[i]);
+        var tri = NavMesh.CalculateTriangulation();
+        Debug.Log($"BOOTH navmesh: {tri.vertices.Length} verts, {tri.indices.Length / 3} tris");
+        return map;
+    }
+
+    // 켜진 전등 = 따뜻한 점광원 + 빛나는 전구, 꺼진 전등 = 어두운 전구만
+    static void PlaceBoothLights(Transform map, DevHud hud)
+    {
+        Material Mat(string path, string name, Color c)
+        {
+            AssetDatabase.DeleteAsset(path);
+            var m = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = name, color = c };
+            AssetDatabase.CreateAsset(m, path);
+            return m;
+        }
+        var on = Mat(BulbOnMatPath, "M9_BulbOn", Tuning.BOOTH_LIGHT_COLOR * 1.4f);
+        var off = Mat(BulbOffMatPath, "M9_BulbOff", new Color(0.05f, 0.045f, 0.04f));
+        var root = new GameObject("BoothLights").transform;
+        var lights = new System.Collections.Generic.List<Light>();
+        foreach (var slot in map.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Light_") || t.name.StartsWith("SLOT_DeadLight_")).OrderBy(t => t.name))
+        {
+            bool lit = slot.name.StartsWith("SLOT_Light_");
+            var go = new GameObject(lit ? "Lamp" : "DeadLamp");
+            go.transform.SetParent(root);
+            go.transform.position = slot.position;
+            var bulb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            UnityEngine.Object.DestroyImmediate(bulb.GetComponent<Collider>());
+            bulb.transform.SetParent(go.transform, false);
+            bulb.transform.localScale = Vector3.one * 0.12f;
+            var br = bulb.GetComponent<MeshRenderer>();
+            br.sharedMaterial = lit ? on : off;
+            br.shadowCastingMode = ShadowCastingMode.Off;
+            if (!lit) continue;
+            var l = go.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = Tuning.BOOTH_LIGHT_COLOR;
+            l.intensity = Tuning.BOOTH_LIGHT_ENERGY;
+            l.range = Tuning.BOOTH_LIGHT_RANGE;
+            l.shadows = LightShadows.Soft;                                   // 없으면 바위를 뚫고 옆 갱도까지 비춘다
+            l.GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer;
+            lights.Add(l);
+        }
+        hud.boothLights = lights.ToArray();
     }
 
     public static void BuildWindows()
     {
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
-            scenes = new[] { IntroScenePath, ScenePath },   // 0 = 인트로(UI-2), 1 = 갱도
+            scenes = new[] { IntroScenePath, ScenePath, BoothScenePath },   // 0 = 인트로(UI-2), 1 = 42 m 복도(검사용), 2 = 부스 맵(MAP1, 인트로 "시작")
             locationPathName = ExePath,
             target = BuildTarget.StandaloneWindows64,
             options = BuildOptions.None,
@@ -415,7 +553,7 @@ public static class BuildM1
         intro.items = items;
 
         EditorSceneManager.SaveScene(scene, IntroScenePath);
-        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(IntroScenePath, true), new EditorBuildSettingsScene(ScenePath, true) };
+        EditorBuildSettings.scenes = new[] { IntroScenePath, ScenePath, BoothScenePath }.Where(File.Exists).Select(sp => new EditorBuildSettingsScene(sp, true)).ToArray();
         PlayerSettings.defaultScreenWidth = 1920;
         PlayerSettings.defaultScreenHeight = 1080;
         AssetDatabase.SaveAssets();

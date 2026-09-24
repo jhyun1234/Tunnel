@@ -110,6 +110,22 @@ public static class Tuning
     public const float INTRO_LOGO_MIN_S = 2.0f;    // s, 로고 최소 노출 (지침 1-1 "최소 2초") — 그 전엔 키를 눌러도 안 넘어간다. 사보타주 skipearly 가 0 으로
     public const float INTRO_LOGO_AUTO_S = 5.0f;   // s, 키가 없어도 이때 메뉴로 (제안값 — 부스 대기 시간 최소화)
     public const int INTRO_VOLUME_STEP = 10;       // 소리 크기 한 칸 (0~100), 좌우 키
+    // ---- MAP1 부스 한 층 맵 (제안서 docs/제안서_MAP1_부스_갱도_모양.md, 승인 09-24). 맵 그물 = blender/map/make_booth.py
+    public const string BOOTH_SCENE = "Booth";                  // 인트로 "시작"이 가는 씬 (42 m 복도 M1_Tunnel 은 검사용으로만)
+    public static readonly bool[] BOOTH_BLOCKS = { false, false, false, false };   // 부스 막힘 스위치(BLK_1..4 = 크로스컷 2 · 크로스컷 3 · 기둥 사이 동쪽 · 운반갱 45 m). 판정 때 F5~F8 로 정한다
+    public static readonly Color BOOTH_LIGHT_COLOR = new Color(1f, 0.72f, 0.42f);   // 켜진 전등 (백열등)
+    public const float BOOTH_LIGHT_ENERGY = 25f;                // 제안값 — 판정 때 숫자패드 −/+ 로 정한다 (4 는 전등 아래도 거의 안 보였다, 첫 부스 검사 09-24)
+    public const float BOOTH_LIGHT_RANGE = 6f;                  // m
+    public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 실제 갱도 천장 2.2~2.7 m (복도는 STALKER_H 2.8 그대로)
+    // 천장 밑 숙이기 (MAP1, 사용자 09-24 "실제 크기 지키고 괴물이 숙여 다니게"): 머리 꼭대기가 그 자리 천장 − STOOP_MARGIN 밑에 오게
+    // 먼저 엉덩이를 STOOP_DROP_MAX 까지 낮추고(발은 다리 IK 로 제자리), 모자라면 허리를 STOOP_PITCH_MAX 까지 앞으로 숙인다. 천장이 높으면(복도 5.6 m) 아무 일 없음
+    public const float STALKER_STOOP_MARGIN = 0.3f;             // m (0.15 는 달릴 때 따라가는 사이 머리가 4 cm 닿았다)
+    public const float STALKER_STOOP_DROP_MAX = 0.45f;          // m (게임)
+    public const float STALKER_STOOP_PITCH_MAX = 55f;           // °
+    public const float STALKER_STOOP_HEAD_TOP = 0.3f;           // m, 머리 뼈에서 머리 꼭대기까지 (모델 크기 1.5)
+    public const float STALKER_STOOP_S = 0.3f;                  // s, 펴는 빠르기 (천장이 높아지는 곳에서 튀지 않게)
+    public const float STALKER_STOOP_DOWN_S = 0.05f;            // s, 숙이는 빠르기 — 0.15~0.25 는 달리며 낮은 천장에 들어갈 때 늦어 머리가 닿았다 (09-24)
+    public const float STALKER_WALL_STOP_M = 2.4f;              // m, 부스 맵: 소리 조사 끝에 가는 쪽 벽이 이 안이면 거기서 멈춘다 — 벽에 붙어 더듬으면 숙인 머리가 벽 속으로 1.3 m (09-24 검사)
     public const bool DEVHUD_START_VISIBLE = false;  // Unity 전용 (UI-1d, 설계서 Step 6 빌드 규칙): 실행하면 갱도 화면, F1 로 켠다. 사보타주 hudon 이 true 로
     public static readonly Color BACKGROUND = new Color(0.02f, 0.02f, 0.03f);
     public const float FOG_DENSITY = 0.03f;        // 거리 안개 (Exponential)

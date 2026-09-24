@@ -9,7 +9,7 @@
 노드: SHL_Booth_<덩어리>(보임) · COL_Booth_<덩어리>(충돌, 같은 그물) · PRP_*(갱목·돌무더기·울타리·널문·철판) · BLK_1..4(부스 막힘 스위치 돌무더기)
   · SLOT_Pocket_1..12 · SLOT_GapBig_1..3 · SLOT_GapSmall_1..2 · SLOT_Light_* · SLOT_DeadLight_* · SPAWN_Player · LOOK_Player · SPAWN_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox.
 자기 검사: 길 위 0.5 m 마다 폭 ≥ 1.9 · 천장 ≥ 2.2 · 바닥 있음, 2 m 마다 26 방향 광선이 40 m 안에서 벽에 맞음(구멍 없음), 광맥 12곳이 벽에 붙음, 삼각형 ≤ 50만.
-사보타주: SABOTAGE=holeroof(천장에 구멍) · narrow(연층 끝을 1.2 m 로) → FAIL 로 죽는다. 빠른 확인 FAST=1(렌더 안 함)."""
+사보타주: SABOTAGE=holeroof(천장에 구멍) · narrow(연층 끝을 1.2 m 로) · plate(철판을 연층 안에) · step(노보리 밑 받침을 되살림) → FAIL 로 죽는다. 빠른 확인 FAST=1(렌더 안 함)."""
 import bpy, bmesh, os, math, random, json
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
@@ -33,8 +33,8 @@ TUNNELS = [
     ("siding",    [(9, 0, 0, 3.0), (12, -3.2, 0, 3.0), (22, -3.2, 0, 3.0), (25, 0, 0, 3.0)], 2.7, True, True),
     ("refuge",    [(40, 0, 0, 1.6), (40, -2.6, 0, 1.6)], 2.2, False, False),
     ("pump_pass", [(60, 0, 0, 2.4), (60, -3.2, 0, 2.4)], 2.4, False, True),
-    ("xcut1",     [(16, 0, 0, 3.0), (23, 9, SEAM, 3.0)], 2.5, True, True),
-    ("xcut2",     [(50, 0, 0, 3.0), (57, 10, SEAM, 3.0)], 2.5, True, True),
+    ("xcut1",     [(16, 0, 0, 3.0), (17.21, 1.56, 0, 3.0), (23, 9, SEAM, 3.0)], 2.5, True, True),   # 비탈은 운반갱 벽선에서 시작 (가운데서 시작하면 벽선에 0.2 m 턱)
+    ("xcut2",     [(50, 0, 0, 3.0), (51.09, 1.56, 0, 3.0), (57, 10, SEAM, 3.0)], 2.5, True, True),
     ("xcut3",     [(30, 0, 0, 3.0), (35, -6, 0, 3.0)], 2.5, True, True),
     ("door_pass", [(33, -3.6, 0, 2.4), (28.4, -7.6, 0, 2.4)], 2.4, True, True),
     ("noburi",    [(35, -6, 0, 2.4), (41, -7, 2.8, 2.4), (48, -8.5, 6.2, 2.4)], 2.4, True, True),
@@ -75,6 +75,27 @@ def floor_at(pts, x, y):
         dist = (Vector((x, y)) - p).length
         if dist < best[0]: best = (dist, a[2] + (b[2] - a[2]) * t)
     return best[1]
+
+def near_other(name, p, tol=0.5):
+    """p 가 다른 갱도 중심선 위(갈림)인가 — 막다른 끝이 아니다"""
+    q = Vector((p[0], p[1]))
+    for n2, pts2, _, _, _ in TUNNELS:
+        if n2 == name: continue
+        for a2, b2 in zip(pts2, pts2[1:]):
+            A2, B2 = Vector(a2[:2]), Vector(b2[:2]); d = B2 - A2
+            t = max(0.0, min(1.0, (q - A2).dot(d) / max(d.length_squared, 1e-9)))
+            if (q - (A2 + d * t)).length < tol: return True
+    return False
+
+def slope_starts_at(name, p):
+    """p 에서 다른 갱도의 비탈이 시작하는가 — 거기로 평평한 받침을 늘리면 비탈 밑에 턱(최대 0.37 m)이 생긴다 (09-24 노보리 밑에서 괴물이 걸렸다)"""
+    for n2, pts2, _, _, _ in TUNNELS:
+        if n2 == name: continue
+        for i, v in enumerate(pts2):
+            if abs(v[0] - p[0]) < 1e-6 and abs(v[1] - p[1]) < 1e-6:
+                nb = [pts2[j] for j in (i - 1, i + 1) if 0 <= j < len(pts2)]
+                if any(abs(w[2] - v[2]) > 1e-6 for w in nb): return True
+    return False
 
 def profile(w, h):
     hw = w / 2
@@ -156,7 +177,7 @@ for m in list(bpy.data.meshes):
 # ================= 1. 공기 덩어리
 bm = bmesh.new()
 for name, pts, h, _, _ in TUNNELS:
-    flat = [i == 0 or i == len(pts) - 1 or pts[i - 1][2] == pts[i][2] == pts[i + 1][2] for i in range(len(pts))]
+    flat = [(i == 0 or i == len(pts) - 1 or pts[i - 1][2] == pts[i][2] == pts[i + 1][2]) and (SAB == "step" or not slope_starts_at(name, pts[i])) for i in range(len(pts))]
     for i, (a, b) in enumerate(zip(pts, pts[1:])):
         prism(bm, Vector(a[:3]), Vector(b[:3]), a[3], b[3], h, min(a[3] / 2, 0.8) if flat[i] else 0.0, min(b[3] / 2, 0.8) if flat[i + 1] else 0.0)
     for i, p in enumerate(pts[1:-1], 1):
@@ -209,11 +230,11 @@ for name, pts, h, _, walk in TUNNELS:
         n = max(1, int(L / 0.5))
         for i in range(n + 1):
             t = i / n
-            if L * min(t, 1 - t) < 1.2 and (t < 0.5 and a is pts[0] or t > 0.5 and b is pts[-1]): continue   # 막다른 끝 1.2 m 는 둥글게 좁아진다
+            if L * min(t, 1 - t) < 1.2 and (t < 0.5 and a is pts[0] and not near_other(name, a) or t > 0.5 and b is pts[-1] and not near_other(name, b)): continue   # 진짜 막다른 끝 1.2 m 만 뺀다(둥글게 좁아진다) — 갈림에 붙은 끝은 잰다
             P = A.lerp(B, t); o = P + Vector((0, 0, 1.0)); samples += 1
             dl, dr = ray(o, lat, 10), ray(o, -lat, 10)
             up = ray(P + Vector((0, 0, 0.2)), Z, 10); dn = ray(o, -Z, 3)
-            if dn is None or dn > 1.25: no_floor.append((name, round(P.x, 1), round(P.y, 1)))
+            if dn is None or abs(dn - 1.0) > 0.2: no_floor.append((name, round(P.x, 1), round(P.y, 1), None if dn is None else round(1.0 - dn, 2)))   # 바닥이 설계 높이 ±0.2 m 안 (턱·구덩이 없음)
             if walk:
                 w = (dl or 99) + (dr or 99); hh = (up or 99) + 0.2
                 if w < worst_w[0]: worst_w = (w, (name, round(P.x, 1), round(P.y, 1)))
@@ -231,7 +252,7 @@ if leaks: print("  leaks:", leaks[:6])
 if no_floor: print("  no floor:", no_floor[:6])
 assert tris <= TRI_MAX, "FAIL: 삼각형 %d > %d" % (tris, TRI_MAX)
 assert not leaks, "FAIL: 맵에 구멍 (광선이 %d m 안에서 벽에 안 맞음)" % SEAL_M
-assert not no_floor, "FAIL: 바닥이 없는 곳"
+assert not no_floor, "FAIL: 바닥이 없거나 설계 높이에서 0.2 m 넘게 어긋난 곳 (턱·구덩이)"
 assert worst_w[0] >= MIN_W, "FAIL: 가장 좁은 곳 %.2f m < %.1f" % (worst_w[0], MIN_W)
 assert worst_h[0] >= MIN_H, "FAIL: 가장 낮은 천장 %.2f m < %.1f" % (worst_h[0], MIN_H)
 assert all(p is not None for p in pocket_pts), "FAIL: 벽에 안 붙은 광맥 자리"
@@ -305,8 +326,33 @@ o = new_obj("PRP_Fence", bm, M_TIMB); box_uv(o.data, UV_WALL * 2)
 dd = (Vector((28.4, -7.6, 0)) - Vector((33, -3.6, 0))).normalized(); dl = Vector((-dd.y, dd.x, 0))   # 바람 문 = 널문
 bm = bmesh.new(); box_verts(bm, Vector((28.4, -7.6, 1.15)) - dd * 0.25, dd, dl, Z, 0.05, 1.15, 1.15)
 o = new_obj("PRP_WindDoor", bm, M_TIMB); box_uv(o.data, UV_WALL * 2)
-bm = bmesh.new(); box_verts(bm, Vector((21.05, 10.0, SEAM + 1.0)), X, Y, Z, 0.75, 0.015, 1.0)         # 옛 노보리 입구의 매달린 철판
-o = new_obj("PRP_Plate", bm, M_RUST); o.rotation_euler = (math.radians(4), 0, math.radians(-7)); box_uv(o.data, UV_WALL * 2)
+bm = bmesh.new(); box_verts(bm, Vector((0, 0, 0)), X, Y, Z, 0.75, 0.015, 1.0)                         # 옛 노보리 입구의 매달린 철판 — 제 가운데로 돌린다
+o = new_obj("PRP_Plate", bm, M_RUST); o.location = (21.15, 10.0 if SAB == "plate" else 10.95, SEAM + 1.0);   # 사보타주 plate = 옛 자리(연층 안) o.rotation_euler = (math.radians(4), 0, math.radians(-7)); box_uv(o.data, UV_WALL * 2)   # (09-24: 원점 기준으로 돌려 크로스컷 1 한가운데 섰다)
+
+# 소품 충돌까지 넣고 걷는 길 폭을 다시 잰다 — Unity 는 철판·널문·울타리에 충돌을 붙인다 (09-24: 연층 한가운데 선 철판이 길을 막았는데 동굴만 재서 못 잡았다)
+deps = bpy.context.evaluated_depsgraph_get()
+def world_bvh(o_):                                            # 세상 좌표로 (철판은 제 자리·돌림이 있다 — 물체 좌표 BVH 는 광선과 어긋난다)
+    b_ = bmesh.new(); b_.from_object(o_, deps); b_.transform(o_.matrix_world); t_ = BVHTree.FromBMesh(b_); b_.free(); return t_
+prop_bvh = [world_bvh(bpy.data.objects[n]) for n in ("PRP_Plate", "PRP_WindDoor", "PRP_Fence")]
+def ray_all(o, d, far):
+    best = ray(o, d, far)
+    for t_ in prop_bvh:
+        h_ = t_.ray_cast(o, d.normalized(), far)
+        if h_[0] is not None and (best is None or h_[3] < best): best = h_[3]
+    return best
+worst_p = (99, None)
+for name, pts, h, _, walk in TUNNELS:
+    if not walk: continue
+    for a, b in zip(pts, pts[1:]):
+        A, B = Vector(a[:3]), Vector(b[:3]); L = (Vector((B.x - A.x, B.y - A.y))).length
+        d2 = Vector((B.x - A.x, B.y - A.y, 0)).normalized(); lat = Vector((-d2.y, d2.x, 0)); n = max(1, int(L / 0.5))
+        for i in range(n + 1):
+            t = i / n
+            if L * min(t, 1 - t) < 1.2 and (t < 0.5 and a is pts[0] and not near_other(name, a) or t > 0.5 and b is pts[-1] and not near_other(name, b)): continue
+            o = A.lerp(B, t) + Vector((0, 0, 1.0)); w = (ray_all(o, lat, 10) or 99) + (ray_all(o, -lat, 10) or 99)
+            if w < worst_p[0]: worst_p = (w, (name, round(o.x, 1), round(o.y, 1)))
+print("CHECK booth props: narrowest with plate/door/fence %.2f m at %s" % worst_p)
+assert worst_p[0] >= MIN_W, "FAIL: 소품이 길을 좁힌다 %.2f m at %s" % worst_p
 
 # ================= 7. 자리 (빈 노드)
 for i, p in enumerate(pocket_pts, 1): empty("SLOT_Pocket_%d" % i, p)
@@ -315,7 +361,7 @@ for i, p in enumerate(GAP_SMALL, 1): empty("SLOT_GapSmall_%d" % i, p)
 for i, (x, y, fz, h) in enumerate(LIGHTS, 1): empty("SLOT_Light_%d" % i, (x, y, fz + h - 0.35))
 for i, (x, y, fz, h) in enumerate(DEAD_LIGHTS, 1): empty("SLOT_DeadLight_%d" % i, (x, y, fz + h - 0.35))
 empty("SPAWN_Player", (-1.5, 0, 0.05)); empty("LOOK_Player", (6, 0, 1.6))
-empty("SPAWN_Stalker", (40.0, 15.0, SEAM + 0.05))
+empty("SPAWN_Stalker", (37.55, 15.05, SEAM + 0.05)); empty("LOOK_Stalker", (46.0, 15.05, SEAM + 1.0))   # 기둥 사이 네거리, 통로 따라 동쪽을 본다 (기둥을 보고 서면 숙인 머리가 기둥 속)
 empty("SLOT_Prop_Cart", (4, -1.3, 0)); empty("SLOT_Prop_Lunchbox", (62.3, 10.6, SEAM))
 
 # ================= 8. 내보내기

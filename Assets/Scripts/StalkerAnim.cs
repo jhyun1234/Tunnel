@@ -250,7 +250,7 @@ public class StalkerAnim : MonoBehaviour
         // Stalker 는 벽타기 시작 때 천천히(초당 5) 벽 쪽으로 돈다 — 세우는 동안 Body 를 벽 정면으로 같이 돌려 손발 면이 벽과 나란하게
         var body = transform.parent;
         if (st.enabled && st.state == Stalker.State.Climb)
-            body.rotation = Quaternion.Slerp(st.transform.rotation, Quaternion.LookRotation(Vector3.right * (st.transform.position.x >= 0f ? 1f : -1f)), Tilt);
+            body.rotation = Quaternion.Slerp(st.transform.rotation, Quaternion.LookRotation(st.ClimbFacing), Tilt);
         else
             body.localRotation = Quaternion.identity;
         transform.localRotation = Quaternion.Euler(-90f * Tilt, 0f, 0f) * baseRot;
@@ -717,6 +717,51 @@ public class StalkerAnim : MonoBehaviour
         }
     }
 
+    // 천장 밑 숙이기 (MAP1): 애니메이션이 만든 자세에서 머리 꼭대기가 천장 − 여유를 넘는 만큼 엉덩이를 낮추고(다리 IK) 모자라면 허리를 숙인다
+    [System.NonSerialized] public bool stoop = true;                      // 사보타주 bigmonster 와 함께 볼 때 끄는 손잡이
+    public float StoopDrop { get; private set; }
+    public float StoopPitch { get; private set; }
+    public float CeilingAbove { get; private set; } = 99f;               // 검사: 그 자리 천장 높이 (발 기준)
+    CharacterController stCC;
+    void Stoop(float dt)
+    {
+        if (!stoop || hipsB == null || headB == null || torso[0] == null || Tilt > 0f) { StoopDrop = StoopPitch = 0f; return; }
+        Vector3 root = st.transform.position;
+        const int mask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));
+        stCC ??= st.GetComponent<CharacterController>();
+        CeilingAbove = Stalker.RayIgnore(root + Vector3.up * 1.0f, Vector3.up, 6f, mask, stCC, out RaycastHit hit) ? hit.distance + 1.0f : 99f;   // 제 캡슐은 뺀다
+        Vector3 overHead = new Vector3(headB.position.x, root.y + 1.0f, headB.position.z);   // 천장은 아치라 가장자리가 낮다 — 머리 바로 위도 잰다 (09-24: 가운데만 재서 달릴 때 머리가 4 cm 닿았다)
+        if (Stalker.RayIgnore(overHead, Vector3.down, 1.4f, mask, stCC, out _) && Stalker.RayIgnore(overHead, Vector3.up, 6f, mask, stCC, out RaycastHit hh))
+            CeilingAbove = Mathf.Min(CeilingAbove, hh.distance + 1.0f);
+        float limit = root.y + CeilingAbove - Tuning.STALKER_STOOP_MARGIN;
+        float top = headB.position.y + Tuning.STALKER_STOOP_HEAD_TOP;
+        float wantDrop = Mathf.Clamp(top - limit, 0f, Tuning.STALKER_STOOP_DROP_MAX);
+        // 엉덩이를 낮춘 뒤에도 넘는 만큼 허리 각: 등뼈 뿌리에서 머리 꼭대기로 가는 막대를 앞으로 돌려 잰다 (뼈는 안 건드리고 셈만)
+        Vector3 pivot = torso[0].position - Vector3.up * wantDrop, v = headB.position + Vector3.up * Tuning.STALKER_STOOP_HEAD_TOP - Vector3.up * wantDrop - pivot;
+        float wantPitch = 0f;
+        for (float a = 0f; a <= Tuning.STALKER_STOOP_PITCH_MAX; a += 2.5f)
+        {
+            wantPitch = a;
+            if (pivot.y + (Quaternion.AngleAxis(a, st.transform.right) * v).y <= limit) break;
+        }
+        float kDown = 1f - Mathf.Exp(-dt / Tuning.STALKER_STOOP_DOWN_S), kUp = 1f - Mathf.Exp(-dt / Tuning.STALKER_STOOP_S);   // 숙이기는 빨리, 펴기는 천천히
+        StoopDrop = Mathf.Lerp(StoopDrop, wantDrop, wantDrop > StoopDrop ? kDown : kUp);
+        StoopPitch = Mathf.Lerp(StoopPitch, wantPitch, wantPitch > StoopPitch ? kDown : kUp);
+        if (StoopDrop < 0.005f && StoopPitch < 0.5f) return;
+        var footP = new Vector3[2]; var footR = new Quaternion[2];
+        for (int h = 0; h < 2; h++) if (legB[h, 2] != null) { footP[h] = legB[h, 2].position; footR[h] = legB[h, 2].rotation; }
+        Quaternion headWorld = headB.rotation;
+        hipsB.position -= Vector3.up * StoopDrop;
+        torso[0].rotation = Quaternion.AngleAxis(StoopPitch, st.transform.right) * torso[0].rotation;
+        headB.rotation = headWorld;                                        // 쳐다보는 방향은 그대로 (허리만 숙인다)
+        for (int h = 0; h < 2; h++)
+            if (legB[h, 0] != null && legB[h, 1] != null && legB[h, 2] != null)
+            {
+                TwoBone(legB[h, 0], legB[h, 1], legB[h, 2], footP[h], 1f);
+                legB[h, 2].rotation = footR[h];
+            }
+    }
+
     void LateUpdate()
     {
         if (Upright)
@@ -725,6 +770,8 @@ public class StalkerAnim : MonoBehaviour
             Head(Time.deltaTime);
         if (neckExt != null && driveNeck)
             NeckOut(Time.deltaTime);
+        if (Upright)
+            Stoop(Time.deltaTime);                                        // 머리 돌리기·목 빼기 뒤에 — 앞에서 하면 그 둘이 머리를 다시 들어 천장에 닿았다 (09-24)
         if (jaw != null && driveJaw)
             Jaw(Time.deltaTime);
         if (Upright && driveFingers && Current != "up_run")
