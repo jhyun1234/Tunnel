@@ -104,7 +104,7 @@ public static class Tuning
     public static readonly Color AMBIENT_COLOR = new Color(0.1f, 0.12f, 0.2f);
     public const float AMBIENT_ENERGY = 0.03f;
     // ---- UI-2 인트로 (지스타 2026 운영지침 1-1 · 4-1, 제안서 UI-2 승인 09-22). 전부 Unity 전용 ----
-    public const string INTRO_TEAM = "(팀명)";                    // 팀명 — 사용자가 정하면 바꾼다 (지침: 인트로에 팀명 필수)
+    public const string INTRO_TEAM = "오토마이너";                 // 팀명 — 사용자 09-24 (지침: 인트로에 팀명 필수)
     public const string INTRO_TITLE = "막장";
     public const string INTRO_SUBTITLE = "End of the Dead-End";  // 영문 부제 (사용자 확정 09-22; "They Wait Below" 는 itch.io 게임과 겹쳐 폐기)
     public const float INTRO_LOGO_MIN_S = 2.0f;    // s, 로고 최소 노출 (지침 1-1 "최소 2초") — 그 전엔 키를 눌러도 안 넘어간다. 사보타주 skipearly 가 0 으로
