@@ -89,6 +89,54 @@ def niche_pts(x, y, z, nx, ny, w, depth=None):
     return [(x + nx * a, y + ny * a, z, NICHE_W), (x + nx * b, y + ny * b, z, NICHE_W)]
 
 
+def through_crevice(T, n):
+    """개구멍 n 을 뚫린 바위 틈으로 바꾼다 (T 를 고친다) → (이름, "through", 한쪽 끝, 반대편 끝, 방향)"""
+    i = [t[0] for t in T].index(n); nm, pts, *_ = T[i]; L = seg_len(pts)
+    def zp(f, sg):                                                  # 굴 따라 f 자리에서 옆으로 sg × CREV_ZIG
+        q = np.array(point_at(pts, L * f)); dd = np.array(point_at(pts, min(L * f + 0.05, L))) - np.array(point_at(pts, max(L * f - 0.05, 0)))
+        return np.array((*(q + np.array((-dd[1], dd[0])) / np.linalg.norm(dd) * CREV_ZIG * sg), proj(pts, q)[2]))
+    ss = np.cumsum([0.0] + [math.dist(a[:2], b[:2]) for a, b in zip(pts, pts[1:])])
+    zig = [k[1] for k in sorted([(s_, np.array(p[:3])) for s_, p in zip(ss, pts)] + [(L * f, zp(f, sg)) for f, sg in ((0.35, 1), (0.65, -1))], key=lambda k: k[0])]   # 가운데 선이 지그재그 — 곧은 홈처럼 안 보이게 (꺾는 점은 그대로)
+    T[i] = (nm, [(*p, CREV_W) for p in zig], CREV_H, False, False, "K", "crevice")
+    d = np.array(pts[-1][:2]) - np.array(pts[0][:2]); return (nm, "through", pts[0][:3], pts[-1][:3], tuple(d / np.linalg.norm(d)))
+
+
+def closed_crevice(T, name, wall, n, z):
+    """막힌 바위 틈: 벽 점 wall 에서 안쪽 방향 n 으로 좁은 틈 → 안쪽 방 (T 에 둘을 더한다) → (이름, "closed", 입구 벽 점, 숨는 자리, 방향)"""
+    p = lambda k: (*(wall + n * k), z)
+    l_ = np.array((-n[1], n[0])); pz = lambda k, sd: (*(wall + n * k + l_ * sd), z)
+    T.append((name, [(*p(-0.6), CREV_W), (*pz(0.7, CREV_ZIG), CREV_W), (*p(CREV_SLIT), CREV_W)], CREV_H, False, False, "K", "crevice"))
+    T.append((name + "_room", [(*p(CREV_SLIT - 0.1), CREV_ROOM), (*p(CREV_SLIT + CREV_ROOM + 0.2), CREV_ROOM)], CREV_H + 0.2, False, False, "K", "crevice_room"))
+    return (name, "closed", p(0), p(CREV_HIDE), tuple(n))
+
+
+def add_niches(T, R, maxgap=12.5):
+    """좁은 대피소 자동: 걷는 굴마다 갈림·숨을 곳 사이가 maxgap 을 넘지 않게 (다른 굴·방과 부딪히면 앞뒤로 옮김). T 에 더한다"""
+    global _R; _R = R
+    walkT = [t for t in T if t[4]]; others = [t for t in T if t[6] != "tunnel" or t[4]]
+    ev = route_events(T, R, walkT, others); added = []
+    for n, pts, *_ in walkT:
+        e = ev[n]
+        for (s0, j0), (s1, j1) in zip(e, e[1:]):
+            L = s1 - s0; k = math.ceil(L / maxgap) - 1 if (j0 and j1) else (math.ceil(L / maxgap) if L > 9 else 0)
+            for i in range(1, k + 1):
+                s_want = s0 + L * i / (k + 1) if (j0 and j1) else s0 + L * i / (k + 0.5)
+                done = False
+                for ds, depth in [(d_, NICHE_D) for d_ in (0, 1.5, -1.5, 3, -3, 4.5, -4.5, 6, -6)] + [(d_, 1.6) for d_ in (0, 1.5, -1.5, 3, -3, 4.5, -4.5, 6, -6)]:   # 자리가 좁으면 얕은 대피소(1.6 m)
+                    s = min(max(s_want + ds, s0 + 1.0), s1 - 1.0)
+                    (x, y) = point_at(pts, s); (x2, y2) = point_at(pts, min(s + 0.5, seg_len(pts))); (x1, y1) = point_at(pts, max(s - 0.5, 0))
+                    dx, dy = x2 - x1, y2 - y1; L2 = math.hypot(dx, dy) or 1; w = pts[0][3]; z = proj(pts, (x, y))[2]
+                    for side in ((1, -1) if len(added) % 2 == 0 else (-1, 1)):
+                        nx, ny = -dy / L2 * side, dx / L2 * side
+                        tips = [(x + nx * (w / 2 + r) + tx * sd, y + ny * (w / 2 + r) + ty * sd) for r in (0.8, 1.6, 2.4, 3.2) if r <= depth + 0.8 for sd in (-0.5, 0, 0.5)
+                                for tx, ty in ((dx / L2, dy / L2),)]                          # 대피소 폭까지 — 옆 굴·방과 바위 1.6 m 이상
+                        narrow_ = [t for t in T if t[6] != "tunnel"] + added              # 다른 개구멍·대피소와도 떨어지게 (겹치면 넓어져 괴물이 들어간다)
+                        if all(not near_room(tp, 1.6) for tp in tips) and all(proj(o[1], tp)[0] > o[1][0][3] / 2 + 1.6 for o in walkT if o[0] != n for tp in tips)                                     and all(proj(o[1], tp)[0] > o[1][0][3] / 2 + 1.2 for o in narrow_ for tp in tips):
+                            added.append(("niche_%d" % len(added), niche_pts(x, y, z, nx, ny, w, depth), NICHE_H, False, False, "K", "niche")); done = True; break
+                    if done: break
+    T.extend(added)
+
+
 def build(crevices=False):
     T, R, PIL = [], [], []
     def pl(name, pxs, w, h, z, lz, kind="tunnel", walk=True, timber=True):
@@ -203,14 +251,7 @@ def build(crevices=False):
     crev = []                                                               # (이름, through/closed, 입구 벽 점, 끝 점(뚫린: 반대편 끝 · 막힌: 숨는 자리), 안쪽 방향)
     if crevices:
         for n in ("c_plaza", "c_link12", "c_z5", "c_z4"):                   # 긴 개구멍(① · ② → 큰길 10 m 등)은 그대로 — 뚫린 틈은 4.2 m 안팎(제안서)
-            i = [t[0] for t in T].index(n); nm, pts, *_ = T[i]; L = seg_len(pts)
-            def zp(f, sg):                                                  # 굴 따라 f 자리에서 옆으로 sg × CREV_ZIG
-                q = np.array(point_at(pts, L * f)); dd = np.array(point_at(pts, min(L * f + 0.05, L))) - np.array(point_at(pts, max(L * f - 0.05, 0)))
-                return np.array((*(q + np.array((-dd[1], dd[0])) / np.linalg.norm(dd) * CREV_ZIG * sg), proj(pts, q)[2]))
-            ss = np.cumsum([0.0] + [math.dist(a[:2], b[:2]) for a, b in zip(pts, pts[1:])])
-            zig = [k[1] for k in sorted([(s_, np.array(p[:3])) for s_, p in zip(ss, pts)] + [(L * f, zp(f, sg)) for f, sg in ((0.35, 1), (0.65, -1))], key=lambda k: k[0])]   # 가운데 선이 지그재그 — 곧은 홈처럼 안 보이게 (꺾는 점은 그대로)
-            T[i] = (nm, [(*p, CREV_W) for p in zig], CREV_H, False, False, "K", "crevice")
-            d = np.array(pts[-1][:2]) - np.array(pts[0][:2]); crev.append((nm, "through", pts[0][:3], pts[-1][:3], tuple(d / np.linalg.norm(d))))
+            crev.append(through_crevice(T, n))
         def closed(name, px, py, parent=None, d=None):
             q = np.array(m_(px, py))
             if parent:                                                      # 굴 벽: px 쪽 벽 (px = 옛 대피소 입구)
@@ -218,42 +259,13 @@ def build(crevices=False):
                 n = (q - c) / np.linalg.norm(q - c); wall = c + n * par[0][3] / 2
             else:                                                           # 방 벽: px = 벽 위 점, d = 안쪽 방향
                 n = np.array(d, float); wall = q; z = room_floor(R, tuple(q))
-            p = lambda k: (*(wall + n * k), z)
-            l_ = np.array((-n[1], n[0])); pz = lambda k, sd: (*(wall + n * k + l_ * sd), z)
-            T.append((name, [(*p(-0.6), CREV_W), (*pz(0.7, CREV_ZIG), CREV_W), (*p(CREV_SLIT), CREV_W)], CREV_H, False, False, "K", "crevice"))
-            T.append((name + "_room", [(*p(CREV_SLIT - 0.1), CREV_ROOM), (*p(CREV_SLIT + CREV_ROOM + 0.2), CREV_ROOM)], CREV_H + 0.2, False, False, "K", "crevice_room"))
-            crev.append((name, "closed", p(0), p(CREV_HIDE), tuple(n)))
+            crev.append(closed_crevice(T, name, wall, n, z))
         closed("cr_z2w", 770, 160, d=(-1, 0)); closed("cr_z2e", 1090, 330, d=(1, 0)); closed("cr_pump", 1030, 1160, d=(1, 0))   # ② 기둥 사이 양쪽 벽 · 펌프실 (옛 작은 틈 자리)
         for nm, px_, py_, par in (("cr_main_a", 1020, 511, "main"), ("cr_main_b", 1275, 557, "main"), ("cr_link_w", 653, 707, "link_w"), ("cr_link_e", 1119, 754, "link_e"),
                                   ("cr_arc", 1239, 35, "T_arc"), ("cr_edge_w", 142, 1072, "W_edge"), ("cr_edge_e", 1823, 1029, "E_edge")):
             closed(nm, px_, py_, par)                                       # 큰길 갈림 가까이 둘 · 광장 옆 굴 둘 · 활 굴 · 바깥 고리 둘 (옛 대피소 자리) — 막힌 틈 10
 
-    # ---- 좁은 대피소 자동: 걷는 굴마다 갈림·숨을 곳 사이가 12.5 m 를 넘지 않게 (다른 굴·방과 부딪히면 앞뒤로 옮김)
-    global _R; _R = R
-    def auto_niches(maxgap=12.5):
-        walkT = [t for t in T if t[4]]; others = [t for t in T if t[6] != "tunnel" or t[4]]
-        ev = route_events(T, R, walkT, others); added = []
-        for n, pts, *_ in walkT:
-            e = ev[n]
-            for (s0, j0), (s1, j1) in zip(e, e[1:]):
-                L = s1 - s0; k = math.ceil(L / maxgap) - 1 if (j0 and j1) else (math.ceil(L / maxgap) if L > 9 else 0)
-                for i in range(1, k + 1):
-                    s_want = s0 + L * i / (k + 1) if (j0 and j1) else s0 + L * i / (k + 0.5)
-                    done = False
-                    for ds, depth in [(d_, NICHE_D) for d_ in (0, 1.5, -1.5, 3, -3, 4.5, -4.5, 6, -6)] + [(d_, 1.6) for d_ in (0, 1.5, -1.5, 3, -3, 4.5, -4.5, 6, -6)]:   # 자리가 좁으면 얕은 대피소(1.6 m)
-                        s = min(max(s_want + ds, s0 + 1.0), s1 - 1.0)
-                        (x, y) = point_at(pts, s); (x2, y2) = point_at(pts, min(s + 0.5, seg_len(pts))); (x1, y1) = point_at(pts, max(s - 0.5, 0))
-                        dx, dy = x2 - x1, y2 - y1; L2 = math.hypot(dx, dy) or 1; w = pts[0][3]; z = proj(pts, (x, y))[2]
-                        for side in ((1, -1) if len(added) % 2 == 0 else (-1, 1)):
-                            nx, ny = -dy / L2 * side, dx / L2 * side
-                            tips = [(x + nx * (w / 2 + r) + tx * sd, y + ny * (w / 2 + r) + ty * sd) for r in (0.8, 1.6, 2.4, 3.2) if r <= depth + 0.8 for sd in (-0.5, 0, 0.5)
-                                    for tx, ty in ((dx / L2, dy / L2),)]                          # 대피소 폭까지 — 옆 굴·방과 바위 1.6 m 이상
-                            narrow_ = [t for t in T if t[6] != "tunnel"] + added              # 다른 개구멍·대피소와도 떨어지게 (겹치면 넓어져 괴물이 들어간다)
-                            if all(not near_room(tp, 1.6) for tp in tips) and all(proj(o[1], tp)[0] > o[1][0][3] / 2 + 1.6 for o in walkT if o[0] != n for tp in tips)                                     and all(proj(o[1], tp)[0] > o[1][0][3] / 2 + 1.2 for o in narrow_ for tp in tips):
-                                added.append(("niche_%d" % len(added), niche_pts(x, y, z, nx, ny, w, depth), NICHE_H, False, False, "K", "niche")); done = True; break
-                        if done: break
-        T.extend(added)
-    auto_niches()
+    add_niches(T, R)
 
     # ---- 자리들
     def snap(px, py):                                                        # 손그림 점 → 가장 가까운 걷는 바닥
