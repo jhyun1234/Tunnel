@@ -118,9 +118,9 @@ public static class Tuning
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
     public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 부스 천장 2.7~3.2 m(09-24 +0.5 m 전 2.2~2.7 에 맞춘 값) (복도는 STALKER_H 2.8 그대로)
     // ---- R2b 바위 틈 비집기 (제안서 docs/제안서_R2b_바위틈_비집기.md, 승인 09-24). 틈 0.5 m 는 몸 캡슐 0.8 m 보다 좁다 — 입구에서 E 를 누르면 조작이 잠기고 틈 가운데 선을 따라 옮겨진다
-    public const float SQUEEZE_S = 2.5f;           // s, 막힌 틈에 들어가는 시간(바위 밖 선 자리 → 숨는 자리, SQUEEZE_REF_M). 뚫린 틈(7~8 m)은 같은 빠르기라 더 걸린다. 판정 때 F7 F8 (제안값 — 더 포레스트 3.5 s 보다 짧게, 쫓길 때 쓴다)
+    public const float SQUEEZE_S = 2.5f;           // s, 막힌 틈에 들어가는 시간(바위 밖 선 자리 → 숨는 자리, SQUEEZE_REF_M). 뚫린 틈(4.5~9.8 m)은 같은 빠르기라 3.0~6.6 s. 사용자 판정 09-25 "길이 괜찮다" (F7 F8, 제안값 그대로)
     public const float SQUEEZE_REF_M = 3.7f;       // m, SQUEEZE_S 가 가리키는 길이 = 막힌 틈 비집는 길 (바위 밖 1.1 + 좁은 틈 1.6 + 안쪽 방 숨는 자리까지 1.0)
-    public const float SQUEEZE_TURN_DEG = 60f;     // °, 틈 속에서 몸을 옆으로 돌리는 각 — 바위면이 화면 대부분, 가는 쪽은 화면 가장자리 (0 = 가는 쪽 정면 · 90 = 벽을 마주봄). 판정 때 F9 F10 (제안값)
+    public const float SQUEEZE_TURN_DEG = 40f;     // °, 틈 속에서 몸을 옆으로 돌리는 각 (0 = 가는 쪽 정면 · 90 = 벽을 마주봄). 사용자 판정 09-25 (F9 F10, 제안값 60)
     public const float SQUEEZE_REACH_M = 1.3f;     // m, 바위 밖 선 자리(또는 숨는 자리)에서 이만큼 안이면 E 가 먹는다
     public const float SQUEEZE_FACE_DEG = 70f;     // °, 틈 쪽을 이 각 안으로 보고 있어야 E 가 먹는다 — 등 뒤 틈으로 빨려 들어가지 않게
     public const float SQUEEZE_BOB_M = 0.015f;     // m, 틈 속에서 머리가 비비적대는 폭 (제안값)

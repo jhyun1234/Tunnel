@@ -420,8 +420,9 @@ public class M1Check : MonoBehaviour
         int shortLaps = laps.Count(l => l <= 60f);
         Check("booth_size", mapA >= 1950f && boothA >= 1500f, $"floor the monster can walk (navmesh) reachable from the cage: whole map {mapA:F0} m² ({mapA / 436f:F1} × MAP1 436, ≥ 1950) · booth (both block groups on) {boothA:F0} m² ({boothA / 436f:F1} ×, ≥ 1500) · structure measured in {Time.realtimeSinceStartup - t0:F1} s");
         Check("booth_escape", shortLaps >= 30, $"rock pillars with floor all round and one lap ≤ 60 m: {shortLaps} (≥ 30, plan 35) · booth {lapsBooth.Count(l => l <= 60f)} · laps m: {string.Join(" ", laps.OrderBy(l => l).Select(l => l.ToString("F0")))}");
-        Check("booth_return", wFull.within300 >= 40f && wBooth.within300 >= 75f,
-            $"lost walker (never turns back except at dead ends, random at every fork, crawls too), {wFull.runs} starts: home to the cage plaza within 300 m {wFull.within300:F0} % (≥ 40, plan 47), median {wFull.median:F0} m · booth {wBooth.within300:F0} % (≥ 75, plan 85), median {wBooth.median:F0} m · graph {wFull.nodes} forks/ends, {wFull.edges} tunnels, {wFull.deadEnds} dead ends, {wFull.homeNodes} plaza points");
+        // 부스판 70: 사용자 플레이 판정 09-25 "c_z5 9.8 m 뚫린 틈을 그대로, 이 정도는 통과" — 잰 값 71 % (막다른 구멍이던 c_z5 를 진짜로 이으니 75 → 71, 55차)
+        Check("booth_return", wFull.within300 >= 40f && wBooth.within300 >= 70f,
+            $"lost walker (never turns back except at dead ends, random at every fork, crawls too), {wFull.runs} starts: home to the cage plaza within 300 m {wFull.within300:F0} % (≥ 40, plan 47), median {wFull.median:F0} m · booth {wBooth.within300:F0} % (≥ 70 user-judged, plan 85), median {wBooth.median:F0} m · graph {wFull.nodes} forks/ends, {wFull.edges} tunnels, {wFull.deadEnds} dead ends, {wFull.homeNodes} plaza points");
 
         var notes = new List<string>(); bool blocksOk = true;
         foreach (var blk in blocks)
