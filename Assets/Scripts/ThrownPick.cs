@@ -127,7 +127,7 @@ public class ThrownPick : MonoBehaviour
             glowMaterial.color = Tuning.PICK_GLOW_COLOR * glow;
         }
         var kb = Keyboard.current;
-        if (kb == null || !kb.eKey.wasPressedThisFrame || player.frozen)
+        if (kb == null || !kb.eKey.wasPressedThisFrame || player.Busy)
             return;
         if (near)
             pickaxe.Return();

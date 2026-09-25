@@ -10,13 +10,14 @@
 노드: SHL_Booth_<칸>(보임) · COL_Booth_<칸>(충돌, 같은 그물) · PRP_*(갱목·돌무더기·울타리) · BLK_<묶음>_<i>(부스 막힘 돌무더기, 묶음 1 서쪽 · 2 동쪽)
   · SLOT_Pocket_1..30 · SLOT_GapBig_1..8 · SLOT_GapSmall_* · SLOT_Light_* · SLOT_DeadLight_* · SLOT_Crawl_<i>_A/B · SLOT_Niche_<i>
   · SLOT_Mouth_<굴>_<0|1>(다른 굴·방에 붙은 끝) + SLOT_In_<굴>_<0|1>(그 끝에서 굴 따라 2.5 m 안) · SLOT_Mid_<굴>(굴 길이 절반) — Unity 검사가 입구·비탈·곁길 자리를 여기서 읽는다
-  · SLOT_Home_A/B(정거장 광장 네모의 두 모서리) · SPAWN_Player · LOOK_Player · SPAWN_Stalker · LOOK_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox.
+  · SLOT_Home_A/B(정거장 광장 네모의 두 모서리) · SPAWN_Player · LOOK_Player · SPAWN_Stalker · LOOK_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox
+  · R2b 바위 틈: PRP_Crevice_<i>(입구 바위) · SLOT_Crevice_<i>_Mouth · _Hide(막힌) / _Out(뚫린) · _P0.._Pn(비집는 길: 바깥 선 자리 → 틈 가운데 선 → 숨는 자리 / 반대편 바깥).
 자기 검사: 길 위 0.5 m 마다 폭 ≥ 1.9 · 천장 ≥ 2.7 · 바닥이 설계 ±0.2 m, 2 m 마다 26 방향 광선이 벽에 맞음(구멍 없음), 광맥 30곳이 벽에 붙음,
   개구멍 폭 0.75~1.15 · 대피소 폭 0.8~1.15 m(사람은 들어가고 괴물 1.2 m 는 못 들어감), 갈림 바닥 높이 맞음, 삼각형 ≤ 120만.
 사보타주: SABOTAGE=holeroof(천장에 구멍) · narrow(①–② 아래 줄을 1.2 m 로) · step(비탈 갈림 받침 없앰) · widecrawl(개구멍 1.6 m) → FAIL.
-  SABOTAGE=unitywide: 개구멍(1.6 × 2.4 m)·대피소(1.6 × 2.6 m)를 괴물이 들어가는 크기로 넓힌 맵을 자기 검사(폭)를 건너뛰고 내보낸다 — Unity 검사 booth_crawl · booth_niche 가 FAIL 하는지 보는 용도. 끝나면 진짜 맵으로 다시 만든다.
+  SABOTAGE=unitywide: 개구멍(1.6 × 2.4 m)·대피소(1.6 × 2.6 m)·바위 틈(폭 1.6 m)을 괴물이 들어가는 크기로 넓힌 맵을 자기 검사(폭)를 건너뛰고 내보낸다 — Unity 검사 booth_crawl · booth_niche · crevice_no_monster 가 FAIL 하는지 보는 용도. 끝나면 진짜 맵으로 다시 만든다.
 빠른 확인 FAST=1(렌더 안 함).
-R2B=1: R2b 바위 틈을 넣은 미리보기(차례 3 — 자리·모양을 먼저 보인다). Assets 를 안 건드리고 build/check_r2b/ 에 맵·그림을 낸다."""
+R2B=1: 1인칭 그림을 바위 틈 여섯 장으로(build/check_r2b/ — 차례 3 에서 자리·모양을 보인 그림). 바위 틈은 차례 4(09-25)부터 늘 맵에 들어간다."""
 import bpy, bmesh, os, sys, math, random, json
 import numpy as np
 from mathutils import Vector
@@ -28,7 +29,7 @@ sys.path.insert(0, HERE)
 import booth_table as bt
 PIECES = os.path.join(ROOT, "Assets", "Tunnel", "Pieces")
 R2B = os.environ.get("R2B", "") == "1"
-OUT = os.path.join(ROOT, "build", "check_r2b", "booth_map.gltf") if R2B else os.path.join(PIECES, "booth_map.gltf")
+OUT = os.path.join(PIECES, "booth_map.gltf")
 CHECK = os.path.join(ROOT, "build", "check_r2b" if R2B else "check_map2")
 SAB = os.environ.get("SABOTAGE", "")
 FAST = os.environ.get("FAST", "") == "1"
@@ -39,10 +40,13 @@ CHUNK_M = 40.0                                     # 덩어리 = 40 m 칸 (안 �
 # ---- 표 (booth_table.py)
 if SAB == "step": bt.LANDING = 0.0                 # 사보타주: 비탈 갈림에 받침 없음
 if SAB in ("widecrawl", "unitywide"): bt.CRAWL_W = 1.6
-if SAB == "unitywide": bt.NICHE_W, bt.NICHE_H, bt.CRAWL_H = 1.6, 2.6, 2.4   # 괴물(1.2 × 2.1 m)이 들어가는 크기 — 넓히기만 하면 높이에 막혀 버그가 아니다
-B = bt.build(crevices=R2B)
+if SAB == "unitywide": bt.NICHE_W, bt.NICHE_H, bt.CRAWL_H, bt.CREV_W = 1.6, 2.6, 2.4, 1.6   # 괴물(1.2 × 2.1 m)이 들어가는 크기 — 넓히기만 하면 높이에 막혀 버그가 아니다
+B = bt.build(crevices=True)                         # R2b 바위 틈 (차례 3 자리·모양 사용자 통과 09-25)
 bad = bt.check_junction_floors(B)
 assert not bad, "FAIL: 굴이 만나는 자리 바닥 높이가 어긋남 %s" % bad[:6]
+bad = bt.check_hole_ends(B)
+print("CHECK booth hole ends: crawl / crevice ends outside any tunnel or room %d %s" % (len(bad), bad))
+assert not bad, "FAIL: 개구멍·바위 틈 끝이 바위 속 (막다른 구멍)"
 TUNNELS = [(n, pts, h, tb, walk) for n, pts, h, tb, walk, lz, kind in B["T"]]
 KIND = {t[0]: t[6] for t in B["T"]}
 if SAB == "narrow":                                # 사보타주: ①–② 아래 줄 굴을 1.2 m 로 (막다른 끝 1.2 m 는 안 재므로 가운데 굴을 좁힌다)
@@ -364,7 +368,7 @@ for i, (name, kind, mouth, end, n) in enumerate(CREVS, 1):         # 틈은 동�
         return any(r[1] <= q[0] <= r[2] and r[3] <= q[1] <= r[4] for r in B["R"]) or any(bt.proj(t_[1], q)[0] < t_[1][0][3] / 2 for t_ in TUNNELS if t_[4])   # 방은 여유 없이 (room_of 의 0.5 m 여유로 입구 바위가 벽 속에 묻혔다)
     L = bt.seg_len(pts); ss = [k * 0.05 for k in range(int(L / 0.05) + 1)]
     rock = [s_ for s_ in ss if not inside_walk(bt.point_at(pts, s_))]
-    ra, rb = rock[0], (rock[-1] if kind == "through" else bt.CREV_SLIT)
+    ra, rb = rock[0], (rock[-1] if kind == "through" else L)       # 막힌 틈: 좁은 틈 끝(안쪽 방 앞)까지 — CREV_SLIT(벽에서 1.6 m)을 굴 따라 길이로 쓰면 틈 뒤쪽 0.6 m 를 안 쟀다
     bm = bmesh.new()
     for s_, sgn_ in ((ra, 1),) + (((rb, -1),) if kind == "through" else ()):   # 입구마다: 굴 쪽에서 틈 안쪽 방향
         q0, q1 = Vector((*bt.point_at(pts, s_), 0)), Vector((*bt.point_at(pts, min(max(s_ + 0.3 * sgn_, 0), L)), 0))
@@ -383,7 +387,8 @@ prop_bvh = [world_bvh(bpy.data.objects["PRP_Fence"])] + [world_bvh(c[0]) for c i
 crev_bad = []                                                # 틈 폭 0.4~0.6 m (바위 틈 벽 사이, 높이 0.5 · 1.0 · 1.5 m) · 막힌 틈 숨는 자리 바닥·천장
 crev_w = []
 for o_, name, kind, pts, ra, rb in crev_objs:                # 틈 속(입구 0.3 m 안쪽부터): 가운데 선에서 양옆 벽까지 (동굴 그물 = ray)
-    for s in [ra + 0.3 + (rb - 0.3 - ra - 0.3) * k / 10 for k in range(11)]:
+    rm = rb - (0.3 if kind == "through" else 0.55)              # 막힌 틈 끝 0.55 m 는 안쪽 방으로 벌어지는 자리 (복셀 0.2 m 가 둥글린다 — 재 보니 0.62~0.80)
+    for s in [ra + 0.3 + (rm - ra - 0.3) * k / 10 for k in range(11)]:
         q = bt.point_at(pts, s); q2 = bt.point_at(pts, s + 0.05); dd = Vector((q2[0] - q[0], q2[1] - q[1], 0)).normalized(); ll = Vector((-dd.y, dd.x, 0))
         for hz in (0.5, 1.0, 1.5):
             P = Vector((q[0], q[1], bt.proj(pts, q)[2] + hz))
@@ -395,7 +400,7 @@ for name, kind, mouth, end, n in CREVS:
     if dn is None or up is None or abs(dn - 1.0) > 0.2 or up + 1.0 < 2.0: crev_bad.append((name, "hide spot floor/ceiling", dn, up))
 print("CHECK booth crevices: %d (through %d · closed %d) · crack width %.2f~%.2f m · problems %d %s" % (len(CREVS), sum(c[1] == "through" for c in CREVS), sum(c[1] == "closed" for c in CREVS),
       min(crev_w or [0]), max(crev_w or [0]), len(crev_bad), crev_bad[:6]))
-assert not crev_bad, "FAIL: 바위 틈 폭(0.4~0.6 m) · 숨는 자리"
+assert not crev_bad or SAB == "unitywide", "FAIL: 바위 틈 폭(0.4~0.6 m) · 숨는 자리"
 def ray_all(o, d, far):
     best = ray(o, d, far)
     for t_ in prop_bvh:
@@ -436,8 +441,18 @@ for name, pts, h, _, _ in TUNNELS:                              # 검사용: 붙
         empty("SLOT_Mouth_%s_%d" % (name, k), end[:3])
         q = bt.point_at(pts, s_in); empty("SLOT_In_%s_%d" % (name, k), (*q, bt.proj(pts, q)[2]))
     q = bt.point_at(pts, L / 2); empty("SLOT_Mid_%s" % name, (*q, bt.proj(pts, q)[2]))
+def at_s(pts, s):                                               # 굴 따라 s 자리 (x, y, 바닥) — 양 끝 밖은 첫·끝 마디를 곧게 늘인다
+    L = bt.seg_len(pts)
+    for s_end, a, b in ((0.0, pts[0], pts[1]), (L, pts[-1], pts[-2])):
+        if (s < 0 and s_end == 0) or (s > L and s_end == L):
+            d = Vector((a[0] - b[0], a[1] - b[1], 0)).normalized(); k = abs(s - s_end); return (a[0] + d.x * k, a[1] + d.y * k, a[2])
+    q = bt.point_at(pts, s); return (*q, bt.proj(pts, q)[2])
 for i, (name, kind, mouth, end, n) in enumerate(CREVS, 1):   # R2b: 입구 벽 점 · 숨는 자리(막힌) / 반대편 끝(뚫린)
     empty("SLOT_Crevice_%d_Mouth" % i, mouth); empty("SLOT_Crevice_%d_%s" % (i, "Hide" if kind == "closed" else "Out"), end)
+    o_, _, _, pts, ra, rb = crev_objs[i - 1]                     # 비집는 길: 바위 밖 1.1 m(몸 캡슐 0.4 m 가 입구 바위 0.5 m 에 안 닿는 자리) → 틈 가운데 선 꺾는 점 → 숨는 자리 / 반대편 바위 밖 1.1 m
+    ss = np.cumsum([0.0] + [math.dist(a[:2], b[:2]) for a, b in zip(pts, pts[1:])])
+    path = [at_s(pts, ra - 1.1), at_s(pts, ra)] + [p_[:3] for p_, s_ in zip(pts, ss) if ra + 0.05 < s_ < rb - 0.05] + [at_s(pts, rb)] + ([tuple(end)] if kind == "closed" else [at_s(pts, rb + 1.1)])
+    for k, p_ in enumerate(path): empty("SLOT_Crevice_%d_P%d" % (i, k), p_)
 empty("SPAWN_Player", B["spawn_player"]); empty("LOOK_Player", B["look_player"])
 hx0_, hx1_, hy0_, hy1_ = B["home_rect"]; empty("SLOT_Home_A", (hx0_, hy0_, 0.0)); empty("SLOT_Home_B", (hx1_, hy1_, 0.0))   # 정거장 광장 네모 (검사 booth_return 의 "집")
 empty("SPAWN_Stalker", B["spawn_stalker"]); empty("LOOK_Stalker", B["look_stalker"])
@@ -453,7 +468,7 @@ cnt = lambda pre: sum(n_.startswith(pre) for n_ in names)
 print("CHECK booth export: %s (%d KB bin) · images %d missing %d · SHL %d COL %d pockets %d gapBig %d gapSmall %d lights %d dead %d blocks %d crawls %d niches %d"
       % (os.path.basename(OUT), os.path.getsize(OUT[:-5] + ".bin") // 1024, len(uris), len(missing), cnt("SHL_"), cnt("COL_"), cnt("SLOT_Pocket_"),
          cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d" % cnt("SLOT_Mouth_"))
-assert R2B or not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
+assert not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
 assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS), "FAIL: 노드 수"
 
 # ================= 9. 그림: 위에서 본 모양 · 1인칭

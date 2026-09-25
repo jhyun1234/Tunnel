@@ -117,6 +117,14 @@ public static class Tuning
     public const float BOOTH_LIGHT_ENERGY = 60.5f;              // 사용자 판정 09-24 (숫자패드 −/+, 제안값 25). 부스 씬을 만들 때 박힌다 — 바꾸면 MakeBooth -force
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
     public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 부스 천장 2.7~3.2 m(09-24 +0.5 m 전 2.2~2.7 에 맞춘 값) (복도는 STALKER_H 2.8 그대로)
+    // ---- R2b 바위 틈 비집기 (제안서 docs/제안서_R2b_바위틈_비집기.md, 승인 09-24). 틈 0.5 m 는 몸 캡슐 0.8 m 보다 좁다 — 입구에서 E 를 누르면 조작이 잠기고 틈 가운데 선을 따라 옮겨진다
+    public const float SQUEEZE_S = 2.5f;           // s, 막힌 틈에 들어가는 시간(바위 밖 선 자리 → 숨는 자리, SQUEEZE_REF_M). 뚫린 틈(7~8 m)은 같은 빠르기라 더 걸린다. 판정 때 F7 F8 (제안값 — 더 포레스트 3.5 s 보다 짧게, 쫓길 때 쓴다)
+    public const float SQUEEZE_REF_M = 3.7f;       // m, SQUEEZE_S 가 가리키는 길이 = 막힌 틈 비집는 길 (바위 밖 1.1 + 좁은 틈 1.6 + 안쪽 방 숨는 자리까지 1.0)
+    public const float SQUEEZE_TURN_DEG = 60f;     // °, 틈 속에서 몸을 옆으로 돌리는 각 — 바위면이 화면 대부분, 가는 쪽은 화면 가장자리 (0 = 가는 쪽 정면 · 90 = 벽을 마주봄). 판정 때 F9 F10 (제안값)
+    public const float SQUEEZE_REACH_M = 1.3f;     // m, 바위 밖 선 자리(또는 숨는 자리)에서 이만큼 안이면 E 가 먹는다
+    public const float SQUEEZE_FACE_DEG = 70f;     // °, 틈 쪽을 이 각 안으로 보고 있어야 E 가 먹는다 — 등 뒤 틈으로 빨려 들어가지 않게
+    public const float SQUEEZE_BOB_M = 0.015f;     // m, 틈 속에서 머리가 비비적대는 폭 (제안값)
+    public static readonly Vector3 SQUEEZE_PICK_DROP = new Vector3(0f, -0.55f, -0.2f);   // 곡괭이를 내리는 만큼 (화면 밖으로, 더 포레스트: 도구를 내리고 손으로 모서리를 잡는다)
     // 천장 밑 숙이기 (MAP1, 사용자 09-24 "실제 크기 지키고 괴물이 숙여 다니게"): 머리 꼭대기가 그 자리 천장 − STOOP_MARGIN 밑에 오게
     // 먼저 엉덩이를 STOOP_DROP_MAX 까지 낮추고(발은 다리 IK 로 제자리), 모자라면 허리를 STOOP_PITCH_MAX 까지 앞으로 숙인다. 천장이 높으면(복도 5.6 m) 아무 일 없음
     public const float STALKER_STOOP_MARGIN = 0.3f;             // m (0.15 는 달릴 때 따라가는 사이 머리가 4 cm 닿았다)

@@ -56,12 +56,12 @@ public class Pickaxe : MonoBehaviour
     {
         cooldown = Mathf.Max(0f, cooldown - Time.deltaTime);
         var mouse = Mouse.current;
-        if (!swinging && hasPick && mouse != null && mouse.rightButton.wasPressedThisFrame && !player.frozen)
+        if (!swinging && hasPick && mouse != null && mouse.rightButton.wasPressedThisFrame && !player.Busy)
         {
             Throw();
             return;
         }
-        if (cooldown <= 0f && !swinging && hasPick && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
+        if (cooldown <= 0f && !swinging && hasPick && !player.Squeezing && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
         {
             cooldown = cooldownTime;
             StartCoroutine(Swing());
@@ -69,8 +69,9 @@ public class Pickaxe : MonoBehaviour
         if (!swinging && hasPick)
         {
             // 걸을 때만 흔들린다. 서 있으면 멎는다. 위상은 Player.gait — 발이 땅에 닿는 순간(π 마다) 곡괭이가 맨 아래를 지난다 = 발소리와 같은 때
+            // 바위 틈을 비집는 동안은 곡괭이를 화면 밖으로 내린다 (Player.squeezeLower)
             if (player.gait <= 0f)
-                basePos = Vector3.Lerp(basePos, Tuning.PICK_POS, Mathf.Min(Time.deltaTime * 8f, 1f));
+                basePos = Vector3.Lerp(basePos, Tuning.PICK_POS + Tuning.SQUEEZE_PICK_DROP * player.squeezeLower, Mathf.Min(Time.deltaTime * 8f, 1f));
             else
                 basePos = Tuning.PICK_POS + new Vector3(Mathf.Cos(player.gait), Mathf.Abs(Mathf.Sin(player.gait)), 0f) * Tuning.PICK_BOB_AMOUNT;
         }

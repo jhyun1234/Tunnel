@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
@@ -22,6 +23,16 @@ public class Player : MonoBehaviour
     public bool BlurOn => dof != null && dof.active;          // 검사: 탈진 아닐 때 흐림이 없어야 한다
     [System.NonSerialized] public float lookDown, breathAmp, pant;   // 탈진 자세: 시야 숙임 각 · 숨 들썩임 폭(0~1) · 탈진 정도(0~1, 시야각·흐림·시점 잠금) (검사가 읽는다)
     float breathPhase, pantYaw;
+    // R2b 바위 틈 비집기 (Crevice): 입구에서 틈 쪽을 보고 E → 조작 잠김, 캡슐을 끄고 틈 가운데 선을 따라 옮긴다. 값은 판정 키 F7 F8 · F9 F10 (DevHud)
+    [System.NonSerialized] public float squeezeS = Tuning.SQUEEZE_S;
+    [System.NonSerialized] public float squeezeTurnDeg = Tuning.SQUEEZE_TURN_DEG;
+    [System.NonSerialized] public float squeezeMul = 1f;      // 사보타주 squeezelong 이 2 로 — 정한 시간보다 오래 걸리는 상태
+    [System.NonSerialized] public float squeezeLower;         // 0~1, 곡괭이를 내린 정도 (Pickaxe 가 본다)
+    public bool Squeezing => sqRoute != null;
+    public bool Busy => frozen || Squeezing;                  // 곡괭이 던지기·줍기가 안 먹는다
+    List<Vector3> sqRoute;
+    float[] sqAt;
+    float sqT, sqDur, sqStartYaw, sqEndYaw;
     DepthOfField dof;                      // 탈진 흐림. 씬 Volume 의 실행 중 프로필에 넣는다 — 에셋은 안 바뀐다
 
     CharacterController cc;
@@ -86,7 +97,15 @@ public class Player : MonoBehaviour
         var mouse = Mouse.current;
         float dt = Time.deltaTime;
         if (frozen)
+        {
+            if (Squeezing) EndSqueeze();                       // 틈 속에서 잡혔다 — 캡슐을 다시 켜 둔다 (재시작이 옮긴다)
             return;
+        }
+        if (Squeezing)
+        {
+            SqueezeStep(dt);
+            return;
+        }
 
         if (mouse != null)
         {
@@ -101,6 +120,11 @@ public class Player : MonoBehaviour
             return;
         if (kb.escapeKey.wasPressedThisFrame)
             Cursor.lockState = CursorLockMode.None;
+        if (kb.eKey.wasPressedThisFrame && cc.isGrounded && !exhausted && Crevice.Find(transform.position, transform.forward, out var route, out var endLook))
+        {
+            StartSqueeze(route, endLook);
+            return;
+        }
 
         Vector2 input = Vector2.ClampMagnitude(new Vector2(
             (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f),
@@ -200,6 +224,59 @@ public class Player : MonoBehaviour
             dof.gaussianMaxRadius.value = panting ? Tuning.EXHAUST_BLUR_RADIUS * pant * blurMul : 0f;
             dof.active = panting && dof.gaussianMaxRadius.value > 0f;
         }
+    }
+
+    void StartSqueeze(List<Vector3> route, Vector3 endLook)
+    {
+        sqRoute = route;
+        sqAt = new float[route.Count];
+        for (int i = 1; i < route.Count; i++)
+            sqAt[i] = sqAt[i - 1] + Vector3.Distance(route[i - 1], route[i]);
+        sqDur = SqueezeTime(sqAt[sqAt.Length - 1]);
+        sqT = 0f;
+        sqStartYaw = transform.eulerAngles.y;
+        sqEndYaw = Quaternion.LookRotation(endLook).eulerAngles.y;
+        cc.enabled = false;
+        velocity = Vector3.zero;
+        gait = 0f;
+        wasMoving = false;
+    }
+
+    public float SqueezeTime(float length) => squeezeS * squeezeMul * length / Tuning.SQUEEZE_REF_M;   // 같은 빠르기 — 뚫린 틈(7~8 m)은 막힌 틈(3.7 m)보다 오래
+
+    // 천천히 떠나 천천히 선다. 바위 속(길의 둘째 점 ~ 끝에서 둘째 점)에서는 몸을 옆으로 돌리고(SQUEEZE_TURN_DEG) 머리가 비비적댄다.
+    // 들어가기 전에는 서 있던 쪽에서 틈 쪽으로 돌고, 막힌 틈 안쪽 방에서는 입구(밖)를 보게 돈다
+    void SqueezeStep(float dt)
+    {
+        sqT += dt;
+        float total = sqAt[sqAt.Length - 1];
+        float s = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(sqT / sqDur)) * total;
+        int i = 1;
+        while (i < sqAt.Length - 1 && sqAt[i] < s) i++;
+        Vector3 a = sqRoute[i - 1], b = sqRoute[i];
+        transform.position = Vector3.Lerp(a, b, Mathf.InverseLerp(sqAt[i - 1], sqAt[i], s));
+        Vector3 dir = b - a;
+        dir.y = 0f;
+        float rockIn = sqAt[1], rockOut = sqAt[sqAt.Length - 2];
+        float side = Mathf.Clamp01((s - (rockIn - 0.5f)) / 0.8f) * Mathf.Clamp01((rockOut + 0.3f - s) / 0.6f);
+        float yaw = Mathf.LerpAngle(sqStartYaw, Quaternion.LookRotation(dir).eulerAngles.y, Mathf.Clamp01(s / 0.6f)) + side * squeezeTurnDeg;
+        yaw = Mathf.LerpAngle(yaw, sqEndYaw, Mathf.Clamp01((s - (total - 0.8f)) / 0.8f));
+        transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        pitch = Mathf.MoveTowards(pitch, 0f, 90f * dt);
+        squeezeLower = Mathf.Clamp01(Mathf.Min(sqT, sqDur - sqT) / 0.3f);
+        float rub = Mathf.Sin(sqT * Mathf.PI * 2f * 1.6f) * Tuning.SQUEEZE_BOB_M * side;
+        head.localPosition = new Vector3(rub, eye + Mathf.Abs(rub) * 0.5f, 0f);
+        head.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        if (sqT >= sqDur)
+            EndSqueeze();
+    }
+
+    void EndSqueeze()
+    {
+        transform.position = sqRoute[sqRoute.Count - 1];
+        sqRoute = null;
+        squeezeLower = 0f;
+        cc.enabled = true;
     }
 
     // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다. 탈진(UI-1b)이면 EXHAUST_EYE 로 — "무릎 짚고 헐떡임", 숙이기가 우선

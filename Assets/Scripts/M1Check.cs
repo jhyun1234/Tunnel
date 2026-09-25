@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -388,12 +388,15 @@ public class M1Check : MonoBehaviour
         var crawlNames = pieces.GetComponentsInChildren<Transform>(true).Select(t => t.name).ToHashSet();
         var crawls = Enumerable.Range(1, 99).TakeWhile(i => crawlNames.Contains($"SLOT_Crawl_{i}_A"))
             .Select(i => (a: SlotAt($"SLOT_Crawl_{i}_A"), b: SlotAt($"SLOT_Crawl_{i}_B"))).ToList();
-        IEnumerable<(Vector3, Vector3)> OpenCrawls()                     // 사람이 지나가는 개구멍 (막힘 돌무더기가 안 막은 것) — 양 끝을 1 m 씩 늘려 바닥에 잇는다
+        // 사람만 지나가는 길 = 개구멍 + 뚫린 바위 틈(R2b, 비집는 길) — 틈은 지그재그라 꺾는 점마다 잇는다
+        var passages = crawls.Select(k => new List<Vector3> { k.a, k.b }).Concat(Crevice.All.Where(c => c.through).Select(c => c.path.ToList())).ToList();
+        static bool Clear(List<Vector3> pl) => pl.Zip(pl.Skip(1), (a, b) => !Physics.Linecast(a + Vector3.up * 0.6f, b + Vector3.up * 0.6f, ~(1 << 2), QueryTriggerInteraction.Ignore)).All(x => x);
+        IEnumerable<(Vector3, Vector3)> OpenCrawls()                     // 사람이 지나가는 길 (막힘 돌무더기가 안 막은 것) — 양 끝을 1 m 씩 늘려 바닥에 잇는다
         {
-            foreach (var (a, b) in crawls)
+            foreach (var pl in passages)
             {
-                Vector3 d = Flat3(b - a).normalized;
-                if (!Physics.Linecast(a + Vector3.up * 0.6f, b + Vector3.up * 0.6f, ~(1 << 2), QueryTriggerInteraction.Ignore)) yield return (a - d, b + d);
+                Vector3 a = pl[0], b = pl[pl.Count - 1], d = Flat3(b - a).normalized;
+                if (Clear(pl)) yield return (a - d, b + d);
             }
         }
 
@@ -424,16 +427,15 @@ public class M1Check : MonoBehaviour
         foreach (var blk in blocks)
         {
             Vector3 c = blk.transform.TransformPoint(blk.GetComponent<MeshFilter>().sharedMesh.bounds.center);   // 꺼진 물체는 Renderer.bounds 가 비어 있다
-            if (blk.GetComponent<MeshFilter>().sharedMesh.bounds.size.y < 2.2f)                 // 개구멍 속 돌무더기(높이 1.3 m, 괴물 바닥 밖): 사람 몸이 막힌다
-            {
-                var (ca, cb) = crawls.OrderBy(k => Flat((k.a + k.b) * 0.5f - c)).First();
-                Vector3 la = ca + Vector3.up * 0.6f, lb = cb + Vector3.up * 0.6f;
-                bool clearOff = !Physics.Linecast(la, lb, ~(1 << 2), QueryTriggerInteraction.Ignore);
+            var inPass = passages.OrderBy(pl => pl.Zip(pl.Skip(1), (a, b) => Flat(c - Vector3.Lerp(a, b, Mathf.Clamp01(Vector3.Dot(c - a, b - a) / Mathf.Max((b - a).sqrMagnitude, 1e-4f))))).Min()).First();
+            if (inPass.Zip(inPass.Skip(1), (a, b) => Flat(c - Vector3.Lerp(a, b, Mathf.Clamp01(Vector3.Dot(c - a, b - a) / Mathf.Max((b - a).sqrMagnitude, 1e-4f))))).Min() < 1.0f)
+            {                                                                                // 개구멍·바위 틈 속 돌무더기(괴물 바닥 밖): 사람 몸이 막힌다
+                bool clearOff = Clear(inPass);
                 blk.SetActive(true); yield return null;
-                bool shut = Physics.Linecast(la, lb, out RaycastHit ch, ~(1 << 2), QueryTriggerInteraction.Ignore) && ch.collider.gameObject == blk;
+                bool shut = inPass.Zip(inPass.Skip(1), (a, b) => Physics.Linecast(a + Vector3.up * 0.6f, b + Vector3.up * 0.6f, out RaycastHit ch, ~(1 << 2), QueryTriggerInteraction.Ignore) && ch.collider.gameObject == blk).Any(x => x);
                 blk.SetActive(false);
                 blocksOk &= clearOff && shut;
-                notes.Add($"{blk.name} crawl: open {clearOff} → shut {shut}");
+                notes.Add($"{blk.name} {(inPass.Count > 2 ? "crevice" : "crawl")}: open {clearOff} → shut {shut}");
                 continue;
             }
             c = OnNav(c);
@@ -597,7 +599,7 @@ public class M1Check : MonoBehaviour
                     Teleport(cc, OnNav(a - dir * 1.0f, 1.5f) + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
                     if (crouch == 1) { InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftCtrl)); yield return new WaitForSeconds(0.3f); }   // 숙인 채로 시작
                     InputSystem.QueueStateEvent(kb, crouch == 1 ? new KeyboardState(Key.W, Key.LeftCtrl) : new KeyboardState(Key.W));
-                    float t = 0f, limit = crouch == 1 ? (L + 2f) / Tuning.CROUCH_SPEED * 1.5f + 1f : 2.0f;
+                    float t = 0f, limit = (L + 2f) / (crouch == 1 ? Tuning.CROUCH_SPEED : Tuning.WALK_SPEED) * 1.5f + 1f;   // 서서도 길이만큼 (2 s 로 재면 10 m 구멍은 천장이 높아도 "못 감" — 09-25 사보타주 unitywide 가 못 잡았다)
                     while (t < limit && Flat(b - player.transform.position) > 0.8f) { player.transform.rotation = Quaternion.LookRotation(Flat3(b - player.transform.position).normalized); yield return null; t += Time.deltaTime; }
                     got[crouch] = Flat(b - player.transform.position) <= 0.8f;
                     if (crouch == 1 && !got[1]) stuckAt = $" ({Flat(b - player.transform.position):F1} m short at ({player.transform.position.x:F1}, {player.transform.position.y:F2}, {player.transform.position.z:F1}), {t:F1} s, {1f / Mathf.Max(Time.smoothDeltaTime, 1e-4f):F0} fps)";
@@ -609,7 +611,7 @@ public class M1Check : MonoBehaviour
                 cOk &= ok;
                 cNotes.Add($"crawl {ci} ({L:F1} m): standing {(got[0] ? "GOT THROUGH" : "stuck")} · crouched {(got[1] ? "through" : "STUCK" + stuckAt)} · monster {(mon < 0f ? "no path" : mon.ToString("F0") + " m around")}");
             }
-            Check("booth_crawl", cOk && crawls.Count == 8, string.Join(" · ", cNotes));
+            Check("booth_crawl", cOk && crawls.Count == 4, string.Join(" · ", cNotes));        // 8 중 짧은 넷은 R2b 뚫린 바위 틈이 됐다 (아래 3c)
         }
 
         // ---- 3b. 대피소: 사람이 서서 들어가 안쪽 자리(SLOT_Niche)에 선다 · 괴물 바닥·몸은 안으로 안 들어온다. 전부 캡슐로 재고, 가장 좁은 여섯은 봇이 걸어 들어간다
@@ -633,10 +635,25 @@ public class M1Check : MonoBehaviour
             }
             // 봇이 걸어 들어가는 것: 가장 좁은 여섯 + 캡슐이 안 맞은 것 (캡슐은 어림 — 사람이 걷는 길이 정답)
             int walkedIn = 0; var narrow = widths.OrderBy(x => x.w).Take(6).Concat(widths.Where(x => !x.fits)).Distinct().ToList();
+            if (sabotageName == "nicheplug" && narrow.Count > 0)            // 걸어 들어갈 대피소 하나를 가운데서 막는다 — 봇이 못 들어가야 한다
+            {
+                var plug = new GameObject("SabotageNichePlug").AddComponent<BoxCollider>();
+                plug.transform.position = (narrow[0].s.position + narrow[0].front) * 0.5f + Vector3.up * 1.0f; plug.size = Vector3.one * 0.9f;
+            }
             foreach (var (s, w, front, fits) in narrow)
             {
-                Vector3 dir = Flat3(s.position - front).normalized;
-                Teleport(cc, front + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
+                // 사람처럼 대피소 정면에서 곧게: 안쪽 자리에서 1° 마다 쏜 광선 중 2.4 m 넘게 트인 방향들의 가운데 = 입구 쪽 축.
+                // (가장 가까운 길찾기 바닥 점에서 비스듬히 가면 폭 1.0 m 에 몸 0.8 m 라 입구 모서리에 걸렸다 — 09-25 SLOT_Niche_44, 축에서 0.24 m 비낌)
+                Vector3 o = s.position + Vector3.up * 1.0f, near = Flat3(front - s.position).normalized, sum = Vector3.zero;
+                for (int k = -60; k <= 60; k++)
+                {
+                    Vector3 d = Quaternion.Euler(0f, k, 0f) * near;
+                    if (!Physics.Raycast(o, d, 2.4f, ~(1 << 2), QueryTriggerInteraction.Ignore)) sum += d;
+                }
+                Vector3 axis = sum.sqrMagnitude > 0f ? sum.normalized : near, start = s.position + axis * 3.0f;
+                start.y = front.y;
+                Vector3 dir = -axis;
+                Teleport(cc, start + Vector3.up * 0.1f, Quaternion.LookRotation(dir).eulerAngles.y);
                 yield return new WaitForSeconds(0.15f);
                 InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
                 float t = 0f;
@@ -648,6 +665,83 @@ public class M1Check : MonoBehaviour
             }
             Check("booth_niche", monsterOut == niches.Length && walkedIn == narrow.Count && niches.Length >= 40,
                 $"{niches.Length} refuges: monster floor and body stay out {monsterOut} · person capsule fits standing {capsuleOk} · walked in standing by the bot {walkedIn}/{narrow.Count} (6 narrowest {string.Join(" ", widths.OrderBy(x => x.w).Take(6).Select(x => x.w.ToString("F2")))} m + capsule misses {widths.Count(x => !x.fits)})" + (nNotes.Count > 0 ? " · " + string.Join(" · ", nNotes.Take(8)) : ""));
+        }
+
+        // ---- 3c. R2b 바위 틈 (제안서 docs/제안서_R2b_바위틈_비집기.md 차례 4): 봇이 입구에서 틈 쪽을 보고 E — 조작이 잠기고 옮겨져 반대편(뚫린) · 숨는 자리(막힌)에 선다.
+        //      뚫린 틈은 양쪽에서, 막힌 틈은 들어갔다 숨는 자리에서 다시 E 로 나온다. 옮겨지는 동안 카메라가 바위 속에 들어가면 안 된다. 괴물 바닥·몸은 틈 속에 없다
+        {
+            var crevs = Crevice.All.OrderBy(c => int.Parse(c.name.Substring("Crevice_".Length))).ToList();
+            if (sabotageName == "crevshift")                                   // 비집는 길을 옆으로 0.35 m — 틈 벽 속을 지나간다
+                foreach (var c in crevs)
+                    for (int i = 1; i < c.path.Length - 1; i++) c.path[i] += Vector3.Cross(Vector3.up, Flat3(c.path[i + 1] - c.path[i - 1]).normalized) * 0.35f;
+            if (sabotageName == "squeezelong") player.squeezeMul = 2f;
+            var cam = Camera.main.transform;
+            int camMask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));
+            var eNotes = new List<string>(); var tNotes = new List<string>(); bool enterOk = crevs.Count == 14, timeOk = true; int runs = 0;
+            foreach (var c in crevs)
+                foreach (bool back in new[] { false, true })                    // 뚫린: 이쪽 → 저쪽, 저쪽 → 이쪽 · 막힌: 들어가기, 나오기
+                {
+                    var p = c.path.ToList();
+                    if (back) p.Reverse();
+                    string nm = $"{c.name.Substring(8)}{(c.through ? "t" : "c")}{(back ? "<" : ">")}";
+                    if (!(back && !c.through && Flat(player.transform.position - p[0]) < Tuning.SQUEEZE_REACH_M))   // 막힌 틈 나오기는 들어간 자리 그대로 (들어가며 입구 쪽을 보게 돌았다)
+                    {
+                        Teleport(cc, p[0] + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(p[1] - p[0])).eulerAngles.y);
+                        yield return new WaitForSeconds(0.3f);
+                    }
+                    Vector3 feet = player.transform.position;
+                    float L = Vector3.Distance(feet, p[1]); for (int i = 2; i < p.Count; i++) L += Vector3.Distance(p[i - 1], p[i]);
+                    float want = Tuning.SQUEEZE_S * L / Tuning.SQUEEZE_REF_M, tE = Time.time;
+                    int inRock = 0, frames = 0; bool locked = true;
+                    InputSystem.QueueStateEvent(kb, new KeyboardState(Key.E, Key.W));        // W 도 누른 채 — 조작이 잠겼으면 안 움직인다
+                    yield return null;
+                    InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+                    bool started = player.Squeezing;
+                    while (player.Squeezing && Time.time - tE < want * 3f + 2f)
+                    {
+                        if (Physics.CheckSphere(cam.position, 0.07f, camMask, QueryTriggerInteraction.Ignore)) inRock++;
+                        if (player.Controller.enabled) locked = false;
+                        frames++;
+                        yield return null;
+                    }
+                    float took = Time.time - tE;
+                    InputSystem.QueueStateEvent(kb, new KeyboardState());
+                    yield return null;
+                    Vector3 end = player.transform.position; float r = Tuning.BODY_RADIUS - 0.05f;
+                    bool fits = !Physics.OverlapCapsule(end + Vector3.up * (0.2f + r), end + Vector3.up * (Tuning.BODY_HEIGHT - r), r, ~(1 << 2), QueryTriggerInteraction.Ignore).Any(col => col != cc);
+                    float faceErr = Vector3.Angle(player.transform.forward, Flat3(!c.through && !back ? p[p.Count - 2] - p[p.Count - 1] : p[p.Count - 1] - p[p.Count - 2]));
+                    InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));                // 조작이 돌아왔나 — 0.5 s 걸어 본다
+                    yield return new WaitForSeconds(0.5f);
+                    InputSystem.QueueStateEvent(kb, new KeyboardState());
+                    yield return new WaitForSeconds(0.1f);
+                    float moved = Flat(player.transform.position - end);
+                    bool ok = started && locked && Flat(end - p[p.Count - 1]) < 0.3f && fits && inRock == 0 && faceErr < 20f && moved >= 0.3f;
+                    enterOk &= ok; runs++;
+                    if (!ok) eNotes.Add($"{nm} started {started} locked {locked} end {Flat(end - p[p.Count - 1]):F2} m off · capsule fits {fits} · camera in rock {inRock}/{frames} frames · facing off {faceErr:F0}° · walked after {moved:F2} m");
+                    bool tOk = Mathf.Abs(took - want) <= 0.2f;
+                    timeOk &= tOk;
+                    tNotes.Add($"{nm} {L:F1} m {took:F2}/{want:F2} s{(tOk ? "" : " WRONG")}");
+                }
+            Check("crevice_enter", enterOk && runs == 28, $"{crevs.Count} crevices ({crevs.Count(c => c.through)} through, {crevs.Count(c => !c.through)} closed), {runs} squeezes (through both ways, closed in and out): E with W held → locked, moved along the crack, ends on the far side / hide spot facing the way out, body fits, camera never inside rock, walks again" + (eNotes.Count > 0 ? " · " + string.Join(" · ", eNotes.Take(8)) : ": all ok"));
+            Check("crevice_squeeze_time", timeOk && runs == 28, $"E → control back = SQUEEZE_S {Tuning.SQUEEZE_S:F2} s per {Tuning.SQUEEZE_REF_M:F1} m ± 0.2 s: " + string.Join(" ", tNotes));
+
+            var mNotes = new List<string>(); int inside = 0, pts = 0;
+            foreach (var c in crevs)
+            {
+                var q = new List<(Vector3 x, bool room)>();                     // 바위 속 점: 둘째 ~ 끝에서 둘째 꺾는 점과 그 사이 + 막힌 틈은 안쪽 방(숨는 자리 — 방은 괴물 몸이 들어갈 만하다, 길이 없어야 한다)
+                for (int i = 1; i < c.path.Length - 1; i++) { q.Add((c.path[i], false)); if (i < c.path.Length - 2) q.Add(((c.path[i] + c.path[i + 1]) * 0.5f, false)); }
+                if (!c.through) { q.Add(((c.path[c.path.Length - 2] + c.path[c.path.Length - 1]) * 0.5f, true)); q.Add((c.path[c.path.Length - 1], true)); }
+                Vector3 outside = OnNav(c.path[0]);
+                foreach (var (x, room) in q)
+                {
+                    pts++;
+                    bool nav = NavMesh.SamplePosition(x, out NavMeshHit h, 0.5f, NavMesh.AllAreas) && Flat(h.position - x) < 0.3f && PathLen(outside, h.position) > 0f;
+                    bool body = !Physics.CheckCapsule(x + Vector3.up * (0.2f + Tuning.STALKER_R), x + Vector3.up * (0.2f + Tuning.BOOTH_STALKER_H - Tuning.STALKER_R), Tuning.STALKER_R, ~(1 << 2), QueryTriggerInteraction.Ignore);
+                    if (nav || (body && !room)) { inside++; mNotes.Add($"{c.name} ({x.x:F1}, {x.z:F1}) navmesh reachable {nav} body fits {body}"); }
+                }
+            }
+            Check("crevice_no_monster", inside == 0 && pts >= 50, $"{pts} points inside the crevices (crack + closed-crevice room): monster floor reachable from outside or body fits in the crack {inside}" + (mNotes.Count > 0 ? " · " + string.Join(" · ", mNotes.Take(6)) : ""));
+            player.squeezeMul = 1f;
         }
 
         // ---- 4. 괴물: 길찾기로 막장 셋까지 걸어서 닿는다. 걷는 동안(조사 걸음·첫 자리 더듬기) 머리 꼭대기와 그 자리 천장을 잰다

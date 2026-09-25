@@ -427,11 +427,22 @@ public static class BuildM1
             }
             else if (n == "PRP_Rubble_FakeExit")                           // 가짜 출구 끝 무너짐 — 몸이 막힌다 (검사 booth_fake_exit)
                 mf.gameObject.AddComponent<MeshCollider>().convex = true;
+            else if (n.StartsWith("PRP_Crevice_"))                         // R2b 바위 틈 입구 바위 — 모난 바위 여럿이 한 그물이라 볼록으로 못 싼다
+                mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
             else if (n == "PRP_Fence" || n == "PRP_WindDoor" || n == "PRP_Plate")   // 못 지나가는 것 — 울타리는 천장까지 막는다(넘어가지 않게)
             {
                 var bc = mf.gameObject.AddComponent<BoxCollider>();
                 if (n == "PRP_Fence") { var c = bc.center; c.y += (2.4f - bc.size.y) * 0.5f; bc.center = c; bc.size = new Vector3(bc.size.x, 2.4f, Mathf.Max(bc.size.z, 0.3f)); }
             }
+        }
+        // R2b 바위 틈: SLOT_Crevice_<i>_P0..Pn = 비집는 길 (바위 밖 선 자리 → 틈 → 숨는 자리 / 반대편), _Out 이 있으면 뚫린 틈
+        var slots = map.GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());   // 그물 노드 이름이 겹칠 수 있다
+        for (int i = 1; slots.ContainsKey($"SLOT_Crevice_{i}_P0"); i++)
+        {
+            var c = new GameObject($"Crevice_{i}").AddComponent<Crevice>();
+            c.transform.SetParent(map, false);
+            c.path = Enumerable.Range(0, 99).TakeWhile(k => slots.ContainsKey($"SLOT_Crevice_{i}_P{k}")).Select(k => slots[$"SLOT_Crevice_{i}_P{k}"].position).ToArray();
+            c.through = slots.ContainsKey($"SLOT_Crevice_{i}_Out");
         }
         blocks = map.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BLK_")).Select(t => t.gameObject).OrderBy(b => b.name).ToArray();
         foreach (var b in blocks) b.SetActive(false);

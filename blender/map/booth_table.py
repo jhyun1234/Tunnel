@@ -186,12 +186,16 @@ def build(crevices=False):
 
     # ---- 개구멍 (사람만 기어서) — 양 끝 바닥 높이는 이어지는 굴·방에서
     walkT = [t for t in T if t[4]]
-    def crawl(name, a, b):
-        za_, zb_ = floor_z(walkT, R, a), floor_z(walkT, R, b)
-        T.append((name, [(*a, za_, CRAWL_W), (*b, zb_, CRAWL_W)], CRAWL_H, False, False, "K", "crawl"))
+    def crawl(name, a, b, via=()):                                          # via = 꺾는 점 (바닥 높이는 길이 따라 잇는다)
+        za_, zb_ = floor_z(walkT, R, a), floor_z(walkT, R, b); xy = [a, *via, b]
+        ss = np.cumsum([0.0] + [math.dist(p, q) for p, q in zip(xy, xy[1:])])
+        T.append((name, [(*p, za_ + (zb_ - za_) * s_ / ss[-1], CRAWL_W) for p, s_ in zip(xy, ss)], CRAWL_H, False, False, "K", "crawl"))
     crawl("c_plaza", m_(910,598), m_(910,530))
     xm = (Z1["xs"][2] + Z2["x0"]) / 2; crawl("c_link12", (xm, Z1["ys"][2]), (xm, Z1["ys"][1]))
-    crawl("c_z4", (Z4["x0"] + 0.5, m_(0,770)[1]), m_(22,770)); crawl("c_z5", (Z5["x0"] + 0.5, m_(0,720)[1]), m_(1470,705))
+    crawl("c_z4", (Z4["x0"] + 0.5, m_(0,770)[1]), m_(22,770))
+    lk = next(t for t in T if t[0] == "link_e")[1]; a5 = (Z5["x0"] + 0.5, m_(0,720)[1]); w5 = (Z5["x0"] - 1.5, a5[1])
+    crawl("c_z5", a5, point_at(lk, proj(lk, w5)[1]), via=[w5])            # 방 벽에서 곧게 1.5 m → link_e 가운데 선의 가장 가까운 점. 손그림 자리 (1470,705)는 link_e 벽 밖 2.5 m 바위 속이라
+                                                                            # 막다른 구멍이었다 (R2b 차례 4 검사가 찾음 09-25, check_hole_ends). 곧게 link_e 로 가면 방 벽을 37° 로 비스듬히 빠져 입구가 방 쪽으로 열린 쐐기가 됐다
     crawl("c_charge", m_(510,1070), m_(510,930)); crawl("c_comp", m_(1460,1105), m_(1460,955))   # 충전실 뒷문은 들어오는 굴(왼쪽 위)과 먼 오른쪽 위 — 왼쪽(330)에 두었더니 괴물이 14 m 만 돌면 반대편이었다(구멍 7.6 m, MAP2 검사 09-25)
     crawl("c_z2", (Z2["x1"] - 1.0, Z2["y0"]), m_(1115,538)); crawl("c_z1", (Z1["xs"][0], Z1["ys"][0]), m_(240,515))
 
@@ -199,9 +203,12 @@ def build(crevices=False):
     crev = []                                                               # (이름, through/closed, 입구 벽 점, 끝 점(뚫린: 반대편 끝 · 막힌: 숨는 자리), 안쪽 방향)
     if crevices:
         for n in ("c_plaza", "c_link12", "c_z5", "c_z4"):                   # 긴 개구멍(① · ② → 큰길 10 m 등)은 그대로 — 뚫린 틈은 4.2 m 안팎(제안서)
-            i = [t[0] for t in T].index(n); nm, pts, *_ = T[i]
-            a_, b_ = np.array(pts[0][:3]), np.array(pts[-1][:3]); dd = b_[:2] - a_[:2]; lat = np.array((-dd[1], dd[0])) / np.linalg.norm(dd)
-            zig = [a_] + [np.array((*(a_[:2] + dd * f + lat * CREV_ZIG * sg), a_[2] + (b_[2] - a_[2]) * f)) for f, sg in ((0.35, 1), (0.65, -1))] + [b_]   # 가운데 선이 지그재그 — 곧은 홈처럼 안 보이게
+            i = [t[0] for t in T].index(n); nm, pts, *_ = T[i]; L = seg_len(pts)
+            def zp(f, sg):                                                  # 굴 따라 f 자리에서 옆으로 sg × CREV_ZIG
+                q = np.array(point_at(pts, L * f)); dd = np.array(point_at(pts, min(L * f + 0.05, L))) - np.array(point_at(pts, max(L * f - 0.05, 0)))
+                return np.array((*(q + np.array((-dd[1], dd[0])) / np.linalg.norm(dd) * CREV_ZIG * sg), proj(pts, q)[2]))
+            ss = np.cumsum([0.0] + [math.dist(a[:2], b[:2]) for a, b in zip(pts, pts[1:])])
+            zig = [k[1] for k in sorted([(s_, np.array(p[:3])) for s_, p in zip(ss, pts)] + [(L * f, zp(f, sg)) for f, sg in ((0.35, 1), (0.65, -1))], key=lambda k: k[0])]   # 가운데 선이 지그재그 — 곧은 홈처럼 안 보이게 (꺾는 점은 그대로)
             T[i] = (nm, [(*p, CREV_W) for p in zig], CREV_H, False, False, "K", "crevice")
             d = np.array(pts[-1][:2]) - np.array(pts[0][:2]); crev.append((nm, "through", pts[0][:3], pts[-1][:3], tuple(d / np.linalg.norm(d))))
         def closed(name, px, py, parent=None, d=None):
@@ -290,6 +297,14 @@ def build(crevices=False):
                 lit=lit, dead=dead, blocks=blocks, crevices=crev, spawn_player=spawn_p, look_player=look_p, spawn_stalker=spawn_s, look_stalker=look_s,
                 cart=(*m_(840, 650), 0.0), lunchbox=(es[-1][0] - 1.5, es[-1][1] - 0.7, SEAM), fake_end=fake_end,
                 home_rect=(m_(800, 0)[0], m_(1020, 0)[0], m_(0, 738)[1], m_(0, 598)[1]))
+
+
+def check_hole_ends(B):
+    """개구멍·뚫린 바위 틈은 양 끝이, 막힌 바위 틈은 입구 끝이 걷는 굴·방 안에 있는가 (끝이 바위 속이면 막다른 구멍이다)"""
+    walk = [t for t in B["T"] if t[4]]; through = {c[0] for c in B.get("crevices", []) if c[1] == "through"}
+    def inside(q): return any(r[1] <= q[0] <= r[2] and r[3] <= q[1] <= r[4] for r in B["R"]) or any(proj(t[1], q)[0] < t[1][0][3] / 2 for t in walk)
+    return [(n, k, round(min(proj(t[1], e)[0] - t[1][0][3] / 2 for t in walk), 2)) for n, pts, *_, kind in B["T"] if kind in ("crawl", "crevice")
+            for k, e in ((0, pts[0]), (1, pts[-1])) if (k == 0 or kind == "crawl" or n in through) and not inside(e[:2])]
 
 
 def check_junction_floors(B, tol=0.15):
