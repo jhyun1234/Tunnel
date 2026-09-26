@@ -341,6 +341,8 @@ public class M1Check : MonoBehaviour
     // ① 부스 바위가 모두 MineRock(셰이더 됨 · 분홍 0) ② 젖음이 보인다(광장 벽들: 젖음 켬/끔 두 장에서 바뀐 픽셀 몫)
     // ③ Insert 로 옛/새가 바뀌고 다시 누르면 돌아온다 ④ 튀는 빛: 켜진 전등 옆 벽은 3 % 넘게 밝아지고 꺼진 전등 옆은 15 % 넘게 안 밝아진다(램프 끔, 눈이 어둠에 익은 뒤)
     // ⑤ 사람이 볼 캡처 27_art_<자리>_new/old. 사보타주: oldlook(새 재질을 옛 재질로 → ①) · drywall(젖음 0 → ②) · bouncedead(꺼진 전등도 튀는 빛 → ④)
+    // ⑥ 차례 3 광장 물건: 삼각형 ≤ 25만(동발 TMB_ 빼고) · 출구 다섯 앞 1.2 m 부터 굴 안 2.5 m 까지 사람 몸 셋 줄에 물건 부딪힘 상자 없음 + 길찾기 길이 이어짐.
+    //   사보타주: propblock(상자 부딪힘을 서북 출구 앞으로 → ⑥ 출구) · tinybudget(한도 10만 → ⑥ 삼각형) · propsstay(옛 모습에서도 물건이 남음 → ③)
     IEnumerator ArtStage(CharacterController cc)
     {
         var art = ArtLook.Instance;
@@ -354,6 +356,7 @@ public class M1Check : MonoBehaviour
         if (sabotageName == "oldlook") { art.newMat = art.oldMats[0]; art.Set(true); }
         ArtLook.SabDryWall = sabotageName == "drywall";
         ArtLook.SabBounceDead = sabotageName == "bouncedead";
+        ArtLook.SabPropsStay = sabotageName == "propsstay";
         Vector3 spawn = OnNav(Slot("SPAWN_Player").position);
         float yaw = Quaternion.LookRotation(Flat3(Slot("LOOK_Player").position - spawn)).eulerAngles.y;
         lamp.lampOn = true;
@@ -369,18 +372,57 @@ public class M1Check : MonoBehaviour
             $"booth rock renderers on MineRock {onRock}/{art.renderers.Length} · shader supported {art.newMat.shader.isSupported} · magenta px {magenta}");
         yield return Press(Key.Insert);
         bool wentOld = !ArtLook.On;
+        bool propsOld = art.newOnly.All(r => !r.enabled) && art.oldOnly.All(r => r.enabled);   // 옛 모습 = 물건 없음 · 네모 갱목 · 공 전구
         yield return Capture("27_art_plaza_n_old", v => vOld = v);
         yield return Press(Key.Insert);
         yield return Capture("27_art_plaza_n_back", v => vBack = v);
         bool changed = Mathf.Abs(vNew.x - vOld.x) > 0.01f || Mathf.Abs(vNew.y - vOld.y) > 0.1f * Mathf.Max(vNew.y, 1e-3f);
         bool back = ArtLook.On && Mathf.Abs(vBack.x - vNew.x) < 0.01f && Mathf.Abs(vBack.y - vNew.y) < 0.1f * Mathf.Max(vNew.y, 1e-3f);
-        Check("art_toggle", wentOld && changed && back, $"Insert → old {wentOld} · new/old mean {vNew.x:F3}/{vOld.x:F3} structure {vNew.y:F1}/{vOld.y:F1} · Insert again → new {ArtLook.On} mean {vBack.x:F3} structure {vBack.y:F1}");
+        bool propsFollow = propsOld && art.newOnly.Length > 0 && art.oldOnly.Length > 0 && art.newOnly.All(r => r.enabled) && art.oldOnly.All(r => !r.enabled);
+        Check("art_toggle", wentOld && changed && back && propsFollow, $"Insert → old {wentOld} · new/old mean {vNew.x:F3}/{vOld.x:F3} structure {vNew.y:F1}/{vOld.y:F1} · Insert again → new {ArtLook.On} mean {vBack.x:F3} structure {vBack.y:F1} · old look swaps props {propsOld} · new look props shown {art.newOnly.Count(r => r.enabled)}/{art.newOnly.Length} · old timber/bulbs hidden {art.oldOnly.Count(r => !r.enabled)}/{art.oldOnly.Length}");
 
         // fps: 광장 첫 자리에서 새 모습 / 옛 모습 (새 모습이 무거운 만큼을 숫자로 — 부스 전체 fps 는 booth_fps)
         float fNew = 0f, fOld = 0f;
         yield return new WaitForSeconds(0.5f); yield return MeasureFps(2f, v => fNew = v);
         art.Set(false); yield return new WaitForSeconds(0.5f); yield return MeasureFps(2f, v => fOld = v); art.Set(true);
         Check("art_fps", fNew >= MinFps, $"plaza first spot: new look {fNew:F0} fps · old look {fOld:F0} fps (new ≥ {MinFps:F0})");
+
+        // ⑥ 광장 물건: 삼각형 한도 · 출구 다섯이 비었나
+        var plaza = Slot("PlazaProps");
+        long tri = 0, triTmb = 0;
+        foreach (var mf in plaza.GetComponentsInChildren<MeshFilter>(true))
+        {
+            if (mf.GetComponent<MeshRenderer>() == null) continue;
+            long n = 0; for (int i = 0; i < mf.sharedMesh.subMeshCount; i++) n += mf.sharedMesh.GetIndexCount(i) / 3;
+            if (mf.name.StartsWith("TMB_")) triTmb += n; else tri += n;
+        }
+        long triMax = sabotageName == "tinybudget" ? 100000 : 250000;
+        Check("art_plaza_budget", tri > 0 && tri <= triMax, $"plaza props {tri} tris (≤ {triMax}) · round timber sets (TMB_, whole map) {triTmb} tris");
+        if (sabotageName == "propblock")                                        // 상자 부딪힘을 서북 출구 앞으로
+        {
+            var crate = plaza.GetComponentsInChildren<BoxCollider>(true).First(c => c.name == "COLP_Crate");
+            crate.transform.position = Slot("SLOT_Mouth_link_nw_0").position + Vector3.up * 0.2f;
+            Physics.SyncTransforms();
+        }
+        var exitNotes = new List<string>(); bool exitsOk = true;
+        foreach (var t in new[] { "link_nw", "link_ne", "link_w", "link_e", "south" })
+        {
+            Vector3 m = Slot($"SLOT_Mouth_{t}_0").position, into = Slot($"SLOT_In_{t}_0").position;
+            Vector3 d = Flat3(into - m).normalized, lat = Vector3.Cross(Vector3.up, d);
+            var hits = new HashSet<string>();
+            for (float s = -1.2f; s <= Flat(into - m) + 1e-3f; s += 0.3f)
+                foreach (float o in new[] { -1f, 0f, 1f })
+                {
+                    Vector3 f = OnNav(m + d * s + lat * o, 1.5f);
+                    foreach (var c in Physics.OverlapCapsule(f + Vector3.up * 0.45f, f + Vector3.up * 1.4f, 0.4f, ~0, QueryTriggerInteraction.Ignore))
+                        if (c.transform.IsChildOf(plaza)) hits.Add(c.name);
+                }
+            var path = new NavMeshPath();
+            bool reach = NavMesh.CalculatePath(spawn, OnNav(into), NavMesh.AllAreas, path) && path.status == NavMeshPathStatus.PathComplete;
+            exitsOk &= hits.Count == 0 && reach;
+            exitNotes.Add($"{t}: props {(hits.Count == 0 ? "none" : string.Join("+", hits))} · path {(reach ? "ok" : "CUT")}");
+        }
+        Check("art_plaza_exits", exitsOk, string.Join(" · ", exitNotes));
 
         // ② 젖음: 광장 가운데에서 여덟 방향 중 12 m 안에 벽이 있는 쪽마다 벽 2.5 m 앞 — 기본 젖음 vs 0 두 장에서 밝기가 0.02 넘게 바뀐 픽셀 몫.
         //    필름 입자(겹치는 볼륨)는 끄고 먼지는 멈춘다 — 둘 다 매 장면 달라 차이에 섞인다
@@ -430,7 +472,7 @@ public class M1Check : MonoBehaviour
         }
         art.Set(true);
         Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
-        ArtLook.SabDryWall = ArtLook.SabBounceDead = false;
+        ArtLook.SabDryWall = ArtLook.SabBounceDead = ArtLook.SabPropsStay = false;
         InputSystem.RemoveDevice(kb);
     }
 

@@ -52,6 +52,37 @@ def materials(root):
              log=pbr("M_Log", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.0, tint=(0.45, 0.38, 0.32)),
              coal=pbr("M_Coal", os.path.join(ART, "art_coal_Rock035_DiffRough.png"), T("Rock035", "Roughness"), os.path.join(ART, "art_coal_Rock035_nor_gl.jpg"), 0.5, tint=(0.4, 0.4, 0.45)))
 
+UV_M = dict(steel=1.0, dark_steel=0.6, paint=1.5, wood=1.5, plank=1.5, log=1.0, coal=0.5)   # 질감 한 장 크기 m (materials 와 같은 값)
+
+def game_materials(root):
+    """게임용 재질 (glTF 로 나감): props_tex 그림(prop_textures.py 가 채도·색까지 구움) + UV 한 벌. arm = (1, 거칠기, 쇠)"""
+    TX = os.path.join(root, "Assets", "Tunnel", "Art", "props_tex"); out = {}
+    for k, size in UV_M.items():
+        m = bpy.data.materials.new("PM_" + k); m.use_nodes = True; m["uv_m"] = size
+        nt = m.node_tree; b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+        def img(suf, data):
+            n = nt.nodes.new("ShaderNodeTexImage"); n.image = bpy.data.images.load(os.path.join(TX, k + suf), check_existing=True)
+            if data: n.image.colorspace_settings.name = "Non-Color"
+            return n
+        nt.links.new(img("_Diffuse.jpg", False).outputs["Color"], b.inputs["Base Color"])
+        sep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(img("_arm.jpg", True).outputs["Color"], sep.inputs["Color"])
+        nt.links.new(sep.outputs["Green"], b.inputs["Roughness"]); nt.links.new(sep.outputs["Blue"], b.inputs["Metallic"])
+        nm = nt.nodes.new("ShaderNodeNormalMap"); nt.links.new(img("_nor_gl.jpg", True).outputs["Color"], nm.inputs["Color"])
+        nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
+        out[k] = m
+    return out
+
+def box_uv(me, uv_per_m):
+    """상자 투영 UV (그물 좌표): 면마다 가장 큰 법선 축을 빼고 나머지 두 축으로 — 후보 그림의 물체 좌표 상자 투영과 같은 모양"""
+    if not me.uv_layers: me.uv_layers.new(name="UVMap")
+    uv = me.uv_layers.active.data
+    for poly in me.polygons:
+        n = poly.normal; ax = max(range(3), key=lambda i: abs(n[i]))
+        for li in poly.loop_indices:
+            co = me.vertices[me.loops[li].vertex_index].co
+            a, b = [(co.y, co.z), (co.x, co.z), (co.x, co.y)][ax]
+            uv[li].uv = (a * uv_per_m, b * uv_per_m)
+
 # ---------- 도형 (bmesh 에 더하기)
 def box(bm, c, s, rot=Matrix.Identity(3)):
     bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(Vector(c)) @ rot.to_4x4() @ Matrix.Diagonal((*s, 1)))
@@ -109,6 +140,29 @@ def rails(M, length=6.0, gauge=0.6, switch=False):
     o1 = obj("Rails", bm, M["steel"]); o2 = obj("Sleepers", sl, M["wood"])
     return group("PROP_Rails", [o1, o2])
 
+def rails_path(M, path, floor_z, name="Rails", gauge=0.6, step=0.6):
+    """꺾은 선(path = [(x, y)], 부르는 쪽이 매끈하게) 을 따라 레일 — 침목을 step m 마다 그 자리 바닥(floor_z(x, y))에 조금 묻어 놓고, 레일은 침목 윗면을 잇는다"""
+    P = [Vector((x, y, 0)) for x, y in path]
+    L = [0.0]
+    for a, b in zip(P, P[1:]): L.append(L[-1] + (b - a).length)
+    def at(s):
+        for i in range(len(P) - 1):
+            if s <= L[i + 1] + 1e-9:
+                t = (s - L[i]) / max(L[i + 1] - L[i], 1e-9); return P[i].lerp(P[i + 1], t), (P[i + 1] - P[i]).normalized()
+        return P[-1], (P[-1] - P[-2]).normalized()
+    n = max(2, int(L[-1] / step) + 1); samp = []
+    for k in range(n):
+        p, d = at(min(k * step, L[-1])); lat = Vector((-d.y, d.x, 0))
+        z = sum(floor_z(q.x, q.y) for q in (p, p + lat * 0.45, p - lat * 0.45)) / 3 - 0.03
+        samp.append((Vector((p.x, p.y, z)), d, lat))
+    bm = bmesh.new(); sl = bmesh.new()
+    for p, d, lat in samp:
+        box(sl, p + Vector((0, 0, 0.05)), (0.16, gauge + 0.5, 0.1), Matrix.Rotation(math.atan2(d.y, d.x), 3, "Z"))
+    for (p0, d0, l0), (p1, d1, l1) in zip(samp, samp[1:]):
+        for s_ in (-1, 1):
+            ibeam(bm, p0 + l0 * (s_ * gauge / 2) + Vector((0, 0, 0.145)), p1 + l1 * (s_ * gauge / 2) + Vector((0, 0, 0.145)), h=0.09, w=0.06, t=0.014)
+    return group("PROP_" + name, [obj(name, bm, M["steel"]), obj(name + "_Sleepers", sl, M["wood"])])
+
 def mine_car(M, coal=True):
     """광차: 바닥 1.3 × 0.75 · 위 1.5 × 0.9 · 높이 0.65 m 사다리꼴 쇠 통, 바퀴 넷(지름 0.3, 궤간 0.6), 앞뒤 연결고리, 석탄 싣기"""
     bm = bmesh.new(); z0 = 0.33
@@ -150,6 +204,66 @@ def mine_car(M, coal=True):
         parts.append(obj("CarCoal", cb, M["coal"], smooth=True))
     return group("PROP_MineCar", parts)
 
+def mine_car_v2(M, coal=True):
+    """광차 다시(09-27, 조사 10 docs/기획서/조사/10_광차_레퍼런스.md 공통점): 2톤 — 전체 2.07 × 1.00 × 1.21 m(문경 실물 [10]).
+    쇠판 U자 몸통(옆 곧음 + 아래 둥금, 11/21) · 맨 위 테두리 띠 한 줄(17/21) · 따로 된 ㄷ자 쇠 밑틀 둘(11/21) · 작은 원판 바퀴 넷(지름 0.34, 축 사이 0.76, 몸통 밑 가운데 — 15/15, 표 [7])
+    · 양 끝 가운데 쇠 범퍼 덩어리(7/21) + 연결 쇠고리(0.45 m) · 핀(0.31 m)(문서 [2][11]) · 석탄 봉긋(9/13). 앞뒤 가로 막대 범퍼 · 나무 · 위가 넓은 상자는 없음(0/21).
+    원점 = 레일 윗면 가운데, X = 달리는 쪽."""
+    L, W, H = 1.80, 0.98, 1.21                      # 몸통 길이 · 폭 · 레일에서 몸통 위까지
+    side, bot, zb, th = 0.40, 0.46, 0.31, 0.02      # 곧은 옆 높이 · 둥근 바닥 깊이 · 몸통 바닥 높이 · 판 두께
+    zt = zb + bot + side                            # = H 가까이 (테두리 띠가 나머지)
+    def prof(hw, inset):                            # U 단면 (y, z): 위 왼쪽 → 옆 → 둥근 바닥 → 옆 → 위 오른쪽
+        pts = [(-hw, zt), (-hw, zt - side)]
+        for k in range(1, 12):
+            t = math.pi * k / 12; pts.append((-hw * math.cos(t), zt - side - (bot - inset) * math.sin(t)))
+        return pts + [(hw, zt - side), (hw, zt)]
+    bm = bmesh.new()
+    outer, inner = prof(W / 2, 0.0), prof(W / 2 - th, th)
+    for x0, x1, pr, flip in ((-L / 2, L / 2, outer, False), (-L / 2 + th, L / 2 - th, inner, True)):   # 옆·바닥 판 (바깥 · 안)
+        a_ = [bm.verts.new((x0, y, z)) for y, z in pr]; b_ = [bm.verts.new((x1, y, z)) for y, z in pr]
+        for i in range(len(pr) - 1):
+            f = [a_[i], a_[i + 1], b_[i + 1], b_[i]]; bm.faces.new(list(reversed(f)) if flip else f)
+    for sx in (-1, 1):                                                          # 끝판 (U 모양 판, 두께)
+        for x, pr, out in ((sx * L / 2, outer, True), (sx * (L / 2 - th), inner, False)):
+            f = [bm.verts.new((x, y, z)) for y, z in pr]; bm.faces.new(f if (sx > 0) == out else list(reversed(f)))
+    for sx in (-1, 1):                                                          # 맨 위 테두리 띠 (말린 테두리)
+        box(bm, (0, sx * (W / 2 + 0.015), zt - 0.03), (L + 0.06, 0.05, 0.07))
+        box(bm, (sx * (L / 2 + 0.015), 0, zt - 0.03), (0.05, W + 0.06, 0.07))
+    fr = bmesh.new()
+    def channel(y, sgn):                                                        # ㄷ자 쇠 밑틀 (등판 + 위아래 날개, 날개는 안쪽으로)
+        box(fr, (0, y, 0.30), (1.95, 0.012, 0.14))
+        for z in (0.236, 0.364): box(fr, (0, y + sgn * 0.03, z), (1.95, 0.06, 0.012))
+    for sy in (-1, 1): channel(sy * 0.21, -sy)
+    for x in (-0.55, 0.0, 0.55): box(fr, (x, 0, 0.35), (0.10, 0.48, 0.05))    # 몸통 받침 (밑틀 사이 가로대)
+    for sx in (-1, 1):                                                          # 양 끝 쇠 범퍼 덩어리 + 고리 넣는 틈(검은 안쪽) + 핀
+        box(fr, (sx * 0.99, 0, 0.34), (0.10, 0.34, 0.20))
+        box(fr, (sx * 1.00, 0, 0.30), (0.10, 0.36, 0.04))
+        rod(fr, (sx * 1.0, 0.0, 0.26), (sx * 1.0, 0.0, 0.57), 0.015, seg=8)         # 핀 31 cm (위로 조금 나옴)
+        rod(fr, (sx * 1.0, 0.0, 0.57), (sx * 1.0, 0.035, 0.57), 0.022, seg=8)       # 핀 머리
+    ring = bmesh.new()                                                          # 연결 쇠고리 45 cm — 한쪽 끝에서 늘어짐 (핀에 걸림)
+    c0 = Vector((1.0, 0, 0.34)); ax = Vector((math.sin(math.radians(35)), 0, -math.cos(math.radians(35))))   # 아래 바깥으로 35°
+    lat = Vector((0, 1, 0)); r_ = 0.05; ptsr = []
+    for k in range(7): t = math.pi * k / 6; ptsr.append(c0 + ax * r_ + lat * (r_ * math.cos(t)) - ax * (r_ * math.sin(t)))      # 핀 쪽 반원
+    for k in range(7): t = math.pi * k / 6; ptsr.append(c0 + ax * (0.45 - r_) - lat * (r_ * math.cos(t)) + ax * (r_ * math.sin(t)))   # 먼 쪽 반원
+    for a_, b_ in zip(ptsr, ptsr[1:] + ptsr[:1]): rod(ring, a_, b_, 0.0175, seg=8)
+    wh = bmesh.new()
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            y0 = sy * 0.30
+            rod(wh, (sx * 0.38, y0 - 0.04 * sy, 0.17), (sx * 0.38, y0 + 0.04 * sy, 0.17), 0.17, seg=18)          # 원판 바퀴 지름 0.34
+            rod(wh, (sx * 0.38, y0 - 0.055 * sy, 0.17), (sx * 0.38, y0 - 0.035 * sy, 0.17), 0.195, seg=18)       # 테(플랜지) — 레일 안쪽
+            box(wh, (sx * 0.38, sy * 0.225, 0.20), (0.16, 0.05, 0.13))                                          # 축 상자 (밑틀에)
+        rod(wh, (sx * 0.38, -0.36, 0.17), (sx * 0.38, 0.36, 0.17), 0.0375, seg=10)                              # 축 굵기 7.5 cm
+    parts = [obj("CarBody", bm, M["steel"]), obj("CarFrame", fr, M["dark_steel"]), obj("CarRing", ring, M["dark_steel"]), obj("CarWheels", wh, M["dark_steel"])]
+    if coal:
+        cb = bmesh.new(); bmesh.ops.create_grid(cb, x_segments=16, y_segments=10, size=0.5)
+        import random; rnd = random.Random(11)
+        for v in cb.verts:
+            u, w_ = 2 * v.co.x, 2 * v.co.y
+            v.co = Vector((u * (L / 2 - 0.03), w_ * (W / 2 - 0.03), zt - 0.02 + 0.22 * max(0.0, 1 - u * u) ** 0.8 * max(0.0, 1 - w_ * w_) ** 0.8 + rnd.uniform(-0.025, 0.025)))
+        parts.append(obj("CarCoal", cb, M["coal"], smooth=True))
+    return group("PROP_MineCar", parts)
+
 def timber_set(M, width=3.0, height=2.9):
     """나무 동발 한 틀: 껍질 벗긴 둥근 통나무 기둥 둘(지름 0.22, 안쪽으로 약간 기욺) + 위 통나무(지름 0.24) + 쐐기"""
     bm = bmesh.new()
@@ -183,12 +297,14 @@ def chain(M, length=1.5, link=0.07, wire=0.011):
         for sz in (-1, 1): box(bm, c + Vector((0, 0, sz * link / 2)), (0.04 + wire, wire, wire), R)
     return group("PROP_Chain", [obj("Chain", bm, M["dark_steel"])])
 
-def cage(M, w=2.6, d=2.2, H=4.4):
-    """수갱 케이지(안 움직임): 강철 틀 기둥 넷(I 형) · 위 보 · 케이지 칸(1.8 × 1.4 × 2.3, 철망 벽) · 앞 미닫이 철망 문 · 위 사슬 · 천장 쪽 검은 굴 (사진: 장성 2023 · 영국 1977 · 독일 2008)"""
+def cage(M, w=2.6, d=2.2, H=4.4, top=None):
+    """수갱 케이지(안 움직임): 강철 틀 기둥 넷(I 형, H 까지 — 천장 바위에 박히게) · 보(2.6 m · top) · 케이지 칸(1.8 × 1.4 × 2.3, 긴 옆 둘 = 철망 벽)
+    · 양 끝(±X) 미닫이 철망 문 반쯤 열림 — 레일이 지나간다(사용자 승인 배치 09-27) · 위 사슬 둘 · 틀 안 천장 = 검은 굴 (사진: 장성 2023 · 영국 1977 · 독일 2008)"""
+    top = H - 0.1 if top is None else top
     fr = bmesh.new()
     for sx in (-1, 1):
         for sy in (-1, 1): ibeam(fr, (sx * w / 2, sy * d / 2, 0), (sx * w / 2, sy * d / 2, H), h=0.2, w=0.16, t=0.016)
-    for z in (2.6, H - 0.1):
+    for z in (2.6, top):
         for sy in (-1, 1): ibeam(fr, (-w / 2, sy * d / 2, z), (w / 2, sy * d / 2, z), h=0.2, w=0.14, t=0.016)
         for sx in (-1, 1): ibeam(fr, (sx * w / 2, -d / 2, z), (sx * w / 2, d / 2, z), h=0.2, w=0.14, t=0.016)
     cg = bmesh.new(); cw, cd, ch = 1.8, 1.4, 2.3; z0 = 0.05
@@ -204,18 +320,20 @@ def cage(M, w=2.6, d=2.2, H=4.4):
         for k in range(1, n):
             p = a.lerp(b, k / n); rod(bars, p + Vector((0, 0, z0)), p + Vector((0, 0, z0 + ch)), 0.008, seg=6)
         for zz in (0.9, 1.8): box(bars, (a + b) / 2 + Vector((0, 0, z0 + zz)), (abs(b.x - a.x) + 0.02, abs(b.y - a.y) + 0.02, 0.03))
-    mesh_wall((-cw / 2, -cd / 2, 0), (-cw / 2, cd / 2, 0), 14); mesh_wall((cw / 2, -cd / 2, 0), (cw / 2, cd / 2, 0), 14)
-    mesh_wall((-cw / 2, cd / 2, 0), (cw / 2, cd / 2, 0), 18)
-    gate = bmesh.new()                                        # 앞(−Y) 미닫이 문: 반쯤 열림
-    for k in range(10):
-        x = -cw / 2 + 0.05 + k * 0.09; rod(gate, (x, -cd / 2 - 0.08, z0), (x, -cd / 2 - 0.08, z0 + 2.0), 0.009, seg=6)
-    for zz in (0.1, 1.0, 1.95): box(gate, (-cw / 2 + 0.45, -cd / 2 - 0.08, z0 + zz), (0.95, 0.03, 0.04))
-    box(gate, (0, -cd / 2 - 0.08, z0 + 2.08), (cw + 0.3, 0.05, 0.05))
-    hole = bmesh.new(); box(hole, (0, 0, H + 0.02), (w - 0.1, d - 0.1, 0.02))
+    mesh_wall((-cw / 2, -cd / 2, 0), (cw / 2, -cd / 2, 0), 18); mesh_wall((-cw / 2, cd / 2, 0), (cw / 2, cd / 2, 0), 18)
+    gate = bmesh.new()                                        # 양 끝 미닫이 문: 반쯤 열림 (쇠살 폭 0.9 가 한쪽으로 밀려 있음)
+    for sx in (-1, 1):
+        gx = sx * (cw / 2 + 0.08)
+        for k in range(10):
+            y = sx * (-cd / 2 + 0.05 + k * 0.09); rod(gate, (gx, y, z0), (gx, y, z0 + 2.0), 0.009, seg=6)
+        for zz in (0.1, 1.0, 1.95): box(gate, (gx, sx * (-cd / 2 + 0.45), z0 + zz), (0.03, 0.95, 0.04))
+        box(gate, (gx, 0, z0 + 2.08), (0.05, cd + 0.3, 0.05))
+    hole = bmesh.new(); box(hole, (0, 0, top + 0.12), (w - 0.1, d - 0.1, 0.02))
     parts = [obj("CageFrame", fr, M["paint"]), obj("CageCar", cg, M["steel"]), obj("CageMesh", bars, M["dark_steel"]),
              obj("CageGate", gate, M["dark_steel"]), obj("ShaftHole", hole, flat("M_Black", (0.0, 0.0, 0.0), 1.0))]
-    c = chain(M, 1.7); c.location = (-0.5, 0, H - 0.1); parts.append(c)
-    c2 = chain(M, 1.7); c2.location = (0.5, 0, H - 0.1); parts.append(c2)
+    L = top - (z0 + ch + 0.06)
+    for x in (-0.5, 0.5):
+        c = chain(M, L); c.location = (x, 0, top); parts.append(c)
     return group("PROP_Cage", parts)
 
 def sign(M, lines, size=(0.9, 0.6), board=(0.92, 0.9, 0.85), ink=(0.7, 0.06, 0.05), font=None, text_h=0.13):

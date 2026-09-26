@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 // ART-1 현실감 시험 (docs/제안서_ART1_현실감_광장_시험.md): 부스 맵의 새 모습 ↔ 옛 모습.
-// 새 모습 = 바위 재질 MineRock(무늬 되풀이 없음 · 석탄 띠 · 진흙 · 젖음) + 전등마다 튀는 빛 + 떠다니는 먼지 + 겹치는 화면 설정(필름 입자 · 빛 번짐 · 대비).
+// 새 모습 = 바위 재질 MineRock(무늬 되풀이 없음 · 석탄 띠 · 진흙 · 젖음) + 전등마다 튀는 빛 + 떠다니는 먼지 + 겹치는 화면 설정(필름 입자 · 빛 번짐 · 대비) + 광장 물건 · 굴 안 둥근 통나무 동발(차례 3).
 // 판정 키: Insert 옛/새 · Home/End 젖음 −/+ · PageDown/PageUp 튀는 빛 −/+ · 숫자패드 4/6 바위 밝기 ÷× 1.1. 받은 숫자는 Tuning.ART_* 에. 씬은 BuildM1.PlaceArt 가 만든다.
 public class ArtLook : MonoBehaviour
 {
@@ -13,11 +13,12 @@ public class ArtLook : MonoBehaviour
     public Light[] mains, bounces;                // 같은 차례 — 튀는 빛은 그 전등이 켜져 있을 때만
     public ParticleSystem dust;
     public Volume artVolume;                      // 겹치는 화면 설정 (필름 입자 · 빛 번짐 · 대비) — 켜고 끈다
+    public Renderer[] newOnly, oldOnly;           // 차례 3: 새 모습에만 = 광장 물건 · 둥근 통나무 동발 / 옛 모습에만 = 네모 갱목 · 광장 공 전구 (부딪힘 상자는 늘 남는다)
 
     public static ArtLook Instance;
     public static bool On = true;
     public static float Wet = Tuning.ART_WET, Bounce = Tuning.ART_BOUNCE, Bright = Tuning.ART_BRIGHT;
-    public static bool SabDryWall, SabBounceDead;   // 검사용 사보타주: drywall(젖음 0) · bouncedead(튀는 빛이 꺼진 전등에서도)
+    public static bool SabDryWall, SabBounceDead, SabPropsStay;   // 검사용 사보타주: drywall(젖음 0) · bouncedead(튀는 빛이 꺼진 전등에서도) · propsstay(옛 모습에서도 물건이 남음)
     static readonly int WetId = Shader.PropertyToID("_ArtWet"), BrightId = Shader.PropertyToID("_ArtBright");
 
     void Awake()
@@ -43,6 +44,8 @@ public class ArtLook : MonoBehaviour
             else dust.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
         if (artVolume != null) artVolume.enabled = on;
+        foreach (var r in newOnly ?? new Renderer[0]) r.enabled = on || SabPropsStay;
+        foreach (var r in oldOnly ?? new Renderer[0]) r.enabled = !on;
         LateUpdate();
     }
 
