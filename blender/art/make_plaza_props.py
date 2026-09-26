@@ -111,15 +111,43 @@ cage = own([mp.cage(M, H=max(cz) + 0.25, top=min(cz) - 0.2)])
 place(cage, (0, 0, sum(floor_z(x, y) for x, y in posts) / 4))
 colp("Cage", (0, 0, 1.5), (2.8, 2.4, 3.0))
 
-# ================= B2 광차 — 지금은 Blender 광차(임시). 사용자가 다시 만들기로(09-27) — 새 광차가 정해지면 이 자리에서 바꾼다
+# ================= B2 광차 — Meshy 광차(사용자 09-27 58차 선택): 조사 10 공통점으로 만든 mine_car_v2 세 방향 그림 → Meshy 그림 → 3D (MINER_ASSET_PIPELINE.md 기록)
+#   원본 glb 는 저장소 밖(Documents/MineTunnel). 그물은 plaza_props.bin 으로, 그림 셋은 glb 에서 그대로 꺼내 plaza_src/meshy_car2/ 로 (이름 = 규칙 _diff · _arm · _nor_gl)
+MESHY_CAR = os.path.join(os.path.expanduser("~"), "Documents", "MineTunnel", "mesh", "props", "meshy_car2.glb")
+def meshy_car(path, length=2.05, width=1.0):
+    import struct
+    raw = open(path, "rb").read(); n = struct.unpack("<I", raw[12:16])[0]; doc = json.loads(raw[20:20 + n]); binc = raw[20 + n + 8:]
+    mat = doc["materials"][0]; pbr = mat["pbrMetallicRoughness"]; tex = lambda k: doc["textures"][k["index"]]["source"]
+    role = {tex(pbr["baseColorTexture"]): "diff", tex(pbr["metallicRoughnessTexture"]): "arm", tex(mat["normalTexture"]): "nor_gl"}
+    dst = os.path.join(SRC, "meshy_car2", "textures"); os.makedirs(dst, exist_ok=True); files = {}
+    for i, im in enumerate(doc["images"]):                                      # 그림을 풀지 않고 바이트 그대로 (glTF 노멀 = OpenGL · 금속거칠기 = G 거칠기 · B 쇠 — 우리 _arm 과 같다)
+        bv = doc["bufferViews"][im["bufferView"]]; data = binc[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]]
+        f = os.path.join(dst, "meshy_car2_%s.%s" % (role[i], "png" if im["mimeType"] == "image/png" else "jpg")); open(f, "wb").write(data); files[role[i]] = f
+    before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=path)
+    new = [o for o in set(bpy.data.objects) - before]; o = next(x for x in new if x.type == "MESH")
+    me = o.data.copy(); me.transform(o.matrix_world)
+    for x in new: bpy.data.objects.remove(x, do_unlink=True)
+    ws = [v.co for v in me.vertices]; lo = Vector(map(min, *ws)); hi = Vector(map(max, *ws))
+    if hi.y - lo.y > hi.x - lo.x: me.transform(Matrix.Rotation(math.pi / 2, 4, "Z")); ws = [v.co for v in me.vertices]; lo = Vector(map(min, *ws)); hi = Vector(map(max, *ws))
+    k = length / (hi.x - lo.x)                                                   # 길이를 새 광차 2.05 m 에 · 폭은 Meshy 가 0.89 로 좁혀서 1.0 으로 늘림(사용자 선택 때 말함)
+    me.transform(Matrix.Diagonal((k, width / ((hi.y - lo.y) * k), k, 1)) @ Matrix.Translation(-Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))))
+    m = bpy.data.materials.new("PM_meshy_car2"); m.use_nodes = True; nt = m.node_tree; b = next(n_ for n_ in nt.nodes if n_.type == "BSDF_PRINCIPLED")
+    def img(r, data):
+        n_ = nt.nodes.new("ShaderNodeTexImage"); n_.image = bpy.data.images.load(files[r]); n_.image.colorspace_settings.name = "Non-Color" if data else "sRGB"; return n_
+    nt.links.new(img("diff", False).outputs["Color"], b.inputs["Base Color"])
+    sep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(img("arm", True).outputs["Color"], sep.inputs["Color"])
+    nt.links.new(sep.outputs["Green"], b.inputs["Roughness"]); nt.links.new(sep.outputs["Blue"], b.inputs["Metallic"])
+    nm = nt.nodes.new("ShaderNodeNormalMap"); nt.links.new(img("nor_gl", True).outputs["Color"], nm.inputs["Color"]); nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
+    me.materials.clear(); me.materials.append(m)
+    car = bpy.data.objects.new("MineCar", me); sc.collection.objects.link(car); own([car]); return car
 def on_path(path, x):                                 # 꺾은 선에서 x 자리의 (점, 방향)
     for a, b in zip(path, path[1:]):
         if (a[0] - x) * (b[0] - x) <= 0 and a[0] != b[0]:
             t = (x - a[0]) / (b[0] - a[0]); return Vector((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0)), (Vector(b) - Vector(a)).normalized()
 car_p, car_d = on_path(RAIL_W, -4.85); car_yaw = math.atan2(car_d.y, car_d.x)
 rail_top = sum(floor_z(car_p.x + car_d.x * s, car_p.y + car_d.y * s) for s in (-0.6, 0, 0.6)) / 3 - 0.03 + 0.19   # 침목(묻힘 0.03 · 두께 0.1) + 레일 0.09
-place(own([mp.mine_car(M)]), (car_p.x, car_p.y, rail_top), car_yaw)
-colp("Cart", (car_p.x, car_p.y, rail_top + 0.5), (1.9, 1.0, 1.0), car_yaw)
+place(meshy_car(MESHY_CAR), (car_p.x, car_p.y, rail_top - 0.02), car_yaw)          # 밑 = 바퀴 테 (레일 윗면보다 조금 아래, 레일 안쪽)
+colp("Cart", (car_p.x, car_p.y, rail_top + 0.6), (2.1, 1.02, 1.2), car_yaw)
 
 # ================= B4 강철 아치 + 판자 — 출구 다섯, 광장 경계에서 굴 안으로 0.3 · 1.4 m. 바위를 광선으로 재서 다리·아치를 안쪽으로 맞춘다
 EXITS = [("NW", (-7.7, 1.4), (-14.7, 2.8)), ("NE", (7.7, 0.7), (13.3, 2.8)), ("W", (-7.7, -2.1), (-16.8, -2.1)),
