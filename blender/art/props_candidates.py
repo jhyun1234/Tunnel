@@ -34,14 +34,7 @@ def swap(mat_name, color, normal, rough):
 swap("MAT_RockWall_EXPORT", os.path.join(ART, "art_rock_Rock031_DiffRough.png"), os.path.join(ART, "art_rock_Rock031_nor_gl.jpg"), os.path.join(CT, "Rock031_Roughness.jpg"))
 swap("MAT_Floor_EXPORT", os.path.join(ART, "art_mud_brown_mud_03_DiffRough.png"), os.path.join(ART, "art_mud_brown_mud_03_nor_gl.jpg"), os.path.join(CT, "brown_mud_03_Roughness.jpg"))
 
-def T(i, s): return os.path.join(CT, "%s_%s.jpg" % (i, s))
-M = dict(steel=mp.pbr("M_Steel", T("rusty_metal_03", "Color"), T("rusty_metal_03", "Roughness"), T("rusty_metal_03", "NormalGL"), 1.0, tint=(0.55, 0.52, 0.5), metal=0.6, sat=0.3),
-         dark_steel=mp.pbr("M_DarkSteel", T("rusty_metal_03", "Color"), T("rusty_metal_03", "Roughness"), T("rusty_metal_03", "NormalGL"), 0.6, tint=(0.32, 0.31, 0.3), metal=0.6, sat=0.2),
-         paint=mp.pbr("M_Paint", T("rusty_painted_metal", "Color"), T("rusty_painted_metal", "Roughness"), T("rusty_painted_metal", "NormalGL"), 1.5, tint=(0.7, 0.7, 0.65), sat=0.55),
-         wood=mp.pbr("M_Wood", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.5, tint=(0.6, 0.55, 0.5)),
-         plank=mp.pbr("M_Plank", T("wood_planks_dirt", "Color"), T("wood_planks_dirt", "Roughness"), T("wood_planks_dirt", "NormalGL"), 1.5, tint=(0.7, 0.65, 0.6)),
-         log=mp.pbr("M_Log", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.0, tint=(0.45, 0.38, 0.32)),
-         coal=mp.pbr("M_Coal", os.path.join(ART, "art_coal_Rock035_DiffRough.png"), T("Rock035", "Roughness"), os.path.join(ART, "art_coal_Rock035_nor_gl.jpg"), 0.5, tint=(0.4, 0.4, 0.45)))
+M = mp.materials(ROOT)
 
 # (번호, 이름, 출처, 사진 근거, 만들기, 놓기: floor = 바닥 · hang = 눈높이에 띄움 · wall = 벽 높이)
 CANDS = [
@@ -75,6 +68,12 @@ CANDS = [
     ("P19", "나무 사다리", "wooden_ladder", "사진 1", "wooden_ladder", "floor"),
     ("P20", "쇠 선반", "worn_metal_rack", "추정", "worn_metal_rack", "floor"),
 ]
+
+# EXTRA="M1|광차 (Meshy)|<glb 경로>" 로 뽑은 모델을 같은 자리·빛으로 더 찍는다 · ONLY="B2,M1" 이면 그 번호만 (props.json 은 기존 것에 더함)
+for ex in filter(None, os.environ.get("EXTRA", "").split(";")):
+    k, nm, path, L = ex.split("|"); CANDS.append((k, nm, "Meshy (유료 구독 · 소유)", "사진 4", ("glb", path, float(L)), "floor"))   # L = 맞출 가장 긴 수평 길이 m (Meshy 크기는 제멋대로)
+ONLY = set(filter(None, os.environ.get("ONLY", "").split(",")))
+if ONLY: CANDS = [c for c in CANDS if c[0] in ONLY]
 
 def meshes_of(root_objs):
     out = []
@@ -118,11 +117,15 @@ for num, name, src, photo, make, place in CANDS:
     before = set(sc.objects)
     if callable(make): roots = [make()]
     else:
-        f = next(os.path.join(PH, make, x) for x in os.listdir(os.path.join(PH, make)) if x.endswith(".gltf"))
+        f = make[1] if isinstance(make, tuple) else next(os.path.join(PH, make, x) for x in os.listdir(os.path.join(PH, make)) if x.endswith(".gltf"))
         bpy.ops.import_scene.gltf(filepath=f)
         roots = [o for o in set(sc.objects) - before if o.parent is None]
     objs = meshes_of(roots)
     lo, hi = bbox(objs); size = hi - lo
+    if isinstance(make, tuple) and len(make) > 2:
+        k_ = make[2] / max(size.x, size.y)
+        for r in roots: r.scale *= k_
+        bpy.context.view_layer.update(); lo, hi = bbox(objs); size = hi - lo
     target_z = {"floor": 0.0, "hang": 1.4 - size.z / 2, "wall": 1.5 - size.z / 2}[place]
     off = Vector((SPOT.x - (lo.x + hi.x) / 2, SPOT.y - (lo.y + hi.y) / 2, target_z - lo.z))
     for r in roots: r.location += off
@@ -140,5 +143,7 @@ for num, name, src, photo, make, place in CANDS:
     info[num] = dict(name=name, src=src, photo=photo, tris=tris(objs), size=[round(v, 2) for v in (hi - lo)])
     print("CHECK prop %s %s tris %d size %s" % (num, name, info[num]["tris"], info[num]["size"]))
     for o in set(sc.objects) - before: o.hide_render = True
-json.dump(info, open(os.path.join(OUT, "props.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+jp = os.path.join(OUT, "props.json")
+if ONLY and os.path.exists(jp): info = {**json.load(open(jp, encoding="utf-8")), **info}
+json.dump(info, open(jp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("CHECK props candidates -> %s (%d)" % (OUT, len(CANDS)))

@@ -39,6 +39,19 @@ def flat(name, rgb, rough=0.6, metal=0.0, emit=None):
     if emit: b.inputs["Emission Color"].default_value = (*emit, 1); b.inputs["Emission Strength"].default_value = 3.0
     return m
 
+
+def materials(root):
+    """물건 재질 한 벌 (CC0 질감: build/art/cand_tex/ 1K · 석탄은 Assets/Tunnel/Art). 쇠는 채도를 낮춰 탄가루 낀 짙은 쇠로"""
+    CT = os.path.join(root, "build", "art", "cand_tex"); ART = os.path.join(root, "Assets", "Tunnel", "Art", "textures")
+    def T(i, s): return os.path.join(CT, "%s_%s.jpg" % (i, s))
+    return dict(steel=pbr("M_Steel", T("rusty_metal_03", "Color"), T("rusty_metal_03", "Roughness"), T("rusty_metal_03", "NormalGL"), 1.0, tint=(0.55, 0.52, 0.5), metal=0.6, sat=0.3),
+             dark_steel=pbr("M_DarkSteel", T("rusty_metal_03", "Color"), T("rusty_metal_03", "Roughness"), T("rusty_metal_03", "NormalGL"), 0.6, tint=(0.32, 0.31, 0.3), metal=0.6, sat=0.2),
+             paint=pbr("M_Paint", T("rusty_painted_metal", "Color"), T("rusty_painted_metal", "Roughness"), T("rusty_painted_metal", "NormalGL"), 1.5, tint=(0.7, 0.7, 0.65), sat=0.55),
+             wood=pbr("M_Wood", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.5, tint=(0.6, 0.55, 0.5)),
+             plank=pbr("M_Plank", T("wood_planks_dirt", "Color"), T("wood_planks_dirt", "Roughness"), T("wood_planks_dirt", "NormalGL"), 1.5, tint=(0.7, 0.65, 0.6)),
+             log=pbr("M_Log", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.0, tint=(0.45, 0.38, 0.32)),
+             coal=pbr("M_Coal", os.path.join(ART, "art_coal_Rock035_DiffRough.png"), T("Rock035", "Roughness"), os.path.join(ART, "art_coal_Rock035_nor_gl.jpg"), 0.5, tint=(0.4, 0.4, 0.45)))
+
 # ---------- 도형 (bmesh 에 더하기)
 def box(bm, c, s, rot=Matrix.Identity(3)):
     bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(Vector(c)) @ rot.to_4x4() @ Matrix.Diagonal((*s, 1)))
@@ -113,10 +126,20 @@ def mine_car(M, coal=True):
         box(bm, (0, sx * (tw / 2 + 0.005), z0 + h - 0.04), (tl + 0.04, 0.04, 0.07))
         box(bm, (0, sx * 0.22, z0 - 0.06), (bl + 0.1, 0.08, 0.1))
         box(bm, (sx * (bl / 2 + 0.16), 0, z0 + 0.02), (0.25, 0.08, 0.06))   # 연결고리
+        box(bm, (sx * (tl / 2 + 0.06), 0, z0 + 0.12), (0.08, 0.5, 0.14))    # 앞뒤 범퍼
+    for sy in (-1, 1):                                        # 옆벽 보강 띠 셋 (비스듬한 벽을 따라) + 끝벽 하나
+        for x in (-0.45, 0.0, 0.45):
+            rod(bm, (x * bl / tl, sy * (bw / 2 + 0.015), z0), (x, sy * (tw / 2 + 0.015), z0 + h - 0.06), 0.018, seg=6)
+    for sx in (-1, 1):
+        rod(bm, (sx * (bl / 2 + 0.015), 0, z0), (sx * (tl / 2 + 0.015), 0, z0 + h - 0.06), 0.018, seg=6)
+    for sy in (-1, 1):                                        # 테두리 리벳
+        for k in range(13): box(bm, (-tl / 2 + 0.06 + k * (tl - 0.12) / 12, sy * (tw / 2 + 0.03), z0 + h - 0.04), (0.022, 0.012, 0.022))
     wh = bmesh.new()
     for sx in (-1, 1):
         for sy in (-1, 1):
             rod(wh, (sx * 0.42, sy * 0.3 - 0.04 * sy, 0.15), (sx * 0.42, sy * 0.3 + 0.04 * sy, 0.15), 0.15, seg=16)
+            rod(wh, (sx * 0.42, sy * 0.3 - 0.05 * sy, 0.15), (sx * 0.42, sy * 0.3 - 0.035 * sy, 0.15), 0.17, seg=16)   # 테(플랜지) — 레일 안쪽
+            box(wh, (sx * 0.42, sy * 0.4, 0.2), (0.12, 0.1, 0.12))                                                     # 축 상자
         rod(wh, (sx * 0.42, -0.38, 0.15), (sx * 0.42, 0.38, 0.15), 0.03)
     parts = [obj("CarBody", bm, M["steel"]), obj("CarWheels", wh, M["dark_steel"])]
     if coal:
