@@ -138,3 +138,10 @@
 워독스: Steam https://store.steampowered.com/app/1867240/ · 설정 비교 https://fps.tcno.co/wardogs-playtest-fps-optimization-full-breakdown-comparison/ · 리뷰 https://www.screenhype.co.uk/wardogs-early-access-first-impressions/ · 엔진 https://en.wikipedia.org/wiki/Wardogs_(video_game) · GI 설정 https://steamcommunity.com/app/1867240/discussions/3/562541634873635867/
 Unity: APV https://docs.unity3d.com/6000.4/Documentation/Manual/urp/probevolumes-concept.html · 데칼 https://docs.unity3d.com/6000.4/Documentation/Manual/urp/renderer-feature-decal.html · 화면 반사(6.7 예정) https://discussions.unity.com/t/preview-of-screen-space-reflections-for-urp/1721494 · 헥스 타일링 https://github.com/mmikk/hextile-demo · https://jcgt.org/published/0011/03/05/ · 화면 효과 목록 https://docs.unity3d.com/6000.4/Documentation/Manual/urp/EffectList.html
 라이선스: Poly Haven https://polyhaven.com/license · ambientCG https://docs.ambientcg.com/license/ · Fab https://dev.epicgames.com/documentation/en-us/fab/licenses-and-pricing-in-fab
+
+## 승인 (09-27, 57차)
+사용자: ① 질감·빛·색은 부스 맵 전체 · 물건만 광장 — **좋다** ② 광장 받침 = **섞기**(광장·케이지 앞은 강철 아치 + 판자, 굴은 나무 동발) ③ 케이지 = **안 움직이는 모양만**(철망 문 · 강철 틀 · 칸) ④ 사진 없는 물건(공구 · 상자 · 드럼통) = **넣는다, "추정"으로 적기**.
+
+## 차례 1 (09-27) — 질감 후보 한 장
+`docs/그림/ART1_질감_후보.png` — 벽 5(지금 · ambientCG Rock031 · Rock022 · Rock030 · Rock050) · 석탄 4(ambientCG Rock035 · Rock037 · Rock033 · Poly Haven dark_rock) · 바닥 5(지금 · Poly Haven brown_mud_03 · rocks_ground_02 · stony_dirt_path · brown_mud_02). 진짜 부스 맵 glTF 를 Blender 로 읽어 광장 첫 자리(넓게) + 가까이(벽 1.4 m · 발밑)를 같은 빛(전등 500 W · 헤드램프 900/180 W, EEVEE)으로 찍음 — 게임 빛이 아니다. 찍기 `blender/art/texture_candidates.py` → 모으기 `python docs/그림/ART1_질감_후보.py`.
+후보 받기(1K JPG, `build/art/cand_tex/`, 커밋 안 함): Poly Haven = `https://api.polyhaven.com/files/<id>` 의 Diffuse · nor_gl · Rough → `<id>_{Color,NormalGL,Roughness}.jpg` · ambientCG = `https://ambientcg.com/get?file=<id>_1K-JPG.zip` 안의 같은 셋. 석탄 질감은 두 곳 모두 "coal" 이 없어 까만 바위를 골랐다(게임에서 더 어둡게 · 번들거리게 섞는다).
