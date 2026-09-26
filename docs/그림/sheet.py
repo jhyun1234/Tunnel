@@ -106,3 +106,85 @@ class P:
                 t = i / k; o = amp * rnd.uniform(-1, 1) if 0 < i else 0
                 out.append((ax + (bx - ax) * t + nx * o, ay + (by - ay) * t + ny * o))
         return out + [pts[-1]]
+
+def scale(p, kx=1.0, ky=1.0, labk=1.0):
+    """판 p 의 좌표를 kx · ky 배로, 글자는 labk 배로 (선 굵기·점 크기는 그대로)."""
+    p.T = lambda x, y: ((p.x0 + x * kx) * SS, (p.y0 + y * ky) * SS)
+    p.lab = lambda x, y, t, sz=14, col=None, b=False, anchor="mm": P.lab(p, x * kx, y * ky, t, round(sz * labk), col, b, anchor)
+    def box(x, y, w, h, col, label=None, sz=16, tc=None, outline=None, ow=3):
+        P.box(p, x, y, w, h, col, None, sz, tc, outline, ow)
+        if label: text(p.x0 + (x + w / 2) * kx, p.y0 + (y + h / 2) * ky, label, sz, tc or C["ink"], b=True, anchor="mm")
+    p.box = box
+    return p
+
+# ── 갱도 그림 기호 (MAP3_구조안.py · MAP3_평면_AB.py) ──
+LIT = (239, 213, 140)          # 불 켜진 방·길
+WATER = (52, 104, 170)
+LADDER = (236, 200, 90)
+ROCK = (58, 53, 49)
+OUTMON = (178, 122, 235)       # 바깥 괴물 (갱도 괴물과 다른 것)
+
+def ladder(p, x, y1, y2, w=14, land=()):
+    p.line([(x - w / 2, y1), (x - w / 2, y2)], 3, LADDER); p.line([(x + w / 2, y1), (x + w / 2, y2)], 3, LADDER)
+    y = y1 + 6
+    while y < y2: p.line([(x - w / 2, y), (x + w / 2, y)], 2, LADDER); y += 11
+    for yy in land: p.line([(x - 16, yy), (x + 16, yy)], 5, LADDER)      # 쉬는 발판
+def hatch(p, a, b, col=None):
+    """갱도 a→b 위에 동발 구간 빗금."""
+    L = math.hypot(b[0] - a[0], b[1] - a[1]); ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+    t = 0
+    while t <= L:
+        cx, cy = a[0] + ux * t, a[1] + uy * t
+        p.line([(cx - uy * 12 - ux * 4, cy + ux * 12 - uy * 4), (cx + uy * 12 + ux * 4, cy - ux * 12 + uy * 4)], 3, col or C["door"])
+        t += 9
+def water(p, x, y, w, h): d.rectangle([*p.T(x, y), *p.T(x + w, y + h)], fill=WATER)
+def corpse(p, x, y, label=None, sz=13):
+    d.rounded_rectangle([*p.T(x - 17, y - 7), *p.T(x + 17, y + 7)], radius=7 * SS, fill=(206, 206, 212), outline=(120, 120, 130), width=2 * SS)
+    if label: p.lab(x, y - 20, label, sz, (206, 206, 212), True)
+def fac(p, x, y, label, side="r", sz=13):
+    p.fix(x, y, 11)
+    if side == "r": p.lab(x + 16, y, label, sz, C["fix"], True, anchor="lm")
+    elif side == "l": p.lab(x - 16, y, label, sz, C["fix"], True, anchor="rm")
+    elif side == "u": p.lab(x, y - 22, label, sz, C["fix"], True)
+    else: p.lab(x, y + 22, label, sz, C["fix"], True)
+def arrow(p, a, b, col, w=3, dash=False):
+    p.line([a, b], w, col, dash=dash)
+    L = math.hypot(b[0] - a[0], b[1] - a[1]); ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+    d.polygon([p.T(*b), p.T(b[0] - ux * 14 - uy * 7, b[1] - uy * 14 + ux * 7), p.T(b[0] - ux * 14 + uy * 7, b[1] - uy * 14 - ux * 7)], fill=col)
+def booth(p, x1, y1, x2, y2, label, lx=None, ly=None):
+    p.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], 3, (245, 245, 245), dash=True, dl=12, gap=8)
+    p.lab(lx if lx is not None else (x1 + x2) / 2, ly if ly is not None else y1 - 14, label, 14, (245, 245, 245), True)
+def region(p, x, y, w, h, label, col=(150, 145, 135)):
+    p.line([(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)], 2, col, dash=True, dl=8, gap=6)
+    p.lab(x + 10, y + 16, label, 14, col, True, anchor="lm")
+def mon_net(p, dots, links, col=None):
+    for (a, c, b) in links: p.line(p.curve(a, c, b), 3, col or C["mon"], dash=True)
+    for (x, y) in dots: p.dot(x, y, 8, col or C["mon"])
+def block(p, x, y):
+    """부스판에서 길을 막는 자리 (MAP2 막힘 돌무더기처럼)."""
+    p.dot(x, y, 13, (96, 88, 80), outline=C["door"])
+    p.line([(x - 8, y - 8), (x + 8, y + 8)], 4, C["door"]); p.line([(x - 8, y + 8), (x + 8, y - 8)], 4, C["door"])
+
+LEGEND = [("hub", "거점 (안전·밝음)"), ("lit", "불 켜진 방·길"), ("room", "방 · 트인 곳"), ("tun", "갱도"), ("exit", "갱구 · 출구"),
+          ("fix", "고칠 시설"), ("hatch", "동발 구간 (무너짐)"), ("rew", "광석"), ("corpse", "시체 (들것)"), ("ladder", "사다리"),
+          ("mon", "괴물 틈 · 길"), ("crawl", "바위 틈 (사람만)"), ("water", "물"), ("booth", "부스판 조각")]
+def legend(x0, y0, items=LEGEND, per_row=5, colw=270, sz=21):
+    LP = P.__new__(P); LP.x0, LP.y0 = x0, y0
+    for i, (k, t) in enumerate(items):
+        cx, cy = (i % per_row) * colw, 12 + (i // per_row) * 30
+        if k in ("hub", "room"): LP.box(cx, cy - 10, 30, 20, C[k])
+        elif k == "lit": LP.box(cx, cy - 10, 30, 20, LIT)
+        elif k == "tun": LP.line([(cx, cy), (cx + 30, cy)], 8, C["tun"])
+        elif k == "exit": LP.exitm(cx + 15, cy)
+        elif k == "fix": LP.fix(cx + 15, cy)
+        elif k == "hatch": LP.line([(cx, cy), (cx + 30, cy)], 8, C["tun"]); hatch(LP, (cx, cy), (cx + 30, cy))
+        elif k == "rew": LP.star(cx + 15, cy)
+        elif k == "corpse": corpse(LP, cx + 15, cy)
+        elif k == "ladder": ladder(LP, cx + 15, cy - 12, cy + 12)
+        elif k == "mon": LP.dot(cx + 6, cy, 6, C["mon"]); LP.line([(cx + 14, cy), (cx + 32, cy)], 3, C["mon"], dash=True, dl=5, gap=4)
+        elif k == "outmon": LP.dot(cx + 6, cy, 6, OUTMON); LP.line([(cx + 14, cy), (cx + 32, cy)], 3, OUTMON, dash=True, dl=5, gap=4)
+        elif k == "crawl": LP.line([(cx, cy), (cx + 30, cy)], 4, C["crawl"], dash=True, dl=6, gap=4)
+        elif k == "water": water(LP, cx, cy - 9, 30, 18)
+        elif k == "booth": LP.line([(cx, cy), (cx + 30, cy)], 3, (245, 245, 245), dash=True, dl=6, gap=4)
+        elif k == "block": block(LP, cx + 15, cy)
+        text(x0 + cx + 42, y0 + cy, t, sz, anchor="lm")

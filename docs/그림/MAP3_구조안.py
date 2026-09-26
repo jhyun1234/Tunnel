@@ -3,83 +3,22 @@
 # 실행: python "docs/그림/MAP3_구조안.py"  →  같은 폴더에 MAP3_구조안_A.png · _B.png · _C.png
 import math, os
 import sheet
-from sheet import C, P, text, wrap, new, F, SS
+from sheet import C, P, text, wrap, new, F, SS, scale, legend, LIT, WATER, LADDER, ROCK, OUTMON, \
+    ladder, hatch, water, corpse, fac, arrow, booth, region, mon_net, block
 
 W, H = 3000, 1780
-LIT = (239, 213, 140)          # 불 켜진 방·길
-WATER = (52, 104, 170)
-LADDER = (236, 200, 90)
-ROCK = (58, 53, 49)
 OUT = os.path.dirname(os.path.abspath(__file__))
-_lab = P.lab       # 이 그림은 글자가 작아 보여서 그림 칸 글자만 1.3배
-P.lab = lambda s, x, y, t, sz=14, col=None, b=False, anchor="mm": _lab(s, x, y, t, round(sz * 1.3), col, b, anchor)
-
-def ladder(p, x, y1, y2, w=14, land=()):
-    p.line([(x - w / 2, y1), (x - w / 2, y2)], 3, LADDER); p.line([(x + w / 2, y1), (x + w / 2, y2)], 3, LADDER)
-    y = y1 + 6
-    while y < y2: p.line([(x - w / 2, y), (x + w / 2, y)], 2, LADDER); y += 11
-    for yy in land: p.line([(x - 16, yy), (x + 16, yy)], 5, LADDER)      # 쉬는 발판
-def hatch(p, a, b, col=None):
-    """갱도 a→b 위에 동발 구간 빗금."""
-    L = math.hypot(b[0] - a[0], b[1] - a[1]); ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
-    t = 0
-    while t <= L:
-        cx, cy = a[0] + ux * t, a[1] + uy * t
-        p.line([(cx - uy * 12 - ux * 4, cy + ux * 12 - uy * 4), (cx + uy * 12 + ux * 4, cy - ux * 12 + uy * 4)], 3, col or C["door"])
-        t += 9
-def water(p, x, y, w, h): sheet.d.rectangle([*p.T(x, y), *p.T(x + w, y + h)], fill=WATER)
-def corpse(p, x, y, label=None, sz=13):
-    sheet.d.rounded_rectangle([*p.T(x - 17, y - 7), *p.T(x + 17, y + 7)], radius=7 * SS, fill=(206, 206, 212), outline=(120, 120, 130), width=2 * SS)
-    if label: p.lab(x, y - 20, label, sz, (206, 206, 212), True)
-def fac(p, x, y, label, side="r", sz=13):
-    p.fix(x, y, 11)
-    if side == "r": p.lab(x + 16, y, label, sz, C["fix"], True, anchor="lm")
-    elif side == "l": p.lab(x - 16, y, label, sz, C["fix"], True, anchor="rm")
-    elif side == "u": p.lab(x, y - 22, label, sz, C["fix"], True)
-    else: p.lab(x, y + 22, label, sz, C["fix"], True)
-def arrow(p, a, b, col, w=3, dash=False):
-    p.line([a, b], w, col, dash=dash)
-    L = math.hypot(b[0] - a[0], b[1] - a[1]); ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
-    sheet.d.polygon([p.T(*b), p.T(b[0] - ux * 14 - uy * 7, b[1] - uy * 14 + ux * 7), p.T(b[0] - ux * 14 + uy * 7, b[1] - uy * 14 - ux * 7)], fill=col)
-def booth(p, x1, y1, x2, y2, label, lx=None, ly=None):
-    p.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], 3, (245, 245, 245), dash=True, dl=12, gap=8)
-    p.lab(lx if lx is not None else (x1 + x2) / 2, ly if ly is not None else y1 - 14, label, 14, (245, 245, 245), True)
-def region(p, x, y, w, h, label, col=(150, 145, 135)):
-    p.line([(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)], 2, col, dash=True, dl=8, gap=6)
-    p.lab(x + 10, y + 16, label, 14, col, True, anchor="lm")
-def mon_net(p, dots, links):
-    for (a, c, b) in links: p.line(p.curve(a, c, b), 3, C["mon"], dash=True)
-    for (x, y) in dots: p.dot(x, y, 8, C["mon"])
 
 def page(tag, title, sub, main_t, side_t):
     img, d = new(W, H)
     text(40, 24, title, 42, b=True)
     text(40, 88, sub, 20, C["sub"])
     text(40, 118, "출시판 전체 맵(1~4인, 여러 밤) 먼저 — 부스판은 이 맵의 한 조각을 막아서 쓴다(사용자 09-26). 손으로 그린 구조도, 크기·자리는 짜임을 보이려는 어림. 사실 근거 = 조사 08·09, 제안 = 우리 판단.", 20, C["sub"])
-    lg = [("hub", "거점 (안전·밝음)"), ("lit", "불 켜진 방·길"), ("room", "방 · 트인 곳"), ("tun", "갱도"), ("exit", "갱구 · 출구"),
-          ("fix", "고칠 시설"), ("hatch", "동발 구간 (무너짐)"), ("rew", "광석"), ("corpse", "시체 (들것)"), ("ladder", "사다리"),
-          ("mon", "괴물 틈 · 길"), ("crawl", "바위 틈 (사람만)"), ("water", "물"), ("booth", "부스판 조각")]
-    LP = P.__new__(P); LP.x0, LP.y0 = 1650, 22
-    for i, (k, t) in enumerate(lg):
-        cx, cy = (i % 5) * 270, 12 + (i // 5) * 30
-        if k in ("hub", "room"): LP.box(cx, cy - 10, 30, 20, C[k])
-        elif k == "lit": LP.box(cx, cy - 10, 30, 20, LIT)
-        elif k == "tun": LP.line([(cx, cy), (cx + 30, cy)], 8, C["tun"])
-        elif k == "exit": LP.exitm(cx + 15, cy)
-        elif k == "fix": LP.fix(cx + 15, cy)
-        elif k == "hatch": LP.line([(cx, cy), (cx + 30, cy)], 8, C["tun"]); hatch(LP, (cx, cy), (cx + 30, cy))
-        elif k == "rew": LP.star(cx + 15, cy)
-        elif k == "corpse": corpse(LP, cx + 15, cy)
-        elif k == "ladder": ladder(LP, cx + 15, cy - 12, cy + 12)
-        elif k == "mon": LP.dot(cx + 6, cy, 6, C["mon"]); LP.line([(cx + 14, cy), (cx + 32, cy)], 3, C["mon"], dash=True, dl=5, gap=4)
-        elif k == "crawl": LP.line([(cx, cy), (cx + 30, cy)], 4, C["crawl"], dash=True, dl=6, gap=4)
-        elif k == "water": water(LP, cx, cy - 9, 30, 18)
-        elif k == "booth": LP.line([(cx, cy), (cx + 30, cy)], 3, (245, 245, 245), dash=True, dl=6, gap=4)
-        LP.lab(cx + 42, cy, t, 16, anchor="lm")
+    legend(1650, 22)
     for (x, w_) in ((30, 1810), (1860, 1110)):
         d.rectangle([x * SS, 164 * SS, (x + w_) * SS, 1318 * SS], outline=(80, 74, 70), width=2 * SS)
-    pm = P(30, 168, main_t, DW=1800, DH=1090)
-    ps = P(1860, 168, side_t, DW=1100, DH=1090)
+    pm = scale(P(30, 168, main_t, DW=1800, DH=1090), labk=1.3)      # 이 그림은 글자가 작아 보여서 그림 칸 글자만 1.3배
+    ps = scale(P(1860, 168, side_t, DW=1100, DH=1090), labk=1.3)
     return img, d, pm, ps
 
 def bottom(cols):
@@ -336,25 +275,16 @@ bottom([
 save(img, "MAP3_구조안_C.png")
 
 # ════════════════════ 안 A+B — 두 산 밑에 층을 쌓는다 (사용자 09-26: "A와 B를 합쳐서 걱정을 없애는 방향") ════════════════════
-def block(p, x, y):
-    """부스판에서 길을 막는 자리 (MAP2 막힘 돌무더기처럼)."""
-    p.dot(x, y, 13, (96, 88, 80), outline=C["door"])
-    p.line([(x - 8, y - 8), (x + 8, y + 8)], 4, C["door"]); p.line([(x - 8, y + 8), (x + 8, y - 8)], 4, C["door"])
 img, d, p, s = page("AB", "안 A+B — 골짜기 마당 양쪽 산 밑에 층을 쌓는다",
     "B 의 바깥(골짜기 마당 · 양쪽 산비탈 · 갱구 넷) + A 의 깊이(윗 갱도 · 1편 · 2편 · 큰 굴 둘 · 막아 둔 옛 갱도). 부스판은 길을 막아 한 조각만 연다(사용자 의견).",
     "서쪽 산 — 골짜기 — 동쪽 산을 옆에서 자른 단면", "걱정 일곱을 어떻게 풀었나")
 YS = 1.2          # 이 단면만 세로로 1.2배 늘린다 (그림 칸 아래가 비어서)
-p.T = lambda x, y: ((p.x0 + x) * SS, (p.y0 + y * YS) * SS)
-p.lab = lambda x, y, t, sz=14, col=None, b=False, anchor="mm": _lab(p, x, y * YS, t, round(sz * 1.3), col, b, anchor)
-def _box(x, y, w, h, col, label=None, sz=16, tc=None, outline=None, ow=3):
-    P.box(p, x, y, w, h, col, None, sz, tc, outline, ow)
-    if label: text(p.x0 + x + w / 2, p.y0 + (y + h / 2) * YS, label, sz, tc or C["ink"], b=True, anchor="mm")
-p.box = _box
+scale(p, 1, YS, 1.3)
 G = [(0, 300), (160, 200), (380, 60), (580, 200), (720, 330), (1080, 330), (1220, 200), (1420, 80), (1640, 210), (1800, 300)]
 d.polygon([p.T(*q) for q in G + [(1800, 1090 / YS), (0, 1090 / YS)]], fill=ROCK); p.line(G, 4, (120, 110, 95))
 p.lab(380, 34, "서쪽 산", 18, (170, 165, 150), True); p.lab(1420, 54, "동쪽 산", 18, (170, 165, 150), True)
 p.lab(900, 226, "골짜기 광업소 마당 (밖)", 18, C["text"], True)
-p.lab(900, 150, "밤 바깥 위협? (정할 것)", 14, C["mon"], True); p.dot(900, 178, 9, None, outline=C["mon"])
+p.lab(900, 150, "바깥 괴물 — 갱도 괴물과 다른 것 (무엇인지 정할 것)", 14, OUTMON, True); p.dot(900, 178, 9, OUTMON)
 ROAD = (150, 128, 96)
 p.line([(722, 322), (620, 228), (500, 136), (380, 52), (260, 118), (205, 166)], 4, ROAD, dash=True, dl=12, gap=8)
 p.line([(1078, 322), (1180, 228), (1320, 140), (1420, 72), (1500, 118)], 4, ROAD, dash=True, dl=12, gap=8)
@@ -370,7 +300,7 @@ fac(p, 110, 150, "주선풍기 (밖)", "u")
 p.exitm(1075, 334); p.line([(1075, 344), (1250, 470)], 10, C["tun"]); p.lab(1150, 372, "사갱 · 인차", 13, C["text"], anchor="lm")
 # 윗 갱도 (산비탈 갱구로 밖과 이어짐)
 p.line([(200, 186), (330, 250), (620, 250), (620, 240)], 12, C["tun"])
-p.line([(1180, 240), (1180, 250), (1560, 250)], 12, C["tun"]); ladder(p, 1500, 138, 244)
+p.line([(1180, 240), (1180, 250), (1560, 250)], 12, C["tun"]); ladder(p, 1500, 138, 244); ladder(p, 1440, 258, 462, land=(360,))
 p.lab(560, 276, "서쪽 윗 갱도", 14, C["text"], True); p.lab(1370, 276, "동쪽 윗 갱도", 14, C["text"], True)
 for (a, b) in [((540, 250), (575, 192)), ((1350, 250), (1390, 192))]: p.line([a, b], 9, C["tun"]); p.star(b[0] + 4, b[1] - 4)
 hatch(p, (420, 250), (500, 250)); hatch(p, (1250, 250), (1320, 250))
@@ -451,8 +381,8 @@ bottom([
         "1명 — 밤마다 한 층씩(기획서 일곱 밤). 막아 둔 길을 밤마다 하나씩 연다(제안 — 부스판 막힘을 그대로 이야기로).",
         "4명 — 양쪽 산 · 여러 층으로 흩어진다. 갱구가 넷이라 서로 다른 입구로 드나든다. 한 명은 권양기실 · 갱내 전화.",
         "괴물 — 본체 하나 + 바위 속 틈 망(지금 '먼 틈에서 나온다' 규칙). 넷이면 시설 고장 · 작은 것을 더한다(조사 09)."]),
-    ("아직 정할 것", [
-        "바깥 밤 위협 — 같은 괴물이 갱구로 나온다 / 바깥에만 다른 것 / 바깥은 안전.",
-        "이 그림은 옆에서 자른 단면 하나다. 방향이 맞으면 층마다 위에서 본 평면을 그린다.",
+    ("정한 것 · 아직 정할 것", [
+        "밤의 바깥은 안전하지 않다 — 갱도 괴물과 다른 괴물이 있다(사용자 09-26: 갱도 괴물은 갇혀 있던 것이라 밖으로 나오면 세계관에 어긋난다). 무엇인지 · 어떻게 찾는지는 정할 것.",
+        "층마다 위에서 본 평면 = MAP3_평면_AB.png.",
         "일의 양 — B 보다 적고 A 보다 많다(골짜기 + 층 셋). 10/17 부스는 막은 조각만 만든다."])])
 save(img, "MAP3_구조안_AB.png")
