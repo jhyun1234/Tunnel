@@ -61,7 +61,7 @@ public class Pickaxe : MonoBehaviour
             Throw();
             return;
         }
-        if (cooldown <= 0f && !swinging && hasPick && !player.Squeezing && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
+        if (cooldown <= 0f && !swinging && hasPick && !player.Squeezing && !player.Repairing && mouse != null && mouse.leftButton.isPressed && Target(out _, out _, out _))
         {
             cooldown = cooldownTime;
             StartCoroutine(Swing());

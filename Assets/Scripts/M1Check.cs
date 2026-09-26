@@ -13,9 +13,9 @@ using UnityEngine.SceneManagement;
 
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
-// -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다.
+// -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -323,13 +323,120 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        yield return BoothStage(cc);
+        if (only != "repair")
+            yield return BoothStage(cc);
+        if (only == "" || only == "repair")
+            yield return RepairStage(cc);
         if (only == "")
         {
             SceneManager.LoadScene("M1_Tunnel");                // 복도 씬의 M1Check 가 나머지 구간을 잇는다 (fails 는 static)
             yield break;
         }
         Finish();
+    }
+
+    // ================= REP-1 고칠 곳 (제안서 docs/제안서_REP1_고칠_곳.md, 승인 09-26)
+    // ① 망가진 갱목 앞에서 E 를 8 s 누르면 고쳐지고 돈이 값만큼 ② 4 s 누르고 떼었다 다시 → 진행이 남는다 ③ 고치는 동안 종류 반경의 소리(갱목 25 m · 전등 4 m), 전등은 켜진다
+    // ④ 판 중에 멀쩡한 곳이 망가진다, 20 m 안은 안 ⑤ 판 시작 30 %. 사보타주: instantfix(시간 0 → ①②) · silentfix(소리 없음 → ③) · nobreak(판 중 안 망가짐 → ④)
+    IEnumerator RepairStage(CharacterController cc)
+    {
+        var dir = FindFirstObjectByType<RepairDirector>();
+        var all = Repairable.All.ToList();
+        if (dir == null || all.Count == 0)
+        {
+            Check("repair_spots_all_kinds", false, $"director {dir != null} · spots {all.Count}");
+            yield break;
+        }
+        if (sabotageName == "instantfix") Repairable.timeMul = 0f;
+        if (sabotageName == "silentfix") Repairable.noiseMul = 0f;
+        if (sabotageName == "nobreak") dir.enabled = false;
+        var kb = InputSystem.AddDevice<Keyboard>("RepairKeyboard");
+        string kinds = string.Join(" ", all.GroupBy(r => r.kind).OrderBy(g => g.Key).Select(g => $"{g.Key} {g.Count()}"));
+        Check("repair_spots_all_kinds", all.Select(r => r.kind).Distinct().Count() == 7 && all.Count >= 30, $"{all.Count} spots · {kinds}");
+        int lamps = all.Count(r => r.kind == "lamp"), want = Mathf.RoundToInt((all.Count - lamps) * Tuning.REP_BROKEN_START);
+        Check("repair_start_broken_30pct", Mathf.Abs(dir.startBroken - want) <= 1 && dir.lampsStart == lamps,
+            $"{dir.startBroken}/{all.Count - lamps} non-lamp broken at start (want {want} = {Tuning.REP_BROKEN_START * 100f:0} %) · dead lamps broken {dir.lampsStart}/{lamps} (want all — MAP2 dark zones)");
+        bool FarFromCrevice(Repairable r) => Crevice.All.All(c => Vector3.Distance(c.path[0], r.standAt) > 3f);   // E 가 틈 비집기로 가지 않게
+        IEnumerator StandAt(Repairable r)
+        {
+            cc.enabled = false;
+            player.transform.position = r.standAt + Vector3.up * 0.1f;
+            Vector3 d = r.focus - r.standAt; d.y = 0f;
+            player.transform.rotation = Quaternion.LookRotation(d);
+            cc.enabled = true;
+            yield return new WaitForSeconds(0.5f);
+        }
+        IEnumerator HoldE(float s)
+        {
+            InputSystem.QueueStateEvent(kb, new KeyboardState(Key.E));
+            yield return new WaitForSeconds(s);
+            InputSystem.QueueStateEvent(kb, new KeyboardState());
+            yield return null;
+        }
+        var noises = new List<float>();
+        void OnNoise(Vector3 at, float radius, string kind, object who) { if (kind == "repair") noises.Add(radius); }
+        NoiseBus.Made += OnNoise;
+
+        // ① 갱목 8 s
+        var tim = all.Where(r => r.kind == "timber" && FarFromCrevice(r)).OrderBy(r => Vector3.Distance(r.standAt, player.transform.position)).First();
+        tim.Break();
+        yield return StandAt(tim);
+        float money0 = Economy.Repair;
+        noises.Clear();
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.E));
+        yield return new WaitForSeconds(7.0f);
+        bool held = player.Repairing, at7 = tim.broken;
+        float prog7 = tim.progress;
+        yield return new WaitForSeconds(1.3f);
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return null;
+        bool at83 = !tim.broken;
+        float paid = Economy.Repair - money0;
+        Check("repair_timber_hold_8s", held && at7 && at83,
+            $"repairing while holding E {held} · still broken at 7.0 s {at7} (progress {prog7 * 100f:0} %) · fixed at 8.3 s {at83} (want {Tuning.RepairTime("timber"):0} s) at {tim.name}");
+        Check("repair_pays_value", tim.Value > 0f && Mathf.Abs(paid - tim.Value) < 0.5f,
+            $"paid {paid:0.0} (want {tim.Value:0.0} = ore {Tuning.ORE_VALUE:0} x {Tuning.RepairTime("timber"):0} s / {Tuning.MINE_TIME_REF} s / {Tuning.ORE_OVER_REPAIR})");
+        int timberNoises = noises.Count;
+        float timberR = noises.Count > 0 ? noises.Max() : 0f;
+
+        // ② 떼도 진행이 남는다
+        tim.Break();
+        yield return HoldE(4.0f);
+        yield return new WaitForSeconds(1.0f);
+        float kept = tim.progress;
+        bool stillBroken = tim.broken;
+        yield return HoldE(4.3f);
+        Check("repair_progress_kept", stillBroken && kept > 0.4f && kept < 0.6f && !tim.broken,
+            $"after 4 s hold + 1 s release: broken {stillBroken} progress {kept * 100f:0} % (want ~50) · after 4.3 s more fixed {!tim.broken}");
+
+        // ③ 소리 반경은 종류마다 · 전등은 고치면 켜진다
+        var lampR = all.Where(r => r.kind == "lamp" && FarFromCrevice(r)).OrderBy(r => Vector3.Distance(r.standAt, player.transform.position)).First();
+        lampR.Break();
+        yield return StandAt(lampR);
+        noises.Clear();
+        yield return HoldE(Tuning.RepairTime("lamp") + 0.4f);
+        float lampRad = noises.Count > 0 ? noises.Max() : 0f;
+        Check("repair_noise_by_kind", timberNoises >= 5 && Mathf.Approximately(timberR, Tuning.RepairNoise("timber")) && noises.Count >= 2 && Mathf.Approximately(lampRad, Tuning.RepairNoise("lamp")),
+            $"timber 8.3 s: {timberNoises} noises max {timberR:0} m (want >=5 · {Tuning.RepairNoise("timber"):0} m) · lamp: {noises.Count} noises max {lampRad:0} m (want {Tuning.RepairNoise("lamp"):0} m)");
+        Check("repair_lamp_lights", lampR.lampLight != null && lampR.lampLight.enabled && !lampR.broken,
+            $"fixed lamp {lampR.name}: light {(lampR.lampLight != null && lampR.lampLight.enabled ? "on" : "off")} · broken {lampR.broken}");
+        NoiseBus.Made -= OnNoise;
+
+        // ④ 판 중에 망가진다 (간격을 1 s 로 당겨 본다) — 20 m 안은 안
+        int before = dir.brokeLater;
+        float every = dir.breakEvery;
+        dir.minBreakDist = 999f;
+        dir.breakEvery = 1.0f;
+        dir.timer = 0.5f;
+        yield return new WaitForSeconds(2.7f);
+        int broke = dir.brokeLater - before;
+        Check("repair_breaks_over_time_far", broke >= 2 && dir.minBreakDist > Tuning.REP_BREAK_MIN_M,
+            $"{broke} broke in 2.7 s at 1 s interval (want >=2) · nearest {dir.minBreakDist:0.0} m from player (want > {Tuning.REP_BREAK_MIN_M:0} m)");
+        dir.breakEvery = every;
+        dir.timer = every;
+        Repairable.timeMul = 1f;
+        Repairable.noiseMul = 1f;
+        InputSystem.RemoveDevice(kb);
     }
 
     Transform Slot(string name) => pieces.GetComponentsInChildren<Transform>(true).First(t => t.name == name);

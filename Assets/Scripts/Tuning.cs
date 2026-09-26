@@ -480,6 +480,20 @@ public static class Tuning
     public const float STALKER_ARM_LIFT_STEP = 3f;          // 도, 손끝이 면 아래면 어깨에서 이만큼씩 (최대 30번 = 90°) 들어 올린다
     public const float STALKER_FOOT_SLIP_MAX = 0.4f;        // m/s. 걷기·달리기 중 딛은 발(두 발 중 느린 발)이 땅 위에서 움직이는 빠르기 중앙값 상한. 제안값 0.3 → 실측(09-18) 걷기 0.03 · 달리기 0.29~0.32 로 문턱에 걸려 흔들려 0.4. 사보타주 slide 는 1 m/s 넘게
 
+    // REP-1 고칠 곳 (제안서 docs/제안서_REP1_고칠_곳.md, 승인 09-26). 시간·반경은 제안값 — 판정 키(DevHud F3 F4 · F11 F12)로 맞춘다
+    public const float ORE_VALUE = 100f;                    // 광석 한 개 값 (돈 단위는 아직 없다 — 광석과 수리의 비율만)
+    public const float MINE_TIME_REF = 6.5f;                // s, 캐는 시간 기준 = MINE-1 "5~8 s" 가운데 (지금 두 번 치기가 아니라 바뀔 캐기 기준)
+    public const float ORE_OVER_REPAIR = 1.15f;             // 같은 시간을 들이면 광석이 15 % 더 (사용자 09-26 (가)) — 수리 값 = 광석 값 × 수리 시간 ÷ MINE_TIME_REF ÷ 이것
+    public const float REP_REACH_M = 1.6f;                  // m, 고칠 곳 자리(바닥 기준)에서 이 안(수평)에서 바라보고 E
+    public const float REP_LOOK_DEG = 60f;                  // 도, 바라보는 방향에서 이 안
+    public const float REP_NOISE_EVERY = 1.5f;              // s, 고치는 동안 소리 간격 (괴물 규칙: 한 번 = 살피러 · 3 초 안 두 번 = 찾으러)
+    public const float REP_NOISE_PANEL_WORK = 4f;           // m, 배전반은 고치는 동안은 작고(스위치) 다 고친 순간 RepairNoise("panel") 로 한 번 크게 (기계가 한꺼번에 켜짐)
+    public const float REP_BROKEN_START = 0.30f;            // 판이 시작될 때 망가져 있는 몫
+    public const float REP_BREAK_EVERY = 90f;               // s, 판 중 멀쩡한 곳 하나가 망가지는 간격
+    public const float REP_BREAK_MIN_M = 20f;               // m, 플레이어에게서 이보다 먼 곳만 판 중에 망가진다 (눈앞에서 갑자기 안 망가지게)
+    public static float RepairTime(string kind) => kind switch { "timber" => 8f, "rail" => 6f, "drain" => 6f, "vent" => 5f, "panel" => 4f, "hose" => 3f, "lamp" => 3f, _ => 5f };
+    public static float RepairNoise(string kind) => kind switch { "timber" => 25f, "rail" => 20f, "drain" => 12f, "vent" => 6f, "panel" => 20f, "hose" => 6f, "lamp" => 4f, _ => 6f };
+
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;
     public static float JumpVelocity => Mathf.Sqrt(2.0f * GRAVITY * JUMP_HEIGHT);

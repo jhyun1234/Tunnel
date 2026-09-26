@@ -11,6 +11,7 @@
   · SLOT_Pocket_1..30 · SLOT_GapBig_1..8 · SLOT_GapSmall_* · SLOT_Light_* · SLOT_DeadLight_* · SLOT_Crawl_<i>_A/B · SLOT_Niche_<i>
   · SLOT_Mouth_<굴>_<0|1>(다른 굴·방에 붙은 끝) + SLOT_In_<굴>_<0|1>(그 끝에서 굴 따라 2.5 m 안) · SLOT_Mid_<굴>(굴 길이 절반) — Unity 검사가 입구·비탈·곁길 자리를 여기서 읽는다
   · SLOT_Home_A/B(정거장 광장 네모의 두 모서리) · SPAWN_Player · LOOK_Player · SPAWN_Stalker · LOOK_Stalker · SLOT_Prop_Cart · SLOT_Prop_Lunchbox
+  · REP-1 고칠 곳: SLOT_Repair_<timber|rail|drain|vent|panel|hose|lamp>_<i> (바닥 자리, 규칙 repair_spots.py)
   · R2b 바위 틈: PRP_Crevice_<i>(입구 바위) · SLOT_Crevice_<i>_Mouth · _Hide(막힌) / _Out(뚫린) · _P0.._Pn(비집는 길: 바깥 선 자리 → 틈 가운데 선 → 숨는 자리 / 반대편 바깥).
 자기 검사: 길 위 0.5 m 마다 폭 ≥ 1.9 · 천장 ≥ 2.7 · 바닥이 설계 ±0.2 m, 2 m 마다 26 방향 광선이 벽에 맞음(구멍 없음), 광맥 30곳이 벽에 붙음,
   개구멍 폭 0.75~1.15 · 대피소 폭 0.8~1.15 m(사람은 들어가고 괴물 1.2 m 는 못 들어감), 갈림 바닥 높이 맞음, 삼각형 ≤ 120만.
@@ -457,6 +458,11 @@ empty("SPAWN_Player", B["spawn_player"]); empty("LOOK_Player", B["look_player"])
 hx0_, hx1_, hy0_, hy1_ = B["home_rect"]; empty("SLOT_Home_A", (hx0_, hy0_, 0.0)); empty("SLOT_Home_B", (hx1_, hy1_, 0.0))   # 정거장 광장 네모 (검사 booth_return 의 "집")
 empty("SPAWN_Stalker", B["spawn_stalker"]); empty("LOOK_Stalker", B["look_stalker"])
 empty("SLOT_Prop_Cart", B["cart"]); empty("SLOT_Prop_Lunchbox", B["lunchbox"])
+# REP-1 고칠 곳 (docs/제안서_REP1_고칠_곳.md): 규칙은 repair_spots.py (MAP3 평면도와 같은 규칙) · 배전반 = 충전실 가운데 · 전등 = 꺼진 전등 자리(SLOT_DeadLight_*)
+import repair_spots as rsp
+_ch = next(r for r in B["R"] if r[0] == "charge")
+REPAIRS = rsp.spots(B["T"], hubs=[(((_ch[1] + _ch[2]) / 2, (_ch[3] + _ch[4]) / 2), _ch[5])], lamps=False) + [("전등", (x, y), fz) for x, y, fz, h in DEAD_LIGHTS]
+for i, (kind, (x, y), z) in enumerate(REPAIRS, 1): empty("SLOT_Repair_%s_%d" % (rsp.KINDS[kind], i), (x, y, z))
 
 # ================= 8. 내보내기
 bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLTF_SEPARATE", export_keep_originals=True, export_apply=True, export_yup=True)
@@ -467,9 +473,9 @@ names = [n_.get("name", "") for n_ in doc["nodes"]]
 cnt = lambda pre: sum(n_.startswith(pre) for n_ in names)
 print("CHECK booth export: %s (%d KB bin) · images %d missing %d · SHL %d COL %d pockets %d gapBig %d gapSmall %d lights %d dead %d blocks %d crawls %d niches %d"
       % (os.path.basename(OUT), os.path.getsize(OUT[:-5] + ".bin") // 1024, len(uris), len(missing), cnt("SHL_"), cnt("COL_"), cnt("SLOT_Pocket_"),
-         cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d" % cnt("SLOT_Mouth_"))
+         cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d · repairs %d" % (cnt("SLOT_Mouth_"), cnt("SLOT_Repair_")))
 assert not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
-assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS), "FAIL: 노드 수"
+assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS) and cnt("SLOT_Repair_") == len(REPAIRS), "FAIL: 노드 수"
 
 # ================= 9. 그림: 위에서 본 모양 · 1인칭
 if not FAST:

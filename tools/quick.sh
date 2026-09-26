@@ -18,7 +18,7 @@ mkdir -p build
 sabs=""
 if [ "${1:-}" = "-sab" ]; then sabs="${2//,/ }"; shift 2; fi
 stages="$*"
-[ -z "$stages" ] && { echo "구간을 적어라: m1 mining map monster stalker lure chase retreat anim throw pick tired hud sound intro booth"; exit 2; }
+[ -z "$stages" ] && { echo "구간을 적어라: m1 mining map monster stalker lure chase retreat anim throw pick tired hud sound intro booth repair"; exit 2; }
 
 t0=$SECONDS
 if [ "${NOBUILD:-}" != "1" ]; then

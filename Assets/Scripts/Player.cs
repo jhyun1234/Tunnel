@@ -29,7 +29,10 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public float squeezeMul = 1f;      // 사보타주 squeezelong 이 2 로 — 정한 시간보다 오래 걸리는 상태
     [System.NonSerialized] public float squeezeLower;         // 0~1, 곡괭이를 내린 정도 (Pickaxe 가 본다)
     public bool Squeezing => sqRoute != null;
-    public bool Busy => frozen || Squeezing;                  // 곡괭이 던지기·줍기가 안 먹는다
+    public bool Busy => frozen || Squeezing || Repairing;     // 곡괭이 던지기·줍기가 안 먹는다
+    // REP-1 고치기: 망가진 고칠 곳을 바라보고 E 를 누르고 있는 동안 (못 걷는다, 곡괭이는 내린다 — 손 동작은 3D-P 뒤)
+    [System.NonSerialized] public Repairable repairing;
+    public bool Repairing => repairing != null;
     List<Vector3> sqRoute;
     float[] sqAt;
     float sqT, sqDur, sqStartYaw, sqEndYaw;
@@ -46,7 +49,7 @@ public class Player : MonoBehaviour
     public CharacterController Controller => cc;
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
 
-    public void AddOre(int count) => ore += count;
+    public void AddOre(int count) { ore += count; Economy.AddOre(count); }
 
     // 화면을 짧게 흔든다. 카메라가 아니라 머리 위치만 — 조준은 그대로다
     public void Shake(float amount, float span)
@@ -129,6 +132,14 @@ public class Player : MonoBehaviour
         Vector2 input = Vector2.ClampMagnitude(new Vector2(
             (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f),
             (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f)), 1f);
+
+        repairing = kb.eKey.isPressed && cc.isGrounded && !exhausted ? Repairable.Nearest(transform.position, head.forward) : null;
+        if (repairing != null)
+        {
+            repairing.Work(dt, this);
+            input = Vector2.zero;                                  // 고치는 동안은 제자리
+        }
+        squeezeLower = Mathf.MoveTowards(squeezeLower, repairing != null ? 1f : 0f, dt * 4f);   // 곡괭이를 내린다 (틈 비집기와 같은 자리)
 
         // 자세: Ctrl 숙이기 > Shift 달리기(움직일 때만) > 걷기
         bool wantCrouch = kb.leftCtrlKey.isPressed;

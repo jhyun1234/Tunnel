@@ -308,6 +308,7 @@ public static class BuildM1
             stalker.zMin = stalker.zMax = 0f;                                                      // = 길찾기
             PlaceBoothLights(pieces, hud);
             hud.boothBlocks = blocks;
+            hud.repairs = PlaceRepairs(pieces, p);                             // REP-1 고칠 곳
         }
         else
         {
@@ -456,6 +457,143 @@ public static class BuildM1
         var tri = NavMesh.CalculateTriangulation();
         Debug.Log($"BOOTH navmesh: {tri.vertices.Length} verts, {tri.indices.Length / 3} tris");
         return map;
+    }
+
+    // REP-1 고칠 곳 (docs/제안서_REP1_고칠_곳.md): 부스 맵의 SLOT_Repair_<종류>_<i>(바닥 자리)마다. 가장 가까운 벽을 광선으로 찾아 벽에 붙인다.
+    // 모습은 자리표시 모양(상자·원기둥) — Broken / Fixed 두 무리. 전등은 PlaceBoothLights 의 꺼진 전등(DeadLamp)에 빛을 달아 고치면 켠다. 충돌 없음(길찾기 바닥 그대로)
+    static RepairDirector PlaceRepairs(Transform map, Player player)
+    {
+        Material Mat(string name, string shader, Color c)
+        {
+            string path = $"Assets/Settings/{name}.mat";
+            AssetDatabase.DeleteAsset(path);
+            var m = new Material(Shader.Find(shader)) { name = name, color = c };
+            AssetDatabase.CreateAsset(m, path);
+            return m;
+        }
+        const string LitS = "Universal Render Pipeline/Lit", UnlitS = "Universal Render Pipeline/Unlit";
+        var wood = Mat("M10_RepWood", LitS, new Color(0.36f, 0.24f, 0.14f));
+        var iron = Mat("M10_RepIron", LitS, new Color(0.32f, 0.3f, 0.28f));
+        var cloth = Mat("M10_RepCloth", LitS, new Color(0.42f, 0.4f, 0.33f));
+        var rubber = Mat("M10_RepRubber", LitS, new Color(0.08f, 0.08f, 0.08f));
+        var water = Mat("M10_RepWater", UnlitS, new Color(0.35f, 0.5f, 0.6f));
+        var lampOn = Mat("M10_RepPanelOn", UnlitS, new Color(1f, 0.7f, 0.3f));
+        var lampOff = Mat("M10_RepPanelOff", UnlitS, new Color(0.12f, 0.03f, 0.02f));
+        var bulbOn = AssetDatabase.LoadAssetAtPath<Material>(BulbOnMatPath);
+        var bulbOff = AssetDatabase.LoadAssetAtPath<Material>(BulbOffMatPath);
+        var deadLamps = GameObject.Find("BoothLights").transform.Cast<Transform>().Where(t => t.name == "DeadLamp").ToList();
+        Physics.SyncTransforms();
+
+        GameObject Part(PrimitiveType type, Transform parent, Vector3 pos, Quaternion rot, Vector3 scale, Material mat)
+        {
+            var g = GameObject.CreatePrimitive(type);
+            UnityEngine.Object.DestroyImmediate(g.GetComponent<Collider>());
+            g.transform.SetParent(parent, true);
+            g.transform.SetPositionAndRotation(pos, rot);
+            g.transform.localScale = scale;
+            var r = g.GetComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            return g;
+        }
+        GameObject Rod(Transform parent, Vector3 a, Vector3 b, float r, Material mat)       // 원기둥 a → b, 반지름 r
+            => Part(PrimitiveType.Cylinder, parent, (a + b) * 0.5f, Quaternion.FromToRotation(Vector3.up, b - a), new Vector3(r * 2f, Vector3.Distance(a, b) * 0.5f, r * 2f), mat);
+        Transform Group(Transform parent, string name) { var g = new GameObject(name).transform; g.SetParent(parent, false); return g; }
+
+        var root = new GameObject("Repairs").transform;
+        int n = 0;
+        foreach (var slot in map.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Repair_")).OrderBy(t => t.name))
+        {
+            string kind = slot.name.Split('_')[2];
+            Vector3 p = slot.position;
+            float best = 99f; Vector3 wall = p, nrm = Vector3.forward;       // 가장 가까운 벽 (허리 높이 수평 광선 24 방향)
+            for (int k = 0; k < 24; k++)
+            {
+                Vector3 d = Quaternion.Euler(0f, k * 15f, 0f) * Vector3.forward;
+                if (Physics.Raycast(p + Vector3.up * 1.2f, d, out RaycastHit h, 8f, ~(1 << 2), QueryTriggerInteraction.Ignore) && h.distance < best)
+                { best = h.distance; wall = new Vector3(h.point.x, p.y, h.point.z); nrm = Vector3.ProjectOnPlane(h.normal, Vector3.up).normalized; }
+            }
+            Vector3 tg = Vector3.Cross(Vector3.up, nrm).normalized, up = Vector3.up;
+            var go = new GameObject($"Repair_{kind}_{++n}");
+            go.transform.SetParent(root);
+            go.transform.position = p;
+            var rep = go.AddComponent<Repairable>();
+            rep.kind = kind;
+            var brk = Group(go.transform, "Broken"); var fix = Group(go.transform, "Fixed");
+            rep.brokenLook = brk.gameObject; rep.fixedLook = fix.gameObject;
+            Quaternion face = Quaternion.LookRotation(nrm, up);
+            switch (kind)
+            {
+                case "timber":                                             // 동발: 벽에 선 기둥 — 망가지면 통로 쪽으로 12° 기운다
+                {
+                    Vector3 c = wall + nrm * 0.16f + up * 1.2f;
+                    Part(PrimitiveType.Cube, fix, c, face, new Vector3(0.22f, 2.4f, 0.22f), wood);
+                    Part(PrimitiveType.Cube, brk, c + nrm * 0.12f, Quaternion.AngleAxis(12f, tg) * face, new Vector3(0.22f, 2.4f, 0.22f), wood);
+                    rep.focus = c; rep.standAt = wall + nrm * 1.0f; break;
+                }
+                case "rail":                                               // 레일 두 줄 (궤간 0.6) — 망가지면 한 줄이 벌어진다
+                {
+                    Vector3 c = p + up * 0.05f, off = Vector3.Cross(tg, up).normalized * 0.3f;
+                    Quaternion along = Quaternion.LookRotation(tg, up);
+                    foreach (var g in new[] { fix, brk }) Part(PrimitiveType.Cube, g, c + off, along, new Vector3(0.07f, 0.1f, 1.8f), iron);
+                    Part(PrimitiveType.Cube, fix, c - off, along, new Vector3(0.07f, 0.1f, 1.8f), iron);
+                    Part(PrimitiveType.Cube, brk, c - off * 1.4f, Quaternion.AngleAxis(12f, up) * along, new Vector3(0.07f, 0.1f, 1.8f), iron);
+                    rep.focus = c; rep.standAt = p + tg * 1.3f; break;
+                }
+                case "drain":                                              // 벽을 따라가는 배수관 — 망가지면 이음새가 벌어져 물이 샌다
+                {
+                    Vector3 c = wall + nrm * 0.12f + up * 0.35f;
+                    Rod(fix, c - tg, c + tg, 0.07f, iron);
+                    Rod(brk, c - tg, c - tg * 0.1f, 0.07f, iron); Rod(brk, c + tg * 0.12f, c + tg, 0.07f, iron);
+                    Part(PrimitiveType.Cube, brk, c + tg * 0.01f - up * 0.17f, face, new Vector3(0.05f, 0.34f, 0.05f), water);
+                    Part(PrimitiveType.Cube, brk, new Vector3(c.x, p.y + 0.01f, c.z) + nrm * 0.25f, face, new Vector3(0.7f, 0.01f, 0.45f), water);
+                    rep.focus = c; rep.standAt = wall + nrm * 1.0f; break;
+                }
+                case "vent":                                               // 천장 밑 풍관 — 망가지면 찢어진 천이 펄럭인다
+                {
+                    Vector3 c = wall + nrm * 0.4f + up * 2.15f;
+                    foreach (var g in new[] { fix, brk }) Rod(g, c - tg * 1.1f, c + tg * 1.1f, 0.22f, cloth);
+                    var hinge = Group(brk, "Flap"); hinge.position = c - up * 0.2f; hinge.rotation = Quaternion.LookRotation(tg, up);
+                    Part(PrimitiveType.Cube, hinge, hinge.position - up * 0.15f, hinge.rotation, new Vector3(0.45f, 0.3f, 0.02f), cloth);
+                    rep.flap = hinge; rep.focus = c; rep.standAt = wall + nrm * 1.1f; break;
+                }
+                case "panel":                                              // 배전반: 벽에 붙은 상자 + 표시등 (꺼짐/켜짐)
+                {
+                    Vector3 c = wall + nrm * 0.08f + up * 1.3f;
+                    foreach (var g in new[] { fix, brk }) Part(PrimitiveType.Cube, g, c, face, new Vector3(0.5f, 0.7f, 0.14f), iron);
+                    Part(PrimitiveType.Sphere, fix, c + nrm * 0.08f + up * 0.22f, face, Vector3.one * 0.07f, lampOn);
+                    Part(PrimitiveType.Sphere, brk, c + nrm * 0.08f + up * 0.22f, face, Vector3.one * 0.07f, lampOff);
+                    rep.focus = c; rep.standAt = wall + nrm * 1.0f; break;
+                }
+                case "hose":                                               // 바닥의 공기 호스 — 망가지면 풀린 끝이 들려 휘청인다
+                {
+                    Vector3 c = wall + nrm * 0.35f + up * 0.04f;
+                    Rod(fix, c - tg * 0.9f, c + tg * 0.9f, 0.035f, rubber);
+                    Rod(brk, c - tg * 0.9f, c + tg * 0.3f, 0.035f, rubber);
+                    var hinge = Group(brk, "Flap"); hinge.position = c + tg * 0.3f; hinge.rotation = Quaternion.LookRotation(tg, up);
+                    Rod(hinge, hinge.position, hinge.position + tg * 0.6f + up * 0.2f, 0.035f, rubber);
+                    rep.flap = hinge; rep.focus = c; rep.standAt = wall + nrm * 1.0f; break;
+                }
+                case "lamp":                                               // 꺼진 전등(DeadLamp) — 고치면 켜진 전등과 같은 빛
+                {
+                    var dl = deadLamps.OrderBy(t => Vector2.Distance(new Vector2(t.position.x, t.position.z), new Vector2(p.x, p.z))).First();
+                    rep.bulb = dl.GetComponentInChildren<MeshRenderer>();
+                    rep.bulbOn = bulbOn; rep.bulbOff = bulbOff;
+                    var l = dl.gameObject.AddComponent<Light>();
+                    l.type = LightType.Point; l.color = Tuning.BOOTH_LIGHT_COLOR; l.intensity = Tuning.BOOTH_LIGHT_ENERGY; l.range = Tuning.BOOTH_LIGHT_RANGE;
+                    l.shadows = LightShadows.Soft; l.enabled = false;
+                    l.GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer;
+                    rep.lampLight = l;
+                    rep.focus = new Vector3(p.x, p.y + 1.2f, p.z); rep.standAt = p + tg * 0.8f; break;
+                }
+            }
+            if (NavMesh.SamplePosition(rep.standAt, out NavMeshHit nh, 1.5f, NavMesh.AllAreas)) rep.standAt = nh.position;
+            brk.gameObject.SetActive(false);
+        }
+        var dir = root.gameObject.AddComponent<RepairDirector>();
+        dir.player = player;
+        Debug.Log($"BOOTH repairs: {n} ({string.Join(" ", root.GetComponentsInChildren<Repairable>(true).GroupBy(r => r.kind).Select(g => g.Key + " " + g.Count()))})");
+        return dir;
     }
 
     // 켜진 전등 = 따뜻한 점광원 + 빛나는 전구, 꺼진 전등 = 어두운 전구만

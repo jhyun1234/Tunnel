@@ -51,6 +51,8 @@ public class NoiseSound : MonoBehaviour
         }
         else if (kind == "pick_land")
             Play3D(pos, Pick(landClips), Tuning.LAND_VOLUME, radius);
+        else if (kind == "repair" && MiningFx.I != null && MiningFx.I.hitClips != null && MiningFx.I.hitClips.Length > 0)   // REP-1: 고치는 소리 파일은 사운드 차례 — 그때까지 타격음을 반경만큼 작게
+            Play3D(pos, MiningFx.I.hitClips[Random.Range(0, MiningFx.I.hitClips.Length)], Tuning.HIT_VOLUME * Mathf.Clamp01(radius / Tuning.NOISE_PICK), radius);
     }
 
     // 곡괭이(휘두른 것·던진 것)가 괴물 몸에 닿았다. 소음은 아니다(NoiseBus 안 탐) — 소리만

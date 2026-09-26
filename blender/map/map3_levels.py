@@ -254,29 +254,11 @@ def build_up():
 
 
 # ═════════════════════════════════════════ 고칠 곳 ═════════════════════════════════════════
-HAUL = ("main", "w_main", "e_main", "m2_hw", "m2_he", "w2_h", "e2_h", "uw_adit", "ue_adit", "ue_main")
-REPAIR = {"갱목": "갱", "전등": "등", "배수관": "수", "환기": "환", "공기 호스": "공", "레일": "레", "배전반": "배"}
+import repair_spots as rsp
+REPAIR = rsp.LETTER
 def repairs(s):
-    """고칠 곳 자리 규칙 (사용자 09-26 "지나가다 갱목, 랜턴, 배수관, 환기구 등 고치면 돈" — 규칙·간격은 제안):
-       전등 = 꺼진 전등 구역(D) 굴 15 m 마다 · 배수관 = 운반갱도 30 m 마다 · 레일 = 운반갱도 40 m 마다 · 갱목 = 그 밖의 갱목 굴 40 m 마다 ·
-       환기 = 막장 끝마다(국부선풍기·풍관) · 공기 호스 = 비탈 막장 세로 굴 가운데 · 배전반 = 층마다 정거장·갱구 쪽. 4 m 안에 겹치면 하나만."""
-    out = []
-    def add(kind, q):
-        if all(math.dist(q, p) > 4.0 for _, p in out): out.append((kind, q))
-    for t in s.T:
-        if t[6] != "tunnel" or not t[4] or t[1][0][3] > 10: continue
-        n, pts, lz, timber = t[0], t[1], t[5], t[3]; L = bt.seg_len(pts)
-        at = lambda sp: tuple(bt.point_at(pts, sp))
-        haul = n in HAUL or n.startswith("w2_h") or n.startswith("m2_h")
-        if "face" in n: add("환기", at(0.0)); continue
-        if lz == "D": [add("전등", at(sp)) for sp in np.arange(7.5, L, 15.0)]
-        if haul:
-            [add("배수관", at(sp)) for sp in np.arange(12.0, L, 30.0)]; [add("레일", at(sp)) for sp in np.arange(27.0, L, 40.0)]
-        elif timber and lz == "K":
-            if any(k in n for k in ("_nb_c", "_ch_c")): add("공기 호스", at(L / 2))
-            [add("갱목", at(sp)) for sp in np.arange(20.0, L, 40.0)]
-    for q, _ in s.hubs: add("배전반", q)
-    return out
+    """고칠 곳 자리 (규칙은 repair_spots.py — Blender 부스 맵과 같은 규칙) → [(종류, (x, y))]"""
+    return [(k, q) for k, q, _ in rsp.spots(s.T, hubs=[(q, 0.0) for q, _ in s.hubs])]
 
 
 # ═════════════════════════════════════════ 그림 ═════════════════════════════════════════
