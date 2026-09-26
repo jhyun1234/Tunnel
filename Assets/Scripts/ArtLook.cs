@@ -1,0 +1,73 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
+
+// ART-1 현실감 시험 (docs/제안서_ART1_현실감_광장_시험.md): 부스 맵의 새 모습 ↔ 옛 모습.
+// 새 모습 = 바위 재질 MineRock(무늬 되풀이 없음 · 석탄 띠 · 진흙 · 젖음) + 전등마다 튀는 빛 + 떠다니는 먼지 + 겹치는 화면 설정(필름 입자 · 빛 번짐 · 대비).
+// 판정 키: Insert 옛/새 · Home/End 젖음 −/+ · PageDown/PageUp 튀는 빛 −/+. 받은 숫자는 Tuning.ART_* 에. 씬은 BuildM1.PlaceArt 가 만든다.
+public class ArtLook : MonoBehaviour
+{
+    public Renderer[] renderers;                  // 부스 맵 바위 (SHL_Booth_* · PRP_Crevice_*)
+    public Material[] oldMats;                    // renderers 의 재질 칸을 차례로 펼친 옛 재질
+    public Material newMat;
+    public Light[] mains, bounces;                // 같은 차례 — 튀는 빛은 그 전등이 켜져 있을 때만
+    public ParticleSystem dust;
+    public Volume artVolume;                      // 겹치는 화면 설정 (필름 입자 · 빛 번짐 · 대비) — 켜고 끈다
+
+    public static ArtLook Instance;
+    public static bool On = true;
+    public static float Wet = Tuning.ART_WET, Bounce = Tuning.ART_BOUNCE;
+    public static bool SabDryWall, SabBounceDead;   // 검사용 사보타주: drywall(젖음 0) · bouncedead(튀는 빛이 꺼진 전등에서도)
+    static readonly int WetId = Shader.PropertyToID("_ArtWet");
+
+    void Awake()
+    {
+        Instance = this;
+        Wet = Tuning.ART_WET; Bounce = Tuning.ART_BOUNCE;
+        Set(true);
+    }
+
+    public void Set(bool on)
+    {
+        On = on;
+        int k = 0;
+        foreach (var r in renderers)
+        {
+            var m = r.sharedMaterials;
+            for (int i = 0; i < m.Length; i++, k++) m[i] = on ? newMat : oldMats[k];
+            r.sharedMaterials = m;
+        }
+        if (dust != null)
+        {
+            if (on) dust.Play();
+            else dust.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+        if (artVolume != null) artVolume.enabled = on;
+        LateUpdate();
+    }
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb == null) return;
+        if (kb.insertKey.wasPressedThisFrame) Set(!On);
+        if (kb.homeKey.wasPressedThisFrame) Wet = Mathf.Max(0f, Wet - 0.25f);
+        if (kb.endKey.wasPressedThisFrame) Wet += 0.25f;
+        if (kb.pageDownKey.wasPressedThisFrame) Bounce = Mathf.Max(0f, Bounce - 0.05f);
+        if (kb.pageUpKey.wasPressedThisFrame) Bounce += 0.05f;
+    }
+
+    void LateUpdate()                               // 전등이 켜지고 꺼지는 것(고치기 · 검사)을 따라간다
+    {
+        Shader.SetGlobalFloat(WetId, SabDryWall ? 0f : Wet);
+        for (int i = 0; i < bounces.Length; i++)
+        {
+            bool lit = mains[i].enabled && mains[i].gameObject.activeInHierarchy;
+            bounces[i].enabled = On && (lit || SabBounceDead) && Bounce > 0f;
+            bounces[i].intensity = mains[i].intensity * Bounce;
+        }
+    }
+
+    public static string Line() => Instance == null ? "" :
+        $"\nlook {(On ? "NEW" : "OLD")} [Ins]  wet {Wet:0.00} [Home End]  bounce {Bounce:0.00} [PgDn PgUp]";
+}

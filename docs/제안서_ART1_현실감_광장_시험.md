@@ -79,7 +79,7 @@
 ## 판정 키 (빈 키에서)
 - **Insert**: 옛 모습 ↔ 새 모습 (질감 · 젖음 · 튀는 빛 · 화면 설정 · 물건 전부)
 - **Home / End**: 젖음 세기 − / +
-- **PageUp / PageDown**: 튀는 빛 세기 − / +
+- **PageDown / PageUp**: 튀는 빛 세기 − / +
 - F1 줄에 `look NEW wet 1.00 bounce 0.15`. 받은 숫자는 `Tuning` 에.
 
 ## 검사 (배포 실행 파일, 부스 구간에 더함 `-only art`)
@@ -145,3 +145,14 @@ Unity: APV https://docs.unity3d.com/6000.4/Documentation/Manual/urp/probevolumes
 ## 차례 1 (09-27) — 질감 후보 한 장
 `docs/그림/ART1_질감_후보.png` — 벽 5(지금 · ambientCG Rock031 · Rock022 · Rock030 · Rock050) · 석탄 4(ambientCG Rock035 · Rock037 · Rock033 · Poly Haven dark_rock) · 바닥 5(지금 · Poly Haven brown_mud_03 · rocks_ground_02 · stony_dirt_path · brown_mud_02). 진짜 부스 맵 glTF 를 Blender 로 읽어 광장 첫 자리(넓게) + 가까이(벽 1.4 m · 발밑)를 같은 빛(전등 500 W · 헤드램프 900/180 W, EEVEE)으로 찍음 — 게임 빛이 아니다. 찍기 `blender/art/texture_candidates.py` → 모으기 `python docs/그림/ART1_질감_후보.py`.
 후보 받기(1K JPG, `build/art/cand_tex/`, 커밋 안 함): Poly Haven = `https://api.polyhaven.com/files/<id>` 의 Diffuse · nor_gl · Rough → `<id>_{Color,NormalGL,Roughness}.jpg` · ambientCG = `https://ambientcg.com/get?file=<id>_1K-JPG.zip` 안의 같은 셋. 석탄 질감은 두 곳 모두 "coal" 이 없어 까만 바위를 골랐다(게임에서 더 어둡게 · 번들거리게 섞는다).
+
+## 차례 1 답 (09-27) — 사용자: 벽 2 · 석탄 1 · 바닥 2
+벽 = ambientCG Rock031 · 석탄 = ambientCG Rock035 · 바닥 = Poly Haven brown_mud_03 (2K). `Assets/Tunnel/Art/textures/` — 색 + 거칠기(알파) 한 장 `_DiffRough.png` + 노멀 `_nor_gl.jpg`, 출처 `Assets/Tunnel/Art/SOURCES.md`.
+
+## 차례 2 (09-27) — 표면·빛 구현
+- **Blender** `make_booth.py` 4b: 점마다 석탄·진흙을 **두 번째 UV "art"**(x 석탄 · y 진흙)에 적는다. 정점 색이 아닌 까닭 = glTF 규칙상 COLOR_0 이 바탕색에 곱해져 옛 재질(Insert 옛 모습)이 검어진다. 석탄 = 옆으로 긴 잡음 띠(벽 점의 19 %), 진흙 = 바닥 전부 + 벽 아래 0.14~0.45 m(벽 점의 13 %). **점 위치 · 노멀 · 첫 UV · 삼각형은 한 바이트도 안 바뀜**(`tools/cmp_booth_pos.py` 옛/새 glTF 비교 — 점 1 바이트를 바꾼 사본으로 FAIL 확인).
+- **셰이더** `Assets/Shaders/MineRock.shader` (+ `HexTile.hlsl`, mmikk/hextile-demo MIT): 세계 좌표 세 방향 투영 × 헥스 타일링(무늬 되풀이 없음 — 맵의 상자 투영 UV 는 안 씀) · 세 겹(바위 · 석탄 · 진흙, 진흙만 보이는 바닥은 바위를 안 읽음) · 몇 m 크기 밝기 얼룩 · 젖음(벽 아래 진흙 띠 · 세로로 흘러내린 자국 · 바닥 물웅덩이, 바닥 전체는 12 %만) · 석탄 윤기. 재질 `Assets/Tunnel/Art/M11_MineRock.mat`(MakeBooth 가 만듦).
+- **Unity** `BuildM1.PlaceArt` + `ArtLook.cs`: 부스 바위 27개(SHL 13 · 바위 틈 입구 바위 14) 재질 칸 40 → MineRock · 전등 18(켜진 10 + 고치면 켜지는 8)마다 튀는 빛(그림자 없음, 전등 1.6 m 아래, 7 m, 세기 × 0.15, 전등이 꺼져 있으면 꺼짐) · 카메라 둘레 먼지 600 알갱이(원래 먼지 재질 — 빛을 받을 때만 보임) · **겹치는 볼륨** `M11_BoothVolume`(대비 +10 · 필름 입자 0.25 · 빛 번짐 0.35 — 첫 볼륨은 DevHud · 검사가 사본을 잡고 있어 바꿔 끼우지 않는다). 키 Insert · Home/End · PageDown/PageUp, F1 줄 `look NEW wet 1.00 bounce 0.15`. 복도(M1) · 인트로는 안 바뀜(새 질감 = 새 파일, 새 재질 = 부스에만).
+- **검사** `-only art` 6개 PASS: `art_booth_material` 27/27 · `art_toggle` · `art_fps` 광장 새 133 / 옛 136 · `art_wet_glint` 젖음 켬/끔 두 장에서 바뀐 픽셀 16 % · `art_bounce` 켜진 전등 옆 +9 % · 꺼진 전등 옆 +1 %. 부스 전체 21 PASS(`booth_fps` 광장 161 · 기둥 사이 162 · 큰길 175 · 노보리 231 · `booth_light_zones` 0.258 / 0.018 / 0.023). **사보타주 FAIL 확인**: oldlook → art_booth_material · drywall → art_wet_glint · bouncedead → art_bounce(꺼진 전등 옆 +130 %).
+- **고치며 바꾼 것**: ① 첫 판은 바닥 전체를 적셔 기름처럼 번들거렸다 → 바닥 12 % + 물웅덩이만 ② 첫 판 fps 67(광장, 기준 60 겨우) + `booth_niche` 봇이 대피소 앞에서 멈춤 → 색·거칠기 한 장 · 바닥은 진흙만 읽기 · 잡음 줄이기 · 투영 섞는 곳 좁히기 · 비스듬한 거르기 8 → 4 → 161, niche 통과 ③ 젖음 검사는 밝은 점 세기로는 필름 입자 · 헤드램프 눈부심에 묻혀 두 장 차이로 바꿈.
+- **알려 둘 것**: 새 모습이 옛 모습보다 **어둡다**(광장 첫 자리 평균 밝기 0.10 vs 0.20) · 광장은 네모 방이라 **모서리가 X 자로 보인다**(모양 — 이번에 안 바꿈) · **갱목(나무 동발)이 하얗게 떠 보인다**(옛 재질 — 차례 3 물건에서) · 새 모습 캡처 `build/Tunnel/check/27_art_*_new/old.png`.

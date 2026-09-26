@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -323,8 +323,10 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair")
+        if (only != "repair" && only != "art")
             yield return BoothStage(cc);
+        if (only == "" || only == "art")
+            yield return ArtStage(cc);
         if (only == "" || only == "repair")
             yield return RepairStage(cc);
         if (only == "")
@@ -333,6 +335,103 @@ public class M1Check : MonoBehaviour
             yield break;
         }
         Finish();
+    }
+
+    // ================= ART-1 현실감 시험 (제안서 docs/제안서_ART1_현실감_광장_시험.md, 승인 09-27)
+    // ① 부스 바위가 모두 MineRock(셰이더 됨 · 분홍 0) ② 젖음이 보인다(광장 벽들: 젖음 켬/끔 두 장에서 바뀐 픽셀 몫)
+    // ③ Insert 로 옛/새가 바뀌고 다시 누르면 돌아온다 ④ 튀는 빛: 켜진 전등 옆 벽은 3 % 넘게 밝아지고 꺼진 전등 옆은 15 % 넘게 안 밝아진다(램프 끔, 눈이 어둠에 익은 뒤)
+    // ⑤ 사람이 볼 캡처 27_art_<자리>_new/old. 사보타주: oldlook(새 재질을 옛 재질로 → ①) · drywall(젖음 0 → ②) · bouncedead(꺼진 전등도 튀는 빛 → ④)
+    IEnumerator ArtStage(CharacterController cc)
+    {
+        var art = ArtLook.Instance;
+        if (art == null) { Check("art_booth_material", false, "no ArtLook in the booth scene"); yield break; }
+        var kb = InputSystem.AddDevice<Keyboard>("ArtKeyboard");
+        IEnumerator Press(Key k)
+        {
+            InputSystem.QueueStateEvent(kb, new KeyboardState(k)); yield return null; yield return null;
+            InputSystem.QueueStateEvent(kb, new KeyboardState()); yield return null;
+        }
+        if (sabotageName == "oldlook") { art.newMat = art.oldMats[0]; art.Set(true); }
+        ArtLook.SabDryWall = sabotageName == "drywall";
+        ArtLook.SabBounceDead = sabotageName == "bouncedead";
+        Vector3 spawn = OnNav(Slot("SPAWN_Player").position);
+        float yaw = Quaternion.LookRotation(Flat3(Slot("LOOK_Player").position - spawn)).eulerAngles.y;
+        lamp.lampOn = true;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.5f);
+
+        // ① ③ 광장 첫 자리: 새 → Insert → 옛 → Insert → 새
+        Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
+        Vector3 vNew = default, vOld = default, vBack = default;
+        yield return Capture("27_art_plaza_n_new", v => vNew = v);
+        int magenta = lastMagenta;
+        int onRock = art.renderers.Count(r => r.sharedMaterials.All(m => m != null && m.shader.name == "Tunnel/MineRock"));
+        Check("art_booth_material", art.renderers.Length > 0 && onRock == art.renderers.Length && art.newMat.shader.isSupported && magenta == 0,
+            $"booth rock renderers on MineRock {onRock}/{art.renderers.Length} · shader supported {art.newMat.shader.isSupported} · magenta px {magenta}");
+        yield return Press(Key.Insert);
+        bool wentOld = !ArtLook.On;
+        yield return Capture("27_art_plaza_n_old", v => vOld = v);
+        yield return Press(Key.Insert);
+        yield return Capture("27_art_plaza_n_back", v => vBack = v);
+        bool changed = Mathf.Abs(vNew.x - vOld.x) > 0.01f || Mathf.Abs(vNew.y - vOld.y) > 0.1f * Mathf.Max(vNew.y, 1e-3f);
+        bool back = ArtLook.On && Mathf.Abs(vBack.x - vNew.x) < 0.01f && Mathf.Abs(vBack.y - vNew.y) < 0.1f * Mathf.Max(vNew.y, 1e-3f);
+        Check("art_toggle", wentOld && changed && back, $"Insert → old {wentOld} · new/old mean {vNew.x:F3}/{vOld.x:F3} structure {vNew.y:F1}/{vOld.y:F1} · Insert again → new {ArtLook.On} mean {vBack.x:F3} structure {vBack.y:F1}");
+
+        // fps: 광장 첫 자리에서 새 모습 / 옛 모습 (새 모습이 무거운 만큼을 숫자로 — 부스 전체 fps 는 booth_fps)
+        float fNew = 0f, fOld = 0f;
+        yield return new WaitForSeconds(0.5f); yield return MeasureFps(2f, v => fNew = v);
+        art.Set(false); yield return new WaitForSeconds(0.5f); yield return MeasureFps(2f, v => fOld = v); art.Set(true);
+        Check("art_fps", fNew >= MinFps, $"plaza first spot: new look {fNew:F0} fps · old look {fOld:F0} fps (new ≥ {MinFps:F0})");
+
+        // ② 젖음: 광장 가운데에서 여덟 방향 중 12 m 안에 벽이 있는 쪽마다 벽 2.5 m 앞 — 기본 젖음 vs 0 두 장에서 밝기가 0.02 넘게 바뀐 픽셀 몫.
+        //    필름 입자(겹치는 볼륨)는 끄고 먼지는 멈춘다 — 둘 다 매 장면 달라 차이에 섞인다
+        art.artVolume.enabled = false; art.dust.Pause();
+        float fracSum = 0f; var notes = new List<string>();
+        for (int k = 0; k < 8; k++)
+        {
+            float y = yaw + k * 45f;
+            Vector3 d = Quaternion.Euler(0f, y, 0f) * Vector3.forward;
+            if (!Physics.Raycast(spawn + Vector3.up * 1.5f, d, out RaycastHit h, 12f, ~(1 << 2), QueryTriggerInteraction.Ignore)) continue;
+            Teleport(cc, OnNav(spawn + d * Mathf.Max(0f, h.distance - 2.5f)) + Vector3.up * 0.1f, y);
+            ArtLook.Wet = Tuning.ART_WET; yield return Capture($"27_art_wet_{k}", _ => { });
+            ArtLook.Wet = 0f; yield return Capture($"27_art_dry_{k}", _ => { });
+            float f = DiffFrac($"27_art_wet_{k}", $"27_art_dry_{k}", 0.02f);
+            fracSum += f; notes.Add($"{k * 45}° {f * 100f:F1} %");
+        }
+        ArtLook.Wet = Tuning.ART_WET; art.artVolume.enabled = true; art.dust.Play();
+        float fracAvg = notes.Count > 0 ? fracSum / notes.Count : 0f;
+        Check("art_wet_glint", notes.Count >= 2 && fracAvg > 0.03f, $"pixels changed > 0.02 by wetness (wet {Tuning.ART_WET} vs 0), plaza walls 2.5 m: {string.Join(" · ", notes)} · average {fracAvg * 100f:F1} % (> 3)");
+
+        // ④ 튀는 빛 (램프 끔, 눈이 어둠에 익은 뒤 — booth_light_zones 와 같은 자리)
+        var lit = FindObjectsByType<Light>(FindObjectsSortMode.None).Where(l => l.type == LightType.Point && l.name == "Lamp").OrderBy(l => Flat(l.transform.position - spawn)).ToArray();
+        var dead = GameObject.Find("BoothLights").transform.Cast<Transform>().Where(t => t.name == "DeadLamp").OrderBy(t => Flat(t.position - spawn)).ToArray();
+        Vector3 litAt = OnNav(lit[Mathf.Min(4, lit.Length - 1)].transform.position), deadAt = OnNav(dead[0].position);
+        var mid = new Rect(Screen.width * 0.25f, Screen.height * 0.25f, Screen.width * 0.5f, Screen.height * 0.5f);
+        lamp.lampOn = false;
+        yield return new WaitForSeconds(Tuning.DARK_ADAPT_TIME + 1f);
+        Vector3 l1 = default, l0 = default, d1 = default, d0 = default;
+        Teleport(cc, litAt + Vector3.up * 0.1f, WallYaw(litAt));
+        yield return Capture("27_art_bounce_lit", v => l1 = v, mid);
+        ArtLook.Bounce = 0f; yield return Capture("27_art_bounce_lit_none", v => l0 = v, mid); ArtLook.Bounce = Tuning.ART_BOUNCE;
+        Teleport(cc, deadAt + Vector3.up * 0.1f, WallYaw(deadAt));
+        yield return Capture("27_art_bounce_dead", v => d1 = v, mid);
+        ArtLook.Bounce = 0f; yield return Capture("27_art_bounce_dead_none", v => d0 = v, mid); ArtLook.Bounce = Tuning.ART_BOUNCE;
+        float litRise = l1.x / Mathf.Max(l0.x, 1e-4f) - 1f, deadRise = d1.x / Mathf.Max(d0.x, 1e-4f) - 1f;
+        Check("art_bounce", litRise > 0.03f && deadRise < 0.15f, $"wall beside a lit lamp {l0.x:F3} -> {l1.x:F3} (+{litRise * 100f:F0} %, > 3) · wall beside a dead lamp {d0.x:F3} -> {d1.x:F3} (+{deadRise * 100f:F0} %, < 15)");
+        lamp.lampOn = true;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.5f);
+
+        // ⑤ 사람이 볼 캡처: 광장 네 쪽 · 큰길 — 새 / 옛 (램프 켬)
+        var shots = new[] { ("plaza_n", spawn, yaw), ("plaza_e", spawn, yaw + 90f), ("plaza_s", spawn, yaw + 180f), ("plaza_w", spawn, yaw - 90f), ("main", OnNav(Slot("SLOT_Mid_main").position), yaw + 90f) };
+        foreach (var (nm, pos, y) in shots)
+        {
+            Teleport(cc, pos + Vector3.up * 0.1f, y);
+            art.Set(true); yield return Capture($"27_art_{nm}_new", _ => { });
+            art.Set(false); yield return Capture($"27_art_{nm}_old", _ => { });
+        }
+        art.Set(true);
+        Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
+        ArtLook.SabDryWall = ArtLook.SabBounceDead = false;
+        InputSystem.RemoveDevice(kb);
     }
 
     // ================= REP-1 고칠 곳 (제안서 docs/제안서_REP1_고칠_곳.md, 승인 09-26)
@@ -440,6 +539,16 @@ public class M1Check : MonoBehaviour
     }
 
     Transform Slot(string name) => pieces.GetComponentsInChildren<Transform>(true).First(t => t.name == name);
+    static float WallYaw(Vector3 at)                                     // 가장 가까운 벽 쪽 (16 방향)
+    {
+        float bestD = 99f, bestY = 0f;
+        for (int k = 0; k < 16; k++)
+        {
+            Vector3 d = Quaternion.Euler(0f, k * 22.5f, 0f) * Vector3.forward;
+            if (Physics.Raycast(at + Vector3.up * 1.5f, d, out RaycastHit h, 10f, ~(1 << 2), QueryTriggerInteraction.Ignore) && h.distance < bestD) { bestD = h.distance; bestY = k * 22.5f; }
+        }
+        return bestY;
+    }
     static Vector3 OnNav(Vector3 p, float r = 4f) => NavMesh.SamplePosition(p, out NavMeshHit h, r, NavMesh.AllAreas) ? h.position : p;
     static float PathLen(Vector3 a, Vector3 b)
     {
@@ -924,16 +1033,6 @@ public class M1Check : MonoBehaviour
         var lit = FindObjectsByType<Light>(FindObjectsSortMode.None).Where(l => l.type == LightType.Point && l.name == "Lamp").OrderBy(l => Flat(l.transform.position - spawn)).ToArray();
         var dead = GameObject.Find("BoothLights").transform.Cast<Transform>().Where(t => t.name == "DeadLamp").OrderBy(t => Flat(t.position - spawn)).ToArray();
         float yaw = Quaternion.LookRotation(Flat3(SlotAt("LOOK_Player") - spawn)).eulerAngles.y;
-        float WallYaw(Vector3 at)                                        // 가장 가까운 벽 쪽
-        {
-            float bestD = 99f, bestY = 0f;
-            for (int k = 0; k < 16; k++)
-            {
-                Vector3 d = Quaternion.Euler(0f, k * 22.5f, 0f) * Vector3.forward;
-                if (Physics.Raycast(at + Vector3.up * 1.5f, d, out RaycastHit h, 10f, ~(1 << 2), QueryTriggerInteraction.Ignore) && h.distance < bestD) { bestD = h.distance; bestY = k * 22.5f; }
-            }
-            return bestY;
-        }
         Vector3 litAt = OnNav(lit[Mathf.Min(4, lit.Length - 1)].transform.position), deadAt = OnNav(dead[0].position);
         Vector3 v1 = Vector3.zero, v2 = Vector3.zero, v3 = Vector3.zero;
         var mid = new Rect(Screen.width * 0.25f, Screen.height * 0.25f, Screen.width * 0.5f, Screen.height * 0.5f);
@@ -3563,6 +3662,17 @@ public class M1Check : MonoBehaviour
     }
     int lastMagenta;   // 마지막 Capture 영역에서 3픽셀 간격으로 센 분홍 픽셀 수
     int lastBright;    // 마지막 Capture 영역에서 3픽셀 간격으로 센 밝기 0.1 넘는 픽셀 수 (어둠 속 눈 발광)
+    // 두 캡처(outDir 의 PNG)에서 밝기가 thr 넘게 다른 픽셀 몫 (3 픽셀 간격) — ART-1 젖음
+    float DiffFrac(string a, string b, float thr)
+    {
+        var ta = new Texture2D(2, 2); ta.LoadImage(File.ReadAllBytes(Path.Combine(outDir, a + ".png")));
+        var tb = new Texture2D(2, 2); tb.LoadImage(File.ReadAllBytes(Path.Combine(outDir, b + ".png")));
+        Color32[] pa = ta.GetPixels32(), pb = tb.GetPixels32();
+        int n = 0, c = 0;
+        for (int i = 0; i < Mathf.Min(pa.Length, pb.Length); i += 3) { n++; if (Mathf.Abs(Lum(pa[i]) - Lum(pb[i])) > thr) c++; }
+        Destroy(ta); Destroy(tb);
+        return (float)c / Mathf.Max(n, 1);
+    }
 
     static float Lum(Color32 c) => (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255f;
 

@@ -116,6 +116,15 @@ public static class Tuning
     public static readonly Color BOOTH_LIGHT_COLOR = new Color(1f, 0.72f, 0.42f);   // 켜진 전등 (백열등)
     public const float BOOTH_LIGHT_ENERGY = 60.5f;              // 사용자 판정 09-24 (숫자패드 −/+, 제안값 25). 부스 씬을 만들 때 박힌다 — 바꾸면 MakeBooth -force
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
+    // ---- ART-1 현실감 시험 (제안서 docs/제안서_ART1_현실감_광장_시험.md, 승인 09-27). 부스 씬을 만들 때 박히는 것(범위·높이·화면)은 바꾸면 MakeBooth -force
+    public const float ART_WET = 1.0f;                          // 젖음 세기 (MineRock 전역 _ArtWet). 판정 키 Home/End ±0.25
+    public const float ART_BOUNCE = 0.15f;                      // 튀는 빛 = 전등 세기 × 이 값 (그림자 없음). 판정 키 PageDown/PageUp ±0.05
+    public const float ART_BOUNCE_RANGE = 7f;                   // m, 튀는 빛 범위 — 그림자가 없어 바위 너머 굴까지 비추니 짧게 (검사 art_bounce: 꺼진 전등 옆은 15 % 넘게 안 밝아진다)
+    public const float ART_BOUNCE_DROP = 1.6f;                  // m, 튀는 빛은 전등보다 이만큼 아래 (바닥에서 튀어 오르는 빛)
+    public static readonly Color ART_BOUNCE_TINT = new Color(0.85f, 0.7f, 0.55f);   // 바위·진흙에서 튄 빛은 더 누렇다 (전등 색에 곱함)
+    public const float ART_GRAIN = 0.25f;                       // 필름 입자 (부스 화면 설정 M11_BoothVolume)
+    public const float ART_BLOOM = 0.35f;                       // 빛 번짐 (전등 · 헤드램프 밝은 곳)
+    public const float ART_CONTRAST = 10f;                      // 색 대비 +
     public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 부스 천장 2.7~3.2 m(09-24 +0.5 m 전 2.2~2.7 에 맞춘 값) (복도는 STALKER_H 2.8 그대로)
     // ---- R2b 바위 틈 비집기 (제안서 docs/제안서_R2b_바위틈_비집기.md, 승인 09-24). 틈 0.5 m 는 몸 캡슐 0.8 m 보다 좁다 — 입구에서 E 를 누르면 조작이 잠기고 틈 가운데 선을 따라 옮겨진다
     public const float SQUEEZE_S = 2.5f;           // s, 막힌 틈에 들어가는 시간(바위 밖 선 자리 → 숨는 자리, SQUEEZE_REF_M). 뚫린 틈(4.5~9.8 m)은 같은 빠르기라 3.0~6.6 s. 사용자 판정 09-25 "길이 괜찮다" (F7 F8, 제안값 그대로)

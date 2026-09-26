@@ -34,6 +34,9 @@ public static class BuildM1
     const string OrePath = "Assets/Tunnel/Pieces/ore.gltf";
     const string ChipsPath = "Assets/Tunnel/Pieces/mine_chips.gltf";
     const string DustMatPath = "Assets/Settings/M2_Dust.mat";
+    const string ArtTexDir = "Assets/Tunnel/Art/textures/";            // ART-1 CC0 질감 (Assets/Tunnel/Art/SOURCES.md)
+    const string MineRockMatPath = "Assets/Tunnel/Art/M11_MineRock.mat";
+    const string ArtProfilePath = "Assets/Settings/M11_BoothVolume.asset";
     // 기본 = 새 몸 m3(Meshy 부위 조립, tools/bake_m3.sh — 사용자 판정 통과 09-22). 옛 TRELLIS 몸은 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb 로 (검사 문턱은 m3 값)
     static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_m3.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
@@ -387,6 +390,7 @@ public static class BuildM1
         hud.miningHud = miningHud;
         miningHud.player = p;
         miningHud.pickaxe = pickaxe;
+        if (booth) PlaceArt(pieces, camGo.transform, fx.dustMaterial);   // ART-1 현실감 (Insert 옛/새)
 
         EditorSceneManager.SaveScene(scene, scenePath);
         EditorBuildSettings.scenes = new[] { IntroScenePath, ScenePath, BoothScenePath }.Where(File.Exists).Select(sp => new EditorBuildSettingsScene(sp, true)).ToArray();
@@ -594,6 +598,83 @@ public static class BuildM1
         dir.player = player;
         Debug.Log($"BOOTH repairs: {n} ({string.Join(" ", root.GetComponentsInChildren<Repairable>(true).GroupBy(r => r.kind).Select(g => g.Key + " " + g.Count()))})");
         return dir;
+    }
+
+    // ART-1 현실감 시험 (docs/제안서_ART1_현실감_광장_시험.md): 부스 맵 바위(SHL_Booth_* · PRP_Crevice_*)의 벽·바닥 재질을 MineRock 으로 · 전등마다 튀는 빛(그림자 없음)
+    // · 카메라 둘레 떠다니는 먼지(헤드램프에만 보이는 먼지 재질) · 부스 화면 설정(겹치는 볼륨: 필름 입자 · 빛 번짐 · 대비). ArtLook 이 Insert 로 옛/새를 바꾼다
+    static void PlaceArt(Transform map, Transform cam, Material dustMat)
+    {
+        Texture2D T(string f)
+        {
+            var t = AssetDatabase.LoadAssetAtPath<Texture2D>(ArtTexDir + f);
+            if (t == null) { Debug.LogError($"ART: {ArtTexDir}{f} 가 없다"); EditorApplication.Exit(11); }
+            return t;
+        }
+        var shader = Shader.Find("Tunnel/MineRock");
+        if (shader == null) { Debug.LogError("ART: Tunnel/MineRock 셰이더를 못 찾았다"); EditorApplication.Exit(12); }
+        AssetDatabase.DeleteAsset(MineRockMatPath);
+        var mat = new Material(shader) { name = "M11_MineRock" };
+        foreach (var (prop, file) in new[] {
+            ("_BaseMap", "art_rock_Rock031_DiffRough.png"), ("_BumpMap", "art_rock_Rock031_nor_gl.jpg"),        // 색 그림 알파 = 거칠기
+            ("_CoalMap", "art_coal_Rock035_DiffRough.png"), ("_CoalNormal", "art_coal_Rock035_nor_gl.jpg"),
+            ("_MudMap", "art_mud_brown_mud_03_DiffRough.png"), ("_MudNormal", "art_mud_brown_mud_03_nor_gl.jpg") })
+            mat.SetTexture(prop, T(file));
+        AssetDatabase.CreateAsset(mat, MineRockMatPath);
+
+        var art = new GameObject("ArtLook").AddComponent<ArtLook>();
+        var rs = map.GetComponentsInChildren<MeshRenderer>(true).Where(r => r.name.StartsWith("SHL_Booth_") || r.name.StartsWith("PRP_Crevice_")).ToArray();
+        art.renderers = rs;
+        art.oldMats = rs.SelectMany(r => r.sharedMaterials).ToArray();
+        art.newMat = mat;
+
+        var mains = GameObject.Find("BoothLights").GetComponentsInChildren<Light>(true).Where(l => l.type == LightType.Point).ToArray();   // 켜진 전등 + 고치면 켜지는 전등
+        art.mains = mains;
+        art.bounces = mains.Select(m =>
+        {
+            var go = new GameObject("Bounce");
+            go.transform.SetParent(m.transform, false);
+            go.transform.localPosition = Vector3.down * Tuning.ART_BOUNCE_DROP;
+            var b = go.AddComponent<Light>();
+            b.type = LightType.Point; b.color = Tuning.BOOTH_LIGHT_COLOR * Tuning.ART_BOUNCE_TINT; b.range = Tuning.ART_BOUNCE_RANGE;
+            b.shadows = LightShadows.None; b.enabled = false;
+            b.GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer;
+            return b;
+        }).ToArray();
+
+        var dustGo = new GameObject("ArtDust");
+        dustGo.transform.SetParent(cam, false);
+        var ps = dustGo.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var main = ps.main;
+        main.loop = true; main.prewarm = true; main.playOnAwake = true;
+        main.startLifetime = 9f; main.startSpeed = 0.03f; main.maxParticles = 600;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.006f, 0.016f);
+        main.startColor = new Color(0.75f, 0.7f, 0.62f, 0.55f);
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        var em = ps.emission; em.rateOverTime = 60f;
+        var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Box; sh.scale = new Vector3(7f, 3f, 7f); sh.position = new Vector3(0f, 0f, 2.5f);
+        var nz = ps.noise; nz.enabled = true; nz.strength = 0.05f; nz.frequency = 0.3f;
+        var pr = dustGo.GetComponent<ParticleSystemRenderer>();
+        pr.sharedMaterial = dustMat; pr.shadowCastingMode = ShadowCastingMode.Off; pr.receiveShadows = false;
+        art.dust = ps;
+
+        // 화면 설정은 바꿔 끼우지 않고 두 번째 볼륨(우선순위 1)을 겹친다 — DevHud · M1Check 가 첫 볼륨의 사본(안개)을 잡고 있다
+        AssetDatabase.DeleteAsset(ArtProfilePath);
+        var np = ScriptableObject.CreateInstance<VolumeProfile>();
+        AssetDatabase.CreateAsset(np, ArtProfilePath);
+        np.Add<ColorAdjustments>(true).contrast.Override(Tuning.ART_CONTRAST);
+        var fg = np.Add<FilmGrain>(true); fg.type.Override(FilmGrainLookup.Medium1); fg.intensity.Override(Tuning.ART_GRAIN);
+        var bl = np.Add<Bloom>(true); bl.intensity.Override(Tuning.ART_BLOOM); bl.threshold.Override(1.0f); bl.scatter.Override(0.6f);
+        foreach (var c in np.components)
+        {
+            c.hideFlags = HideFlags.HideInInspector | HideFlags.HideInHierarchy;
+            AssetDatabase.AddObjectToAsset(c, np);
+        }
+        EditorUtility.SetDirty(np);
+        var av = new GameObject("ArtVolume").AddComponent<Volume>();
+        av.isGlobal = true; av.priority = 1f; av.sharedProfile = np;
+        art.artVolume = av;
+        Debug.Log($"BOOTH art: rock renderers {rs.Length} (material slots {art.oldMats.Length}) · bounce lights {art.bounces.Length} · art volume {string.Join(" ", np.components.Select(c => c.GetType().Name))}");
     }
 
     // 켜진 전등 = 따뜻한 점광원 + 빛나는 전구, 꺼진 전등 = 어두운 전구만

@@ -8,6 +8,7 @@ using UnityEngine.Rendering;
 // V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · 9 괴물을 내 앞에 세움 · N 선 괴물의 동작 차례로 · U 배회 걸음 A/B/C (3D-③) · I M 목 붉기 −/+ · Q R 목 밝기 ÷× 1.15 · Z X 세운 괴물 목 길이 −/+ · C B 목 빼는 시간 −/+ (3D-③b M1e) · F1 표시 끄기
 // 부스 맵: 숫자패드 − + 켜진 전등 밝기 ÷×1.25 · F5 F6 막힘 묶음 서쪽·동쪽 켜기/끄기 · F7 F8 바위 틈 비집는 시간 −/+ 0.25 s · F9 F10 틈 속 몸 돌리는 각 −/+ 10° (누르면 표시가 켜진다)
 // REP-1 고칠 곳: F2 가장 가까운 멀쩡한 고칠 곳을 망가뜨림 · F3 F4 고치는 시간 ÷×1.25 (모든 종류) · F11 F12 판 중 망가지는 간격 −/+ 30 s
+// ART-1 현실감: Insert 옛/새 · Home/End 젖음 · PageDown/PageUp 튀는 빛 — 키는 ArtLook 이 받는다 (여기는 줄만)
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
@@ -204,6 +205,6 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + BoothLine() + RepairLine() + CreviceLine() + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
     }
 }

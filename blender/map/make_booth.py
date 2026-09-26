@@ -269,6 +269,45 @@ assert worst_h[0] >= MIN_H, "FAIL: 가장 낮은 천장 %.2f m < %.1f" % (worst_
 assert not narrow_bad or SAB == "unitywide", "FAIL: 개구멍·대피소 폭이 사람/괴물 기준 밖 %s" % narrow_bad[:4]
 assert all(p is not None for p in pocket_pts), "FAIL: 벽에 안 붙은 광맥 자리 %s" % [i + 1 for i, p in enumerate(pocket_pts) if p is None]
 
+# ================= 4b. ART-1: 점마다 석탄 · 진흙 → 두 번째 UV "art" (x = 석탄, y = 진흙). 점 위치는 안 바꾼다 (충돌 그물이 같은 그물).
+#   정점 색이 아닌 까닭: glTF 규칙상 COLOR_0 은 바탕색에 곱해져 옛 재질(Insert 옛 모습)이 검어진다. 젖음은 Unity 셰이더(MineRock)가 진흙 + 잡음으로 계산.
+def vnoise3(p):
+    """값 잡음 0..1 (격자 모서리 해시 + 부드러운 삼선형)"""
+    i = np.floor(p); f = p - i; u = f * f * (3 - 2 * f); i = i.astype(np.int64)
+    def h(dx, dy, dz):
+        n = ((i[:, 0] + dx) * 73856093) ^ ((i[:, 1] + dy) * 19349663) ^ ((i[:, 2] + dz) * 83492791)
+        n = n.astype(np.uint64); n = (n ^ (n >> np.uint64(13))) * np.uint64(1274126177)
+        return ((n ^ (n >> np.uint64(16))) & np.uint64(0xFFFF)).astype(np.float64) / 65535.0
+    x0 = h(0, 0, 0) * (1 - u[:, 0]) + h(1, 0, 0) * u[:, 0]; x1 = h(0, 1, 0) * (1 - u[:, 0]) + h(1, 1, 0) * u[:, 0]
+    x2 = h(0, 0, 1) * (1 - u[:, 0]) + h(1, 0, 1) * u[:, 0]; x3 = h(0, 1, 1) * (1 - u[:, 0]) + h(1, 1, 1) * u[:, 0]
+    return (x0 * (1 - u[:, 1]) + x1 * u[:, 1]) * (1 - u[:, 2]) + (x2 * (1 - u[:, 1]) + x3 * u[:, 1]) * u[:, 2]
+def fbm3(p, octaves=3):
+    return sum(vnoise3(p * 2 ** k) * 0.5 ** k for k in range(octaves)) / sum(0.5 ** k for k in range(octaves))
+ART_COAL_T, ART_MUD_H = 0.57, 0.35                   # 석탄 문턱(잡음 0..1 — 높을수록 석탄이 적다) · 벽 진흙 높이(바닥에서 m)
+def art_uv(me, bvh_=None):
+    """석탄 = 옆으로 긴 잡음 띠(9 m × 1.1 m) · 진흙 = 바닥 1 + 벽은 바닥에서 ART_MUD_H 까지 들쭉날쭉. bvh_ 없으면 0(맨 바위)"""
+    nv = len(me.vertices)
+    if bvh_ is None: coal = mud = np.zeros(nv)
+    else:
+        co = np.empty(nv * 3); me.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
+        nr = np.empty(nv * 3); me.vertices.foreach_get("normal", nr); nr = nr.reshape(-1, 3)
+        down = Vector((0, 0, -1)); hgt = np.empty(nv)
+        for k in range(nv):                                  # 바닥에서 높이 = 공기 쪽으로 5 cm 뜬 뒤 아래로 광선
+            hit = bvh_.ray_cast(Vector(co[k] + nr[k] * 0.05), down, 6.0); hgt[k] = hit[3] if hit[0] is not None else 6.0
+        floor = nr[:, 2] > 0.6
+        edge = fbm3(co * np.array([1 / 1.3, 1 / 1.3, 1 / 0.5]))
+        mud = np.where(floor, 1.0, np.clip(1 - (hgt - ART_MUD_H * (0.4 + 0.9 * edge)) / 0.25, 0, 1))
+        coal = np.clip((fbm3(co * np.array([1 / 9, 1 / 9, 1 / 1.1]) + 17.3) - ART_COAL_T) / 0.06, 0, 1) * (1 - mud)
+        wall = ~floor
+        print("CHECK booth art: wall verts %d · coal>0.5 %.0f %% · mud>0.5 %.0f %% (wall) · floor verts %d"
+              % (wall.sum(), 100 * (coal[wall] > 0.5).mean(), 100 * (mud[wall] > 0.5).mean(), floor.sum()))
+    vi = np.empty(len(me.loops), int); me.loops.foreach_get("vertex_index", vi)
+    base = me.uv_layers.active
+    lay = me.uv_layers.get("art") or me.uv_layers.new(name="art")
+    lay.data.foreach_set("uv", np.stack([coal, mud], 1)[vi].ravel())
+    me.uv_layers.active = base                           # 첫 UV(그림)가 TEXCOORD_0 그대로
+art_uv(final_me, bvh)
+
 # ================= 5. 덩어리로 나눔 (SHL · COL 은 같은 그물) — 40 m 칸. 칸마다 임시 재질을 붙여 "재질로 나누기"(한 번에)
 ctr = np.empty(len(final_me.polygons) * 3); final_me.polygons.foreach_get("center", ctr); ctr = ctr.reshape(-1, 3)
 cid = np.floor(ctr[:, 0] / CHUNK_M).astype(int) * 1000 + np.floor(ctr[:, 1] / CHUNK_M).astype(int)
@@ -376,7 +415,7 @@ for i, (name, kind, mouth, end, n) in enumerate(CREVS, 1):         # 틈은 동�
         d_ = (q1 - q0).normalized(); z_ = bt.proj(pts, (q0.x, q0.y))[2]
         boulders(bm, q0, d_, Vector((-d_.y, d_.x, 0)), z_)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    o = new_obj("PRP_Crevice_%d" % i, bm, M_WALL); box_uv(o.data, UV_WALL)             # 벽과 같은 바위 겉 — 덧붙인 돌처럼 안 보이게
+    o = new_obj("PRP_Crevice_%d" % i, bm, M_WALL); box_uv(o.data, UV_WALL); art_uv(o.data)   # 벽과 같은 바위 겉 — 덧붙인 돌처럼 안 보이게 (art UV 0 = 맨 바위)
     for pl_ in o.data.polygons: pl_.use_smooth = False                # 모난 바위
     crev_objs.append((o, name, kind, pts, ra, rb))
 

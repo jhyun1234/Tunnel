@@ -5,7 +5,7 @@ using UnityEditor;
 // 6배 갈렸다 (09-14 사용자 지적 "+Z 쪽으로 램프 빛이 안 보인다", 검사 lamp_symmetric_z).
 public class TextureImportRules : AssetPostprocessor
 {
-    public override uint GetVersion() => 1;
+    public override uint GetVersion() => 3;
 
     void OnPreprocessTexture()
     {
@@ -15,5 +15,7 @@ public class TextureImportRules : AssetPostprocessor
             importer.textureType = TextureImporterType.NormalMap;     // OpenGL(Y+) 노멀 = Unity 규약
         else if (path.Contains("_rough") || path.Contains("_arm"))
             importer.sRGBTexture = false;                              // 데이터 텍스처는 선형
+        if (path.Contains("/tunnel/art/"))
+            importer.anisoLevel = 4;                                   // ART-1 바위·바닥: 비스듬히 보는 바닥이 뭉개지지 않게 (8 은 fps 가 무거웠다)
     }
 }
