@@ -60,8 +60,8 @@ public static class Tuning
     // "" 로 두면 옛 조각(네모 기둥·죽은 전구)으로 돌아간다. 곡괭이는 Assets/Tunnel/Props/pickaxe.glb (fit_prop.py, 자루 +Y · 머리 위 · 원점 = 쥐는 곳, pick.gltf 와 같은 틀)
     // 09-23 사용자 판정: 1차 셋(곡괭이·갱목·갓등) 전부 불통과 → 옛 조각·옛 곡괭이로 되돌림. 통과한 디자인이 생기면 "_v2" · Props/pickaxe.glb 로
     public const string PIECE_SUFFIX = "";
-    public const string PICK_MODEL = "Assets/Tunnel/Pieces/pick.gltf";   // Meshy 것: Assets/Tunnel/Props/pickaxe.glb
-    public const float PICK_LENGTH_M = 0.88f;      // 검사: 곡괭이 자루 끝~머리 위 (fit_prop.py 표와 같다)
+    public const string PICK_MODEL = "Assets/Tunnel/Props/pick_meshy.glb";   // PICK-1 판정 ① B(09-27, 보령 탄광 곡괭이 → Meshy). 옛 것: Assets/Tunnel/Pieces/pick.gltf · A: Assets/Tunnel/Props/pick_blender.glb
+    public const float PICK_LENGTH_M = 0.68f;      // 검사: 곡괭이 자루 끝~머리 위 (fit_prop.py 표와 같다). PICK-1: 자루 66 cm + 쇠 통 2 cm (옛 0.88)
     public const float TIMBER_POST_M = 4.8f;       // 검사: 기둥 높이 (piece_straight TMB_*_post_*)
     public const float LAMP_FIXTURE_M = 0.30f;     // 검사: 갓등 높이 (fit_prop.py 표)
     public const int PROPS_TRIS_MAX = 400000;      // 검사: 소품(갱목·갓등·곡괭이) 삼각형 합 상한 — 조각 6개 × 통나무 토막 40 × 1.2k + 갓등 + 곡괭이 ≈ 310k (09-23)
@@ -215,7 +215,7 @@ public static class Tuning
     public const float ORE_COLLECT_DIST = 0.35f;   // m
     // 곡괭이 뷰모델. Unity 는 카메라 앞이 +Z 라 Godot PICK_POS z(-0.60)와 X 축 회전 부호를 뒤집었다
     public static readonly Vector3 PICK_POS = new Vector3(0.32f, -0.42f, 0.60f);
-    public const float PICK_SCALE = 0.75f;
+    public const float PICK_SCALE = 1.0f;          // PICK-1: 실물 크기 (옛 0.88 m 곡괭이는 0.75 — 화면 속 자루 66 cm 로 거의 같다)
     public const float PICK_TILT_DEG = 12.0f;      // Godot -12, 앞으로 눕힌 각
     public const float PICK_YAW_DEG = 90.0f;       // 머리 긴 축(X)을 앞뒤로 세운다
     public const float PICK_ROLL_DEG = 10.0f;      // 자루 끝을 앞으로 기울인 각

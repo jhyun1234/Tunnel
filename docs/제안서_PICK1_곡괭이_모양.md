@@ -1,6 +1,6 @@
 # 제안서 PICK-1 — 곡괭이 모양: 보령 탄광 곡괭이를 Blender · Meshy 두 개로 만들어 비교
 
-옆 가지 `pick-hands`(작업 폴더 `Tunnel/unity-pick`), 2026-09-27. **승인(09-27) → 차례 1~3 끝, 판정 ① 대기.**
+옆 가지 `pick-hands`(작업 폴더 `Tunnel/unity-pick`), 2026-09-27. **승인(09-27) → 판정 ① B(Meshy) → 차례 4 끝, 실행 파일 판정 ② 대기.**
 
 **왜** — 사용자(09-27, ART-1 차례 2 도중): "곡괭이의 생김새와 곡괭이질 소리가 현실적이었으면" + "워독스의 재질과 느낌". 사용자 순서 "캐기 한 벌"의 한 조각이다. 뒤에 MINE-1(콱콱 캐는 연출)이 이 곡괭이와 3D-P 손을 쓴다.
 
@@ -98,3 +98,13 @@
 - **B** A 를 흰 바탕 네 방향(`blender/props/pick_views.py` 앞·비스듬히·옆·위)으로 찍어 `gen_meshy.py pick_boryeong … --poly 8000 --tex 2k --pose ""` — **30 크레딧**(2,769 → 2,739), 한 번만. `fit_prop.py` 표에 `pick_meshy` + 한쪽 날 곡괭이용 세 가지(`center="handle"`: 자루 아래 55 % 로 긴 축을 다시 잡고 자루 가운데를 0 에 — 처음엔 머리 무게로 약 4° 기울어 "날이 +X 한쪽" 검사가 FAIL(+X 0.218 · −X 0.093) 했고, 고친 뒤 +X 0.252 · −X 0.056 PASS · `point="+X"` · `head_min` 0.25) → `shrink_glb.py` 1K → `pick_meshy.glb`(1.9 MB · 삼각형 7,938). **Meshy 가 지어 넣은 것**: 자루에 쇠띠 두 개, 자루가 머리 쪽으로 더 굵음, 나무가 더 밝음.
 - **비교 한 장** `blender/props/pick_compare.py`(Eevee: 1인칭 쉴 때 · 내려친 순간 · 참고로 머리를 옆으로 돌린 자세 · 램프 빛 옆모습) + `docs/그림/PICK1_비교.py` → `build/pick1/PICK1_비교.png`(박물관 사진이 들어가 커밋 안 함).
 - **알게 된 것**: 지금 드는 자세(`PICK_YAW` 90° — 머리 긴 축을 앞뒤로)는 날이 벽 쪽을 향해서 **한쪽 날 곡괭이는 1인칭에서 머리가 거의 안 보인다**(쇠 통과 꼭지만). 옛 곡괭이는 양쪽 날이 크게 휘어 보였다. 머리를 옆으로 돌리면(`PICK_YAW` 0°) 날 옆모습이 다 보이지만, 그러면 지금의 앞으로 내려치기로는 날 끝이 아니라 옆면으로 친다 — 자세·휘두르기는 3D-P 손 · MINE-1 과 같이 정할 일.
+
+## 판정 ① (09-27, 사용자 — 비교 그림)
+**B · Meshy** 를 고름. 드는 자세는 **지금 그대로**(날이 벽 쪽 — 자세는 3D-P · MINE-1 에서).
+
+## 차례 4 (09-27) — 게임에 넣기
+- `Tuning.cs` 세 줄: `PICK_MODEL` = `Assets/Tunnel/Props/pick_meshy.glb` · `PICK_LENGTH_M` 0.88 → 0.68 · `PICK_SCALE` 0.75 → 1.0.
+- 곡괭이는 씬을 만들 때 씬 안에 박히므로(`BuildM1.Make`) `MakeScene -force` · `MakeBooth -force` 로 씬 둘을 다시 만들어 빌드했다. **다시 만든 씬·설정 파일(씬 2 + `Assets/Settings/` 16, 번호만 바뀜)은 커밋하지 않고 되돌렸다** — 옆 가지는 씬을 안 고친다(사용자 첫 지시). 합칠 때 main 이 `MakeScene -force` · `MakeBooth -force` 를 다시 돌린다. 실행 파일 `Tunnel/unity-pick/build/Tunnel/Tunnel.exe` 는 새 곡괭이 판.
+- **전체 `build.sh`(배포물): ALL PASS 166** (1,028 s, main 57차와 같은 수). 곡괭이 검사 전부 통과: `viewmodel_overlay` · `pick_not_burnt`(탄 곳 0.0 % · 밝기 0.111) · `thrown_pick_rests_on_floor`(가장 낮은 0.000 · 높은 0.064 m) · `pickup_with_e_within_reach` · `pick_head_glows_within_reach`(머리 밝기 0.3055 — 머리를 찾는다) · `pick_breaks_at_zero` 등.
+- `-only props`(전체 검사엔 빠진 구간 — A1 조각용): **곡괭이 0.68 m**(0.68 ±10 %) · 곡괭이 법선 1.00 · 분홍 0 · 예산 PASS. `props_real_size` · `props_on_floor` 는 FAIL — 갓등 0.08 m(옛 조각, A1 갓등 0.3 m 아님) 때문이라 곡괭이와 무관(09-23 옛 조각으로 되돌린 뒤 늘 그렇다).
+- 게임 캡처(`build/Tunnel/check/10_pick_in_tunnel.png`): 자루가 Blender 그림보다 허옇게 밝다(옛 곡괭이도 그랬다 — 곡괭이 전용 등 PickLight 때문으로 보임, 안 고침) · Meshy 쇠띠 둘이 보인다 · 머리는 날이 앞을 향해 거의 안 보인다.
