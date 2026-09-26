@@ -72,6 +72,7 @@ Shader "Tunnel/MineRock"
 
             TEXTURE2D(_CoalMap); TEXTURE2D(_CoalNormal); TEXTURE2D(_MudMap); TEXTURE2D(_MudNormal);   // 색 그림 알파 = 거칠기 (읽는 횟수 1/3 덜기)
             float _ArtWet;                                   // 전역 (ArtLook) — 0 이면 마른 바위
+            float _ArtBright;                                // 전역 (ArtLook) — 바위·석탄·진흙 밝기 배율 (사용자 09-27 "조금 어둡다")
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float2 art : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings
@@ -170,7 +171,7 @@ Shader "Tunnel/MineRock"
                 }
 
                 // 몇 m 크기 밝기 얼룩 (같은 벽이 어디서나 같은 색이 아니게)
-                alb *= lerp(1.0 - _Macro, 1.0 + _Macro, VNoise(pw * 0.22) * 0.67 + VNoise(pw * 0.45) * 0.33);
+                alb *= lerp(1.0 - _Macro, 1.0 + _Macro, VNoise(pw * 0.22) * 0.67 + VNoise(pw * 0.45) * 0.33) * _ArtBright;
 
                 // 젖음: 벽 아래 진흙 띠 · 벽 흘러내린 자국(세로로 긴 잡음) · 바닥 물웅덩이 — 바닥 전체는 조금만(다 적시면 기름처럼 번들거렸다, 09-27 첫 캡처)
                 half up = saturate(N.y), streak = 0, puddle = 0;

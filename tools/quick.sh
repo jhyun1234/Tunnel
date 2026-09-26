@@ -42,6 +42,7 @@ job() {                                                   # $1 = 이름, 나머�
   kill $pid 2>/dev/null                                   # 결과를 다 적고 끝내다 멈춘 창 (09-24: 창 셋을 같이 돌리자 mining 이 끝내기에서 8 분 멈췄다)
   wait $pid 2>/dev/null
 }
+source tools/gpu_lock.sh; gpu_lock                          # 다른 작업 폴더(병렬 세션)가 검사 중이면 기다린다 — 그래픽카드 하나
 rm -f "$LOCALAPPDATA/Temp/jhyun1234/Tunnel/dx12_pso_cache_lib.bin"   # build.sh 와 같은 이유
 t1=$SECONDS
 for r in "${runs[@]}"; do

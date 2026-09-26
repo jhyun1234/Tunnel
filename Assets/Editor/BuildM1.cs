@@ -647,11 +647,11 @@ public static class BuildM1
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.loop = true; main.prewarm = true; main.playOnAwake = true;
-        main.startLifetime = 9f; main.startSpeed = 0.03f; main.maxParticles = 600;
+        main.startLifetime = 9f; main.startSpeed = 0.03f; main.maxParticles = (int)(Tuning.ART_DUST_RATE * 10f);
         main.startSize = new ParticleSystem.MinMaxCurve(0.006f, 0.016f);
         main.startColor = new Color(0.75f, 0.7f, 0.62f, 0.55f);
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        var em = ps.emission; em.rateOverTime = 60f;
+        var em = ps.emission; em.rateOverTime = Tuning.ART_DUST_RATE;
         var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Box; sh.scale = new Vector3(7f, 3f, 7f); sh.position = new Vector3(0f, 0f, 2.5f);
         var nz = ps.noise; nz.enabled = true; nz.strength = 0.05f; nz.frequency = 0.3f;
         var pr = dustGo.GetComponent<ParticleSystemRenderer>();

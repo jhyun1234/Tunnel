@@ -37,6 +37,15 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 - 소리는 재배포 가능한 라이선스만 넣고, 라이선스 파일을 소리와 같은 폴더에 둔다. 지금: `Assets/Audio/PickHit/` Kenney Impact Sounds (CC0, 2026-09-14 kenney.nl에서 받음).
 - 큰 바이너리(fbx·glb·png·wav 등)는 Git LFS로 간다 (`.gitattributes`). `.meta`는 반드시 커밋한다.
 
+## 병렬 세션 (작업 폴더 여럿, 사용자 09-27)
+
+- **main = `Tunnel/unity`(이 폴더), 합치기 담당.** 옆 가지는 작업 폴더를 따로 만든다: `cd C:\Users\anjyo\Tunnel\unity; git worktree add ..\unity-<이름> -b <가지>` → 그 폴더에서 세션 하나. 같은 폴더를 두 세션이 쓰지 않는다(Unity 가 폴더마다 하나만 연다). 새 폴더는 처음 Unity 임포트가 오래 걸린다.
+- **배포물 검사는 한 번에 하나** — `tools/quick.sh` · `tools/build.sh` 가 `tools/gpu_lock.sh`(잠금 = `Tunnel/.gpu_check_lock`)로 다른 폴더의 검사가 끝날 때까지 기다린다. 그래픽카드가 하나라 fps·밝기 검사가 서로를 떨어뜨린다. 자기 검사 `bash tools/test_gpu_lock.sh`. 사용자가 판정 중이면 어느 폴더도 검사를 안 돌린다(그대로).
+- **옆 가지는 되도록 안 고치는 파일**: `BuildM1.cs` · `M1Check.cs` · `Tuning.cs` · `DevHud.cs` · 씬 — Unity 에 붙이는 일은 합칠 때 main 에서. 고쳐야 하면 고친 곳을 옆 가지 HANDOFF 절에 적는다(합칠 때 부딪힘 줄이기).
+- **HANDOFF**: 옆 가지는 자기 절 `## 0. 옆 가지 <가지>`에만 쓴다(09-20 m2-body 전례). 맨 위 요약·다음 세션 프롬프트는 main 세션만.
+- **합치기**: 사용자가 옆 가지 결과를 통과시키면 main 세션이 `git merge <가지>` → 전체 build.sh → 커밋. 작업 폴더 지우기(`git worktree remove`)는 사용자 확인 뒤 — 에디터·탐색기가 잡고 있으면 안 지워진다(09-20 unity-m2).
+- 제안서는 가지마다 하나씩(사용자 규칙 그대로). 푸시는 사용자 지시 때만.
+
 ## 하지 말 것
 
 - Godot 저장소·`new-game` 폴더를 지우거나 고치지 않는다.
