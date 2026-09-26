@@ -163,3 +163,9 @@ Unity: APV https://docs.unity3d.com/6000.4/Documentation/Manual/urp/probevolumes
 3. 빛·그림자·먼지 — **"먼지가 조금 더 날렸으면 — 지금보다 10 % 더"** → `Tuning.ART_DUST_RATE` 60 → 66 알갱이/s (최대 660)
 4. 어둡지 않나 — **"조금 어둡다"** → 바위·석탄·진흙 밝기 배율 `Tuning.ART_BRIGHT` 1.25(제안값) + 판정 키 **숫자패드 4/6 (÷× 1.1)** — 숫자 대기. 1.25 에서 광장 첫 자리 평균 밝기 0.102 → 0.109(옛 0.201; 젖음 1.5 가 조금 더 어둡게 함)
 5. 젖음 — **1.50** → `Tuning.ART_WET` 1.0 → 1.5. 튀는 빛은 그대로(0.15)
+
+## 차례 3 (09-27) — 물건 후보 한 장
+`docs/그림/ART1_물건_후보.png` — B1~B9 Blender 로 만드는 것(첫 모양: `blender/art/mine_props.py` — 레일 + 갈림 · 광차 + 석탄 · 케이지(안 움직임, 문 반쯤 열림) · 강철 아치 둘 + 판자 · 나무 동발(둥근 통나무) · 쇠사슬 · 판 셋(Pretendard OFL 글자, 케이지 경고 글자는 지어냄)) · P1~P20 Poly Haven CC0 모델. 진짜 부스 광장(새 바위·진흙 질감)에 하나씩 세워 같은 빛(EEVEE)으로 찍음 — `blender/art/props_candidates.py` → `python docs/그림/ART1_물건_후보.py`. 받은 것(커밋 안 함): 모델 `build/art/props_cand/`(받기 `build/art/get_ph_models.py` 와 같은 방법 — Poly Haven API `files/<id>` 의 gltf 1k, User-Agent 필요) · 질감 `build/art/cand_tex/`(rusty_metal_03 · rusty_painted_metal · weathered_brown_planks · wood_planks_dirt · metal_grate_rusty).
+- 쇠 질감(rusty_metal_03)은 주황 녹이라 첫 그림에서 장난감처럼 보였다 → 채도 0.3 · 어둡게(탄가루 낀 짙은 쇠).
+- 적어 둔 사정: P1 · P2 · P8 = 부품 모음(이어 붙여 씀) · P4 = 여러 모양 모음 · P6 · P16 = 요즘 것 · P7 · P14 · P15 · P18 = 영어 글자(지워야) · P3 = 형광등.
+- **다음**: 사용자가 뺄 것 · 고칠 것을 고르면 → 광장 배치 평면(위에서 본 그림, 케이지 = 손그림대로 광장 가운데 (0, 0)) → 승인 → 게임에 넣기.
