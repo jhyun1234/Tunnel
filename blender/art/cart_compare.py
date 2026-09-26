@@ -1,7 +1,8 @@
 """광차 다시(09-27) — 옛 Blender 광차(B2)와 새 광차(조사 10 공통점, mine_props.mine_car_v2)를 광장 레일 위에 같은 빛으로 찍는다.
   "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup -P blender/art/cart_compare.py
   python docs/그림/ART1_광차_다시.py        (한 장으로 — 사진 없는 판은 docs/그림, 사진 넣은 판은 build/ 만)
-출력: build/art/cart_v2/<old|new>_<각도>.png · info.json(삼각형 · 크기). 빛은 게임이 아니다(EEVEE · 전등 500 W · 헤드램프)."""
+  MESHY=<glb> 이면 그 모델도 "meshy" 로 (가장 긴 수평 길이를 새 광차 2.05 m 에 맞추고 긴 쪽을 X 로, 밑을 레일에)
+출력: build/art/cart_v2/<old|new|meshy>_<각도>.png · info.json(삼각형 · 크기). 빛은 게임이 아니다(EEVEE · 전등 500 W · 헤드램프)."""
 import bpy, os, sys, math, json
 from mathutils import Vector
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
@@ -17,6 +18,12 @@ for o in sc.objects:
 M = mp.game_materials(ROOT)
 rails = mp.rails_path(M, [(-3.0, 1.0), (3.0, 1.0)], lambda x, y: 0.0)
 CARS = {"old": mp.mine_car(M), "new": mp.mine_car_v2(M)}
+if os.environ.get("MESHY"):
+    before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=os.environ["MESHY"])
+    root = bpy.data.objects.new("MESHY", None); sc.collection.objects.link(root)
+    for o in set(bpy.data.objects) - before:
+        if o.parent is None and o is not root: o.parent = root
+    CARS["meshy"] = root
 for o in list(rails.children_recursive) + [c for r in CARS.values() for c in r.children_recursive]:
     if o.type == "MESH" and o.data.materials and "uv_m" in o.data.materials[0]: mp.box_uv(o.data, 1.0 / o.data.materials[0]["uv_m"])
 
@@ -45,8 +52,13 @@ for tag, root in CARS.items():
         for o in [r] + list(r.children_recursive): o.hide_render = k != tag
     root.location = (0.0, 1.0, rt)
     bpy.context.view_layer.update()
+    if tag == "meshy":                                                        # 크기·방향 맞추기 (Meshy 크기는 제멋대로)
+        lo, hi = bbox(meshes(root))
+        if hi.y - lo.y > hi.x - lo.x: root.rotation_euler.z = math.pi / 2; bpy.context.view_layer.update(); lo, hi = bbox(meshes(root))
+        root.scale *= 2.05 / (hi.x - lo.x); bpy.context.view_layer.update(); lo, hi = bbox(meshes(root))
+        root.location += Vector((-(lo.x + hi.x) / 2, 1.0 - (lo.y + hi.y) / 2, rt - 0.02 - lo.z)); bpy.context.view_layer.update()
     lo, hi = bbox(meshes(root)); c = (lo + hi) / 2
-    blo, bhi = bbox([o for o in meshes(root) if o.name.split(".")[0] not in ("CarRing", "CarCoal")])   # 몸통 · 밑틀 · 바퀴 (늘어진 고리 · 석탄 무더기 빼고, 레일 윗면부터)
+    blo, bhi = bbox([o for o in meshes(root) if o.name.split(".")[0] not in ("CarRing", "CarCoal")] or meshes(root))   # 몸통 · 밑틀 · 바퀴 (늘어진 고리 · 석탄 무더기 빼고, 레일 윗면부터)
     info[tag] = dict(tris=sum(len(p.vertices) - 2 for o in meshes(root) for p in o.data.polygons), size=[round(bhi.x - blo.x, 2), round(bhi.y - blo.y, 2), round(bhi.z - rt, 2)])
     for ang, eye in (("34", c + Vector((2.2, -2.6, 1.3))), ("side", c + Vector((0.0, -3.4, 0.35))), ("end", c + Vector((3.0, -0.35, 0.5))), ("top", c + Vector((1.0, -1.3, 2.4)))):
         q = (c - eye).to_track_quat("-Z", "Y"); cam.location = eye; cam.rotation_euler = q.to_euler()

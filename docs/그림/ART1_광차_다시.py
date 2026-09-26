@@ -19,17 +19,19 @@ ROWS = [
     ("뺀 것", "베이지 · 위가 넓은 상자 · 한쪽 막대 범퍼", "0/21"),
 ]
 def sheet(with_photos):
-    H = 1290 if with_photos else 1010
+    rows = [("old", "옛 광차 (지금 게임에 임시로)"), ("new", "새 광차 (Blender 코드)")] + ([("meshy", "새 광차 → Meshy 살 입히기 (그림 3장 · 30 크레딧)")] if "meshy" in info else [])
+    top = 84 + len(rows) * 300
+    H = top + (290 if with_photos else 10) + 310
     img, d = S.new(1900, H)
     S.text(20, 14, "광차 다시 — 옛 Blender 광차 | 새 광차 (실제 광차 사진 21 · 문서 9 공통점, 조사 10)", 22, b=True)
-    S.text(20, 48, "같은 자리 · 같은 빛 (Blender, 게임 빛 아님). 새 광차는 Blender 코드 모양 — 고르면 이 그림을 넣어 Meshy 로 살을 입힐지 정한다.", 14, col=S.C["sub"])
-    for r, (tag, title) in enumerate((("old", "옛 광차 (지금 게임에 임시로)"), ("new", "새 광차"))):
+    S.text(20, 48, "같은 자리 · 같은 빛 (Blender, 게임 빛 아님). 새 광차 = Blender 코드 모양 · 그 세 방향 그림을 Meshy 에 넣은 것 (사용자 09-27 \"Meshy 로 살 입히기\").", 14, col=S.C["sub"])
+    for r, (tag, title) in enumerate(rows):
         y = 84 + r * 300
-        S.text(20, y, "%s — %s 삼각형 · 길이 %.2f × 폭 %.2f × 레일에서 높이 %.2f m (고리 · 석탄 빼고)" % (title, format(info[tag]["tris"], ","), *info[tag]["size"]), 17, b=True, col=S.C["rew"] if tag == "new" else S.C["sub"])
+        S.text(20, y, "%s — %s 삼각형 · 길이 %.2f × 폭 %.2f × 레일에서 높이 %.2f m (고리 · 석탄 빼고)" % (title, format(info[tag]["tris"], ","), *info[tag]["size"]), 17, b=True, col=S.C["sub"] if tag == "old" else S.C["rew"])
         for k, ang in enumerate(("34", "side", "end", "top")):
             im = Image.open(os.path.join(B, "%s_%s.png" % (tag, ang))).convert("RGB").resize((375 * S.SS, 250 * S.SS))
             img.paste(im, ((20 + k * 385) * S.SS, (y + 30) * S.SS))
-    y = 700
+    y = top + 10
     S.text(20, y, "공통점 → 새 광차에 넣은 것 (n/21 = 사진 21장 중 보인 수)", 17, b=True)
     for i, (a, b, c) in enumerate(ROWS):
         yy = y + 34 + i * 29
@@ -38,10 +40,10 @@ def sheet(with_photos):
     for i, t in enumerate(("1988 년 · 곳이 확인된 광차 사진", "석공 표준 칠 색 · 판 두께", "(레일 폭은 610 mm — 우리 레일 0.6 m 그대로)")):
         S.text(1010, y + 34 + i * 29, t, 15, col=S.C["sub"])
     if with_photos:
-        S.text(20, 1010, "한국 사진 (비교용 — 저장소에 안 올림): 문경 U자 탄차 · 동원탄좌 광차 몸통 · 보령 축전차와 광차 · 보령 광차 운반", 15, col=S.C["sub"])
+        S.text(20, top + 320, "한국 사진 (비교용 — 저장소에 안 올림): 문경 U자 탄차 · 동원탄좌 광차 몸통 · 보령 축전차와 광차 · 보령 광차 운반", 15, col=S.C["sub"])
         for k, f in enumerate(("k12_much_문경_U자탄차.jpg", "k13_ncms_3787_동원탄좌_광차몸통.jpg", "k05_ncms_10707_보령_축전차와광차.jpg", "k04_ncms_10726_보령_광차운반.jpg")):
             im = Image.open(os.path.join(REF, f)).convert("RGB"); im.thumbnail((455 * S.SS, 240 * S.SS))
-            img.paste(im, ((20 + k * 470) * S.SS, 1040 * S.SS))
+            img.paste(im, ((20 + k * 470) * S.SS, (top + 350) * S.SS))
     out = os.path.join(B, "광차_다시_사진.png") if with_photos else os.path.join(HERE, "ART1_광차_다시.png")
     img.resize((img.width // S.SS, img.height // S.SS), Image.LANCZOS).save(out); print("saved", out)
 sheet(False); sheet(True)
