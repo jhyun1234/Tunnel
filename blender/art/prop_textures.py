@@ -13,7 +13,7 @@ os.makedirs(OUT, exist_ok=True)
 MATS = {"steel": ("rusty_metal_03", 0.3, (0.40, 0.38, 0.36), 0.6), "dark_steel": ("rusty_metal_03", 0.2, (0.24, 0.23, 0.22), 0.6),
         "paint": ("rusty_painted_metal", 0.55, (0.6, 0.6, 0.55), 0.3), "wood": ("weathered_brown_planks", 1.0, (0.5, 0.45, 0.4), 0.0),
         "plank": ("wood_planks_dirt", 1.0, (0.55, 0.5, 0.45), 0.0), "log": ("weathered_brown_planks", 1.0, (0.38, 0.32, 0.27), 0.0),
-        "coal": ("Rock035", 1.0, (0.35, 0.35, 0.4), 0.0)}
+        "coal": ("Rock035", 1.0, (0.2, 0.2, 0.22), 0.0)}   # 석탄 = 검은 무연탄 (0.35 는 회색 먼지처럼 보였다 — 광차 비교 09-27, 조사 10 색)
 for name, (src, sat, tint, metal) in MATS.items():
     c = ImageEnhance.Color(Image.open(os.path.join(CT, src + "_Color.jpg")).convert("RGB")).enhance(sat)
     r, g, b = c.split(); c = Image.merge("RGB", [ch.point(lambda v, k=k: int(v * k)) for ch, k in zip((r, g, b), tint)])
