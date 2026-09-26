@@ -23,6 +23,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 #     Meshy remesh API(timber_log3_6k, 5 크레딧)는 찢어진 껍데기가 왔다(경계 변 530) — 안 쓴다 · split = 곡괭이 머리·자루 가르기 · name = 내보낼 물체 이름
 PROPS = {
     "pickaxe":    dict(src="meshy_pickaxe2.glb", long=0.88, heavy=True,  origin="top",    origin_y=0.73, tris=8000, split=True,  name="PICK_Handle"),   # pick.gltf 와 같은 틀: 자루 +Y, 머리 위(y 0.63~0.73), 머리 폭 X, 원점 = 쥐는 곳
+    "pick_meshy": dict(src="meshy_pick_boryeong.glb", long=0.68, heavy=True, origin="top", origin_y=0.53, tris=8000, split=True, name="PICK_Handle",
+                       center="handle", point="+X", head_min=0.25),   # PICK-1 B (09-27): make_pick.py 그림 4장 → Meshy. 한쪽 날이라 자루를 가운데에, 날은 +X(make_pick.py 와 같은 틀)
     "timber_log": dict(src="meshy_timber_log3.glb", long=4.80, heavy=None,  origin="center", origin_y=0.0,  tris=1600, normalmap=False, split=False, name="PRP_timber_log"),   # 굵기 0.34 로 균일하게 줄이면 토막 1.7 m — piece_v2.py 가 기둥 3 · 가로대 4 토막으로 잇는다(조각마다 40 토막이라 면을 아낀다)
     "mine_lamp":  dict(src="meshy_mine_lamp.glb", long=0.30, heavy=False, origin="top",    origin_y=0.0,  tris=3000, split=False, name="PRP_mine_lamp"),    # 매다는 점이 원점, 전구가 아래
 }
@@ -70,6 +72,10 @@ def fit(name, spec):
     a, b = spread(t <= lo); bot = a.std() + b.std()
     if spec["heavy"] is not None and (top > bot) != spec["heavy"]:
         e_long = -e_long
+    if spec.get("center") == "handle":       # 한쪽 날 곡괭이: 머리 무게 때문에 긴 축이 자루에서 기운다(09-27 pick_meshy 약 4°) → 아래 55 % (자루)만으로 긴 축을 다시
+        t = Q @ e_long; H = Q[t < np.percentile(t, 55)]; H = H - H.mean(axis=0)
+        e2 = np.linalg.eigh(H.T @ H)[1][:, 2]; e_long = e2 if np.dot(e2, e_long) > 0 else -e2
+        e_mid = e_mid - np.dot(e_mid, e_long) * e_long; e_mid /= np.linalg.norm(e_mid); e_short = np.cross(e_long, e_mid)
     e_mid = e_mid if np.dot(np.cross(e_mid, e_short), e_long) > 0 else -e_mid       # 오른손 좌표계 유지 (거울이 되면 면이 뒤집힌다)
     e_short = np.cross(e_long, e_mid)
     if SAB == "mirror": e_short = -e_short                # 사보타주: 왼손 좌표계(1차 사고 재현) → det 검사 FAIL
@@ -84,7 +90,14 @@ def fit(name, spec):
     if spec["origin"] == "top": P2[:, LA] += spec["origin_y"] - ymax
     elif spec["origin"] == "bottom": P2[:, LA] += spec["origin_y"] - ymin
     else: P2[:, LA] -= (ymin + ymax) / 2
-    P2[:, 0] -= (P2[:, 0].min() + P2[:, 0].max()) / 2; P2[:, 1] -= (P2[:, 1].min() + P2[:, 1].max()) / 2
+    ys_ = P2[:, LA]
+    ref = P2[ys_ < ys_.min() + 0.5 * (ys_.max() - ys_.min())] if spec.get("center") == "handle" else P2   # 한쪽 날: 전체 가운데로 맞추면 자루가 옆으로 밀린다 → 자루(아래 반) 가운데를 0 에
+    P2[:, 0] -= (ref[:, 0].min() + ref[:, 0].max()) / 2; P2[:, 1] -= (ref[:, 1].min() + ref[:, 1].max()) / 2
+    if spec.get("point") == "+X":
+        hd = P2[ys_ > ys_.max() - 0.08]
+        if hd[:, 0].max() < -hd[:, 0].min(): P2[:, 0] *= -1; P2[:, 1] *= -1     # Z 축으로 180° 돌림(거울 아님) — 날을 +X 로
+        hd = P2[ys_ > ys_.max() - 0.08]
+        check(hd[:, 0].max() > 3 * -hd[:, 0].min(), "%s 날이 +X 한쪽: +X %.3f · −X %.3f" % (name, hd[:, 0].max(), -hd[:, 0].min()))
     for v, p in zip(me.vertices, P2): v.co = p
     me.update()
     # 면 예산
@@ -137,7 +150,8 @@ def fit(name, spec):
             bmesh.ops.delete(bm, geom=head, context="FACES"); bm.to_mesh(me); bm.free()
             oh = bpy.data.objects.new("PICK_Head", me_h); bpy.context.scene.collection.objects.link(oh)
             hp = np.array([v.co[:] for v in me_h.vertices])
-            check(len(hp) > 0 and hp[:, 0].max() - hp[:, 0].min() >= 0.3, "%s 머리(PICK_Head) 폭 %.2f m ≥ 0.3 · 머리 시작 y %.3f" % (name, (hp[:, 0].max() - hp[:, 0].min()) if len(hp) else 0, y_split))
+            hmin = spec.get("head_min", 0.3)
+            check(len(hp) > 0 and hp[:, 0].max() - hp[:, 0].min() >= hmin, "%s 머리(PICK_Head) 폭 %.2f m ≥ %.2f · 머리 시작 y %.3f" % (name, (hp[:, 0].max() - hp[:, 0].min()) if len(hp) else 0, hmin, y_split))
     elif spec["split"]:
         check(False, "%s 머리·자루를 안 갈랐다 (사보타주 nosplit)" % name)
     out = os.path.join(OUT_DIR, name + ".glb")
