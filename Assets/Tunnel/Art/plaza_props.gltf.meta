@@ -1,0 +1,223 @@
+fileFormatVersion: 2
+guid: 3fac7b6fd074544498ab30c3f666e342
+ScriptedImporter:
+  internalIDToNameTable: []
+  externalObjects: {}
+  serializedVersion: 2
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+  script: {fileID: 11500000, guid: 715df9372183c47e389bb6e19fbc3b52, type: 3}
+  editorImportSettings:
+    generateSecondaryUVSet: 0
+  importSettings:
+    nodeNameMethod: 1
+    animationMethod: 2
+    generateMipMaps: 1
+    texturesReadable: 0
+    defaultMinFilterMode: 9729
+    defaultMagFilterMode: 9729
+    anisotropicFilterLevel: 1
+  instantiationSettings:
+    mask: -1
+    layer: 0
+    skinUpdateWhenOffscreen: 1
+    lightIntensityFactor: 1
+    sceneObjectCreation: 2
+  assetDependencies:
+  - type: 0
+    originalUri: Assets\Tunnel\Art\plaza_props.bin
+    assetPath: Assets\Tunnel\Art\plaza_props.bin
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_electric_cables\textures\modular_electric_cables_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_electric_cables\textures\modular_electric_cables_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_electric_cables\textures\modular_electric_cables_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_electric_cables\textures\modular_electric_cables_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_electric_cables\textures\modular_electric_cables_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_electric_cables\textures\modular_electric_cables_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\crowbar_01\textures\crowbar_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\crowbar_01\textures\crowbar_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\crowbar_01\textures\crowbar_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\crowbar_01\textures\crowbar_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\crowbar_01\textures\crowbar_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\crowbar_01\textures\crowbar_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_airduct_circular_01\textures\modular_airduct_circular_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_airduct_circular_01\textures\modular_airduct_circular_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_airduct_circular_01\textures\modular_airduct_circular_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_airduct_circular_01\textures\modular_airduct_circular_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_airduct_circular_01\textures\modular_airduct_circular_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_airduct_circular_01\textures\modular_airduct_circular_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\caged_hanging_light\textures\caged_hanging_light_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\caged_hanging_light\textures\caged_hanging_light_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\caged_hanging_light\textures\caged_hanging_light_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\caged_hanging_light\textures\caged_hanging_light_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\caged_hanging_light\textures\caged_hanging_light_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\caged_hanging_light\textures\caged_hanging_light_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_emissive_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_emissive_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\industrial_caged_sconce\textures\industrial_caged_sconce_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\dark_steel_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\dark_steel_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\dark_steel_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\dark_steel_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\dark_steel_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\dark_steel_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\picke_dirty_01\textures\picke_dirty_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\picke_dirty_01\textures\picke_dirty_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\picke_dirty_01\textures\picke_dirty_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\picke_dirty_01\textures\picke_dirty_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\picke_dirty_01\textures\picke_dirty_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\picke_dirty_01\textures\picke_dirty_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group02_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group02_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group02_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group02_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group02_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\modular_industrial_pipes_01\textures\modular_industrial_pipes_01_group02_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\steel_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\steel_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\steel_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\steel_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\steel_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\steel_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\plank_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\plank_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\plank_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\plank_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\plank_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\plank_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\paint_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\paint_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\paint_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\paint_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\paint_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\paint_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\coal_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\coal_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\coal_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\coal_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\coal_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\coal_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\wood_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\wood_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\wood_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\wood_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\wood_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\wood_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\worn_metal_rack\textures\worn_metal_rack_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\worn_metal_rack\textures\worn_metal_rack_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\worn_metal_rack\textures\worn_metal_rack_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\worn_metal_rack\textures\worn_metal_rack_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\worn_metal_rack\textures\worn_metal_rack_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\worn_metal_rack\textures\worn_metal_rack_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\rusted_spade_01\textures\rusted_spade_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\rusted_spade_01\textures\rusted_spade_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\rusted_spade_01\textures\rusted_spade_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\rusted_spade_01\textures\rusted_spade_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\rusted_spade_01\textures\rusted_spade_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\rusted_spade_01\textures\rusted_spade_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\sledgehammer_01\textures\sledgehammer_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\sledgehammer_01\textures\sledgehammer_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\sledgehammer_01\textures\sledgehammer_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\sledgehammer_01\textures\sledgehammer_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\sledgehammer_01\textures\sledgehammer_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\sledgehammer_01\textures\sledgehammer_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\log_nor_gl.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\log_nor_gl.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\log_Diffuse.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\log_Diffuse.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\props_tex\log_arm.jpg
+    assetPath: Assets\Tunnel\Art\props_tex\log_arm.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_bucket_01\textures\wooden_bucket_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_bucket_01\textures\wooden_bucket_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_bucket_01\textures\wooden_bucket_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_bucket_01\textures\wooden_bucket_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_bucket_01\textures\wooden_bucket_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_bucket_01\textures\wooden_bucket_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_crate_01\textures\wooden_crate_01_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_crate_01\textures\wooden_crate_01_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_crate_01\textures\wooden_crate_01_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_crate_01\textures\wooden_crate_01_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_crate_01\textures\wooden_crate_01_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_crate_01\textures\wooden_crate_01_arm_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_ladder\textures\wooden_ladder_nor_gl_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_ladder\textures\wooden_ladder_nor_gl_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_ladder\textures\wooden_ladder_diff_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_ladder\textures\wooden_ladder_diff_1k.jpg
+  - type: 1
+    originalUri: Assets\Tunnel\Art\plaza_src\wooden_ladder\textures\wooden_ladder_arm_1k.jpg
+    assetPath: Assets\Tunnel\Art\plaza_src\wooden_ladder\textures\wooden_ladder_arm_1k.jpg
+  reportItems: []

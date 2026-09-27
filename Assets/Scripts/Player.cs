@@ -47,6 +47,7 @@ public class Player : MonoBehaviour
     CharacterController cc;
     Vector3 velocity;
     float pitch;
+    public float Pitch { get => pitch; set => pitch = value; }   // 검사 캡처가 내려다보게 (ART-1 광차 석탄)
     float eye = Tuning.EYE_HEIGHT;
     float shakeLeft, shakeAmount, shakeSpan;
     [System.NonSerialized] public float gait;   // 걸음 위상(라디안). π 마다 한 발이 땅에 닿는다 — 발소리와 곡괭이 흔들림이 이 하나를 같이 본다. 멈추면 0
@@ -68,7 +69,6 @@ public class Player : MonoBehaviour
     }
 
     public void EndMine() { mineLock = false; mineCrouch = false; mineLean = 0f; }
-    public float Pitch => pitch;                                                                           // 검사가 읽는다 (위아래 시점 °, + = 아래)
     public float MineYawOffset => mineLock ? Mathf.DeltaAngle(mineYaw0, transform.eulerAngles.y) : 0f;   // 검사가 읽는다
 
     // 화면을 짧게 흔든다. 카메라가 아니라 머리 위치만 — 조준은 그대로다

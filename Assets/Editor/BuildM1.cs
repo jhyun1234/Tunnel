@@ -37,6 +37,7 @@ public static class BuildM1
     const string ArtTexDir = "Assets/Tunnel/Art/textures/";            // ART-1 CC0 질감 (Assets/Tunnel/Art/SOURCES.md)
     const string MineRockMatPath = "Assets/Tunnel/Art/M11_MineRock.mat";
     const string ArtProfilePath = "Assets/Settings/M11_BoothVolume.asset";
+    const string PlazaPropsPath = "Assets/Tunnel/Art/plaza_props.gltf";          // ART-1 차례 3 광장 물건 + 굴 안 둥근 통나무 동발 (blender/art/make_plaza_props.py)
     // 기본 = 새 몸 m3(Meshy 부위 조립, tools/bake_m3.sh — 사용자 판정 통과 09-22). 옛 TRELLIS 몸은 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb 로 (검사 문턱은 m3 값)
     static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_m3.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
@@ -449,6 +450,16 @@ public static class BuildM1
             c.path = Enumerable.Range(0, 99).TakeWhile(k => slots.ContainsKey($"SLOT_Crevice_{i}_P{k}")).Select(k => slots[$"SLOT_Crevice_{i}_P{k}"].position).ToArray();
             c.through = slots.ContainsKey($"SLOT_Crevice_{i}_Out");
         }
+        // ART-1 차례 3: 광장 물건을 맵 아래에 (같은 좌표) — COLP_ = 부딪힘 상자(안 보임), 길찾기 바닥이 비켜 간다. 보이는 것은 ArtLook 이 Insert 로 켜고 끈다
+        var plazaPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlazaPropsPath);
+        if (plazaPrefab == null) { Debug.LogError($"{PlazaPropsPath} 를 못 읽었다 (blender/art/make_plaza_props.py)"); EditorApplication.Exit(13); }
+        var plaza = Instance(plazaPrefab, map).transform;
+        plaza.name = "PlazaProps";
+        foreach (var mf in plaza.GetComponentsInChildren<MeshFilter>(true).Where(f => f.name.StartsWith("COLP_")))
+        {
+            mf.gameObject.AddComponent<BoxCollider>();
+            UnityEngine.Object.DestroyImmediate(mf.GetComponent<MeshRenderer>());
+        }
         blocks = map.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BLK_")).Select(t => t.gameObject).OrderBy(b => b.name).ToArray();
         foreach (var b in blocks) b.SetActive(false);
         var surf = map.gameObject.AddComponent<NavMeshSurface>();
@@ -626,6 +637,13 @@ public static class BuildM1
         art.renderers = rs;
         art.oldMats = rs.SelectMany(r => r.sharedMaterials).ToArray();
         art.newMat = mat;
+        // 새 모습에만: 광장 물건 · 둥근 통나무 동발(TMB_) / 옛 모습에만: 네모 갱목(PRP_Timber_) · 광장 전등 둘의 공 전구(새 모습은 철망 등이 대신)
+        var plaza = Find(map, "PlazaProps");
+        art.newOnly = plaza.GetComponentsInChildren<MeshRenderer>(true);
+        var lampNodes = plaza.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("Lamp_Light_")).ToArray();
+        var bulbs = GameObject.Find("BoothLights").GetComponentsInChildren<MeshRenderer>(true)
+            .Where(r => lampNodes.Any(n => Vector3.Distance(n.GetComponentInChildren<Renderer>().bounds.center, r.transform.position) < 0.5f)).ToArray();   // 노드 원점은 부품 모음 원점이라 그물 가운데로
+        art.oldOnly = map.GetComponentsInChildren<MeshRenderer>(true).Where(r => r.name.StartsWith("PRP_Timber_")).Concat(bulbs).ToArray();
 
         var mains = GameObject.Find("BoothLights").GetComponentsInChildren<Light>(true).Where(l => l.type == LightType.Point).ToArray();   // 켜진 전등 + 고치면 켜지는 전등
         art.mains = mains;
@@ -674,7 +692,7 @@ public static class BuildM1
         var av = new GameObject("ArtVolume").AddComponent<Volume>();
         av.isGlobal = true; av.priority = 1f; av.sharedProfile = np;
         art.artVolume = av;
-        Debug.Log($"BOOTH art: rock renderers {rs.Length} (material slots {art.oldMats.Length}) · bounce lights {art.bounces.Length} · art volume {string.Join(" ", np.components.Select(c => c.GetType().Name))}");
+        Debug.Log($"BOOTH art: plaza props renderers {art.newOnly.Length} · colliders {plaza.GetComponentsInChildren<BoxCollider>(true).Length} · old-only {art.oldOnly.Length} (bulbs {bulbs.Length}) · rock renderers {rs.Length} (material slots {art.oldMats.Length}) · bounce lights {art.bounces.Length} · art volume {string.Join(" ", np.components.Select(c => c.GetType().Name))}");
     }
 
     // 켜진 전등 = 따뜻한 점광원 + 빛나는 전구, 꺼진 전등 = 어두운 전구만

@@ -332,7 +332,7 @@ def inside_other(name, p, margin=0.1):
     q = (p.x, p.y)
     if any(x0 - margin < p.x < x1 + margin and y0 - margin < p.y < y1 + margin for _, x0, x1, y0, y1, _, _ in ROOMS): return True
     return any(n2 != name and bt.proj(pts2, q)[0] < max(pts2[0][3], pts2[-1][3]) / 2 + margin for n2, pts2, *_ in TUNNELS if KIND[n2] == "tunnel")
-tmb = {}
+tmb = {}; TSETS = []
 MOUTHS = [Vector((pts[0][0], pts[0][1], 0)) for n, pts, *_ in TUNNELS if KIND[n] != "tunnel"] +          [Vector((pts[-1][0], pts[-1][1], 0)) for n, pts, *_ in TUNNELS if KIND[n] in ("crawl", "crevice")]      # 개구멍·대피소 입구 — 앞에 갱목을 세우지 않는다 (09-24 캡처: 대피소를 기둥이 가렸다)
 for name, pts, h, timber, _ in TUNNELS:
     if not timber: continue
@@ -344,6 +344,8 @@ for name, pts, h, timber, _ in TUNNELS:
             t = s / L; P = A.lerp(B_, t); w = a[3] + (b[3] - a[3]) * t; hw = w / 2 - 0.16; ph = 0.78 * h
             if any(inside_other(name, P + lat * (sgn * (hw + 0.1))) for sgn in (-1, 1)) or any((Vector((P.x, P.y, 0)) - mo).length < w / 2 + 1.0 for mo in MOUTHS): s += 1.5; continue
             bmx = tmb.setdefault(chunk_of(P.x, P.y), bmesh.new())
+            TSETS.append(empty("SLOT_TimberSet_%d" % (len(TSETS) + 1), P)); ts = TSETS[-1]   # ART-1 ④ 둥근 통나무 동발 자리: X = 가로(lat) · 크기 (기둥 반간격, 1, 기둥 높이) — make_plaza_props.py 가 읽는다
+            ts.rotation_euler.z = math.atan2(lat.y, lat.x); ts.scale = (hw, 1.0, ph)
             for sgn in (-1, 1):
                 box_verts(bmx, P + lat * (sgn * hw) + Z * (ph / 2), d2, lat, Z, 0.1, 0.1, ph / 2)
             box_verts(bmx, P + Z * (ph + 0.09), d2, lat, Z, 0.1, hw + 0.12, 0.09)
@@ -512,9 +514,9 @@ names = [n_.get("name", "") for n_ in doc["nodes"]]
 cnt = lambda pre: sum(n_.startswith(pre) for n_ in names)
 print("CHECK booth export: %s (%d KB bin) · images %d missing %d · SHL %d COL %d pockets %d gapBig %d gapSmall %d lights %d dead %d blocks %d crawls %d niches %d"
       % (os.path.basename(OUT), os.path.getsize(OUT[:-5] + ".bin") // 1024, len(uris), len(missing), cnt("SHL_"), cnt("COL_"), cnt("SLOT_Pocket_"),
-         cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d · repairs %d" % (cnt("SLOT_Mouth_"), cnt("SLOT_Repair_")))
+         cnt("SLOT_GapBig_"), cnt("SLOT_GapSmall_"), cnt("SLOT_Light_"), cnt("SLOT_DeadLight_"), cnt("BLK_"), cnt("SLOT_Crawl_") // 2, cnt("SLOT_Niche_")) + " mouths %d · repairs %d · timber sets %d" % (cnt("SLOT_Mouth_"), cnt("SLOT_Repair_"), cnt("SLOT_TimberSet_")))
 assert not missing and all(u.startswith("textures/") for u in uris), "FAIL: 그림 경로: %s" % uris
-assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS) and cnt("SLOT_Repair_") == len(REPAIRS), "FAIL: 노드 수"
+assert cnt("SHL_") == cnt("COL_") == len(cells) and cnt("SLOT_Pocket_") == 30 and cnt("BLK_") == len(BLOCKS) and cnt("SLOT_Repair_") == len(REPAIRS) and cnt("SLOT_TimberSet_") == len(TSETS), "FAIL: 노드 수"
 
 # ================= 9. 그림: 위에서 본 모양 · 1인칭
 if not FAST:
