@@ -118,7 +118,7 @@ public static class Tuning
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
     // ---- ART-1 현실감 시험 (제안서 docs/제안서_ART1_현실감_광장_시험.md, 승인 09-27). 부스 씬을 만들 때 박히는 것(범위·높이·화면)은 바꾸면 MakeBooth -force
     public const float ART_WET = 1.5f;                          // 젖음 세기 (MineRock 전역 _ArtWet). 판정 키 Home/End ±0.25 — 사용자 판정 09-27 1.50 (제안값 1.0)
-    public const float ART_BRIGHT = 1.25f;                      // 바위·석탄·진흙 밝기 배율 (MineRock 전역 _ArtBright). 판정 키 숫자패드 4/6 ÷× 1.1 — 사용자 09-27 "조금 어둡다" → 제안값 1.25, 숫자 대기
+    public const float ART_BRIGHT = 1.25f;                      // 바위·석탄·진흙 밝기 배율 (MineRock 전역 _ArtBright). 판정 키 ← → (숫자패드 4/6) ÷× 1.1 — 사용자 09-27 "조금 어둡다" → 1.25, 판정 ③ "1.25 그대로" 확정
     public const float ART_DUST_RATE = 66f;                     // 떠다니는 먼지 알갱이 / s (최대 = × 10) — 사용자 09-27 "10 % 더" (제안값 60)
     public const float ART_BOUNCE = 0.15f;                      // 튀는 빛 = 전등 세기 × 이 값 (그림자 없음). 판정 키 PageDown/PageUp ±0.05
     public const float ART_BOUNCE_RANGE = 7f;                   // m, 튀는 빛 범위 — 그림자가 없어 바위 너머 굴까지 비추니 짧게 (검사 art_bounce: 꺼진 전등 옆은 15 % 넘게 안 밝아진다)

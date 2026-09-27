@@ -321,7 +321,8 @@ for idx, (sid, P, lat, hw, ph_) in enumerate(SETS):
     for s_ in (-1, 1):                                                        # 기둥 둘: 굵은 쪽(뿌리)을 위로
         rb = rnd.uniform(0.095, 0.12); rt = rb * 1.12
         top = P + lat * (s_ * (hw - lean)) + Z * ph_
-        mp.rough_log(side_, ends_, P + lat * (s_ * hw) - Z * 0.08, top, rb, rt, rnd, caps=(False, False))
+        hw_dir = (lat * math.cos(rnd.uniform(0, 6.283)) + along * math.sin(rnd.uniform(0, 6.283))) if rnd.random() < 0.25 else None   # 기둥 넷 중 하나쯤 한 면을 깎음
+        mp.rough_log(side_, ends_, P + lat * (s_ * hw) - Z * 0.08, top, rb, rt, rnd, caps=(False, False), hew=hw_dir)
         tops.append((top, rt, s_))
         for w_ in (-1, 1):                                                    # 캡과 기둥 머리 사이 쐐기 (막 쪼갠 밝은 나무, 갱도 쪽으로 삐져나옴)
             if rnd.random() < 0.8: mp.board(wedge_, top + along * (w_ * (rt + 0.02)) + lat * rnd.uniform(-0.04, 0.04) + Z * 0.012, along, Z, rnd.uniform(0.1, 0.16), rnd.uniform(0.05, 0.08), 0.028)
@@ -329,7 +330,7 @@ for idx, (sid, P, lat, hw, ph_) in enumerate(SETS):
     ext_l, ext_r = rnd.uniform(0.05, 0.15), rnd.uniform(0.05, 0.15)          # 캡 양 끝이 기둥 바깥으로 5~15 cm
     ca = P + lat * -(hw - lean + tops[0][1] + ext_l) + Z * zc; cb = P + lat * (hw - lean + tops[1][1] + ext_r) + Z * zc
     if rnd.random() < 0.5: ca, cb = cb, ca
-    mp.rough_log(side_, ends_, ca, cb, rc * 1.06, rc * 0.94, rnd)
+    mp.rough_log(side_, ends_, ca, cb, rc * 1.06, rc * 0.94, rnd, hew=Z if rnd.random() < 0.5 else None)   # 캡 절반은 윗면을 깎아 덧판을 받침
     stat["sets"] += 1
     nb = [j for (q, j, dist) in kd.find_range(P + along * 1.5, 0.45) if j != idx]   # 이웃 틀 (1.5 m 앞)
     if not nb: continue
@@ -341,7 +342,7 @@ for idx, (sid, P, lat, hw, ph_) in enumerate(SETS):
             w_ = rnd.uniform(0.12, 0.22)
             if rnd.random() > 0.12:
                 c = mid + lat * (x + w_ / 2) + Z * (top_z + 0.018 + rnd.uniform(-0.01, 0.015)) + dirv * rnd.uniform(-0.1, 0.1)
-                mp.board(fresh_ if rnd.random() < 0.12 else lag_, c, dirv, Z, span.length + rnd.uniform(0.12, 0.4), w_, 0.035)
+                mp.board(fresh_ if rnd.random() < 0.03 else lag_, c, dirv, Z, span.length + rnd.uniform(0.12, 0.4), w_, 0.035)   # 새 널 3 % (12 % 는 노란 판자가 줄줄이 튀었다 — 09-27 캡처)
             x += w_ + rnd.uniform(0.015, 0.07)
     for s_ in (-1, 1):                                                        # 옆 덧판: 기둥 뒤(바위 쪽)에 가로로, 반쯤만 · 벽에 붙은 것 둘레는 비움
         if rnd.random() > 0.55 or not clear(WALLS, n_w, mid + lat * (s_ * hw) + Z * 1.2, 1.8): continue
@@ -350,7 +351,7 @@ for idx, (sid, P, lat, hw, ph_) in enumerate(SETS):
             h_ = rnd.uniform(0.12, 0.2)
             if rnd.random() > 0.2:
                 off = hw - lean * (z / ph_) + 0.13
-                mp.board(fresh_ if rnd.random() < 0.1 else lag_, mid + lat * (s_ * off) + Z * (z + h_ / 2) + dirv * rnd.uniform(-0.1, 0.1), dirv, lat * s_, span.length + rnd.uniform(0.1, 0.35), h_, 0.035)
+                mp.board(fresh_ if rnd.random() < 0.03 else lag_, mid + lat * (s_ * off) + Z * (z + h_ / 2) + dirv * rnd.uniform(-0.1, 0.1), dirv, lat * s_, span.length + rnd.uniform(0.1, 0.35), h_, 0.035)
             z += h_ + rnd.uniform(0.03, 0.12)
 n_sets = stat["sets"]
 for key, bms in tmb.items():

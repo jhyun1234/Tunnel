@@ -475,6 +475,13 @@ public class M1Check : MonoBehaviour
         Vector3 carFrom = OnNav(car + Flat3(spawn - car).normalized * 1.3f);
         Teleport(cc, carFrom + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(car - carFrom)).eulerAngles.y);
         art.Set(true); player.Pitch = 35f; yield return Capture("27_art_cart_new", _ => { }); player.Pitch = 0f;
+        // 굴 안 동발 가까이 (판정 ③ "너무 원통형") — 큰길 가운데에서 가장 가까운 틀 1.6 m 앞, 조금 올려다봄
+        Vector3 mainMid = OnNav(Slot("SLOT_Mid_main").position);
+        var ts = pieces.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("SLOT_TimberSet_")).OrderBy(t => Flat(t.position - mainMid)).First().position;
+        Vector3 tFrom = OnNav(ts + Flat3(mainMid - ts).normalized * 1.6f);
+        Teleport(cc, tFrom + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(ts - tFrom)).eulerAngles.y);
+        art.Set(true); player.Pitch = -8f; yield return Capture("27_art_timber_new", _ => { });
+        art.Set(false); yield return Capture("27_art_timber_old", _ => { }); player.Pitch = 0f;
         art.Set(true);
         Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
         ArtLook.SabDryWall = ArtLook.SabBounceDead = ArtLook.SabPropsStay = false;

@@ -206,24 +206,25 @@ def mine_car(M, coal=True):
         parts.append(obj("CarCoal", cb, M["coal"], smooth=True))
     return group("PROP_MineCar", parts)
 
-def coal_heap(M, L, W, z_edge, peak, cx=0.0, n=1400, seed=5):
-    """석탄 무더기 (사용자 09-27 "찰흙처럼 보인다" → 조사 10 사진: 검은 잔 알갱이(분탄) 위에 모난 덩어리, 테두리 위로 봉긋).
-    가루 언덕 한 겹(석탄 질감, 거의 검정) + 모난 덩어리 n 개(2~9 cm, 작은 것이 많게, 언덕을 거의 덮게 — 면이 각진 검은 윤기). 원점 = 광차 좌표, 가운데 x = cx
-    (첫 판 260 개 · 점 9 개는 얇은 조각처럼 떠 보였다 — 09-27 확인 그림)"""
+def coal_heap(M, L, W, z_edge, peak, cx=0.0, n=1600, seed=5):
+    """석탄 무더기 (조사 10 · 11 사진: 검은 잔 알갱이 위에 모난 덩어리, 테두리 위로 봉긋).
+    가루 언덕(울퉁불퉁 ±2 cm, 석탄 질감) + 덩어리 n 개(1.5~7 cm, 작은 것이 많게) — 덩어리는 뭉툭한 다면체(깨진 상자 모양 점 14 개의 볼록 껍질).
+    판 1(점 9~18 개 뾰족한 결정 · 거칠기 0.16 유리)은 "현실적이 아니다 · 빛 반사가 심하다"(09-27 판정 ③) → 무딘 모양 · 반쯤 무광(coal_lump 거칠기 0.5~0.75 얼룩)"""
     import random; rnd = random.Random(seed); hx, hy = L / 2, W / 2
     def h(x, y):
         u, w_ = (x - cx) / hx, y / hy
         return z_edge + peak * max(0.0, 1 - u * u) ** 0.8 * max(0.0, 1 - w_ * w_) ** 0.8
-    fb = bmesh.new(); bmesh.ops.create_grid(fb, x_segments=28, y_segments=14, size=0.5)
+    fb = bmesh.new(); bmesh.ops.create_grid(fb, x_segments=40, y_segments=20, size=0.5)
     for v in fb.verts:
-        x, y = cx + 2 * v.co.x * hx, 2 * v.co.y * hy; v.co = Vector((x, y, h(x, y) + rnd.uniform(-0.012, 0.012)))
+        x, y = cx + 2 * v.co.x * hx, 2 * v.co.y * hy; v.co = Vector((x, y, h(x, y) + rnd.uniform(-0.02, 0.02)))
     lb = bmesh.new()
+    corners = [Vector((sx, sy, sz)) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)] + [Vector(v) for v in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))]
     for i in range(n):
-        sz = 0.02 + 0.06 * rnd.random() ** 1.6
+        sz = 0.015 + 0.055 * rnd.random() ** 1.8
         x, y = cx + rnd.uniform(-hx + sz, hx - sz), rnd.uniform(-hy + sz, hy - sz)
-        R = Matrix.Rotation(rnd.uniform(0, 6.3), 3, "Z") @ Matrix.Rotation(rnd.uniform(0, 6.3), 3, "X")
-        c = Vector((x, y, h(x, y) - sz * 0.35)); sq = Vector((1.0, rnd.uniform(0.7, 1.0), rnd.uniform(0.55, 0.9)))
-        vs = [lb.verts.new(c + R @ (Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))).normalized() * sz * rnd.uniform(0.7, 1.0) * sq)) for _ in range(18)]
+        R = Matrix.Rotation(rnd.uniform(0, 6.3), 3, "Z") @ Matrix.Rotation(rnd.uniform(0, 6.3), 3, "X") @ Matrix.Rotation(rnd.uniform(0, 6.3), 3, "Y")
+        c = Vector((x, y, h(x, y) - sz * 0.25)); sq = Vector((1.0, rnd.uniform(0.65, 1.0), rnd.uniform(0.5, 0.85)))
+        vs = [lb.verts.new(c + R @ Vector([q * s_ * sz * 0.62 * rnd.uniform(0.75, 1.15) for q, s_ in zip(p_ * (0.8 if p_.length > 1.2 else 1.25), sq)])) for p_ in corners]
         r = bmesh.ops.convex_hull(lb, input=vs)
         bmesh.ops.delete(lb, geom=list({g for g in r["geom_interior"] + r["geom_unused"] if isinstance(g, bmesh.types.BMVert)}), context="VERTS")
     return [obj("CoalFines", fb, M["coal"], smooth=True), obj("CoalLumps", lb, M["coal_lump"])]   # 덩어리도 그림 재질 — 그림 없는 색만 재질(0.012)은 게임에서 면마다 하얗게 떴다(09-27 캡처, 까닭 못 찾음)
@@ -282,29 +283,45 @@ def mine_car_v2(M, coal=True):
     if coal: parts += coal_heap(M, L - 0.06, W - 0.06, zt - 0.02, 0.22)
     return group("PROP_MineCar", parts)
 
-def rough_log(side, ends, a, b, r0, r1, rnd, sides=8, step=0.6, bend=0.012, caps=(True, True)):
-    """거친 통나무 한 토막 a→b (조사 11 docs/기획서/조사/11_갱목_동발_레퍼런스.md): 단면이 조금 울퉁불퉁(±7 %) · 한쪽이 굵음(r0→r1) · 살짝 휨
-    · 옆 UV = (둘레 m, 길이 m) — 질감 timber 의 세로 결 · 세로 금이 길이 방향으로 (몸통을 도는 고리 줄무늬 0/21) · 잘린 끝 = log_end 원 UV(나이테).
-    side / ends = bmesh (옆 · 끝을 다른 재질로)"""
+def rough_log(side, ends, a, b, r0, r1, rnd, sides=10, step=0.25, bend=0.025, caps=(True, True), hew=None):
+    """거친 통나무 한 토막 a→b (조사 11 docs/기획서/조사/11_갱목_동발_레퍼런스.md · 사진 R1 R3): 원통이 아니게 —
+    굵기가 길이를 따라 불룩·잘록(±9 % 낮은 물결 + ±4 % 잔 물결) · 옹이 혹 0~2 개 · 한쪽이 굵음(r0→r1) · 휨(길이의 2.5 %까지)
+    · hew = 한 면을 도끼로 깎아 평평하게 할 방향(벡터, 캡은 위) — 사진의 캡·기둥에 평평한 면 (09-27 판정 ③ "너무 원통형" → 판 1 은 ±7 % 8 각이었다)
+    · 옆 UV = (둘레 m, 길이 m) — 질감 timber 의 세로 결이 길이 방향 · 잘린 끝 = log_end 원 UV(나이테). side / ends = bmesh"""
     a, b = Vector(a), Vector(b); d = b - a; L = d.length; t = d / L
     up = Vector((0, 0, 1)) if abs(t.z) < 0.9 else Vector((1, 0, 0)); u1 = t.cross(up).normalized(); u2 = t.cross(u1)
     n = max(2, int(L / step) + 1); ph = rnd.uniform(0, 6.283); bdir = u1 * math.cos(ph) + u2 * math.sin(ph); bamp = rnd.uniform(0.3, 1.0) * bend * L
-    wob = [rnd.uniform(0.93, 1.07) for _ in range(sides)]; uvl = side.loops.layers.uv.verify(); circ = 2 * math.pi * (r0 + r1) / 2
+    waves = [(rnd.choice((1, 2, 3)), 2 * math.pi / rnd.uniform(0.6, 1.5), rnd.uniform(0, 6.283), 0.09 / 3) for _ in range(3)] +             [(rnd.choice((3, 4, 5)), 2 * math.pi / rnd.uniform(0.25, 0.5), rnd.uniform(0, 6.283), 0.04 / 2) for _ in range(2)]
+    knots = [(rnd.uniform(0, 6.283), rnd.uniform(0.15, 0.85) * L, rnd.uniform(0.1, 0.2)) for _ in range(rnd.choice((0, 1, 1, 2)))]
+    hdir = None
+    if hew is not None:
+        hv = Vector(hew) - t * Vector(hew).dot(t)
+        if hv.length > 1e-3: hdir = hv.normalized()
+    uvl = side.loops.layers.uv.verify(); circ = 2 * math.pi * (r0 + r1) / 2
     rings = []
     for i in range(n):
-        s_ = i / (n - 1); c = a + d * s_ + bdir * (bamp * 4 * s_ * (1 - s_)); r = r0 + (r1 - r0) * s_
-        pos = [c + (u1 * math.cos(2 * math.pi * k / sides) + u2 * math.sin(2 * math.pi * k / sides)) * (r * wob[k] * rnd.uniform(0.98, 1.02)) for k in range(sides)]
-        rings.append((pos, [side.verts.new(p_) for p_ in pos + pos[:1]], s_ * L))
+        s_ = i / (n - 1); z = s_ * L; c = a + d * s_ + bdir * (bamp * 4 * s_ * (1 - s_)); r = r0 + (r1 - r0) * s_
+        pos = []
+        for k in range(sides):
+            th = 2 * math.pi * k / sides; rad = u1 * math.cos(th) + u2 * math.sin(th)
+            f = 1 + sum(A * math.sin(kk * th + m * z + p_) for kk, m, p_, A in waves)
+            for kt, kz, ka in knots:
+                dth = math.atan2(math.sin(th - kt), math.cos(th - kt)); f += ka * math.exp(-(dth / 0.35) ** 2 - ((z - kz) / 0.08) ** 2)
+            q = rad * (r * f)
+            if hdir is not None and q.dot(hdir) > 0.78 * r: q -= hdir * (q.dot(hdir) - 0.78 * r)   # 깎은 면
+            pos.append(c + q)
+        rings.append((pos, [side.verts.new(p_) for p_ in pos + pos[:1]], z))
     for (p0, v0, l0), (p1, v1, l1) in zip(rings, rings[1:]):
         for k in range(sides):
             f = side.faces.new((v0[k], v0[k + 1], v1[k + 1], v1[k]))
             for lp, (uu, vv) in zip(f.loops, ((k, l0), (k + 1, l0), (k + 1, l1), (k, l1))): lp[uvl].uv = (uu / sides * circ, vv)
     euv = ends.loops.layers.uv.verify()
-    for (pos, _, _), keep, flip in ((rings[0], caps[0], True), (rings[-1], caps[1], False)):
+    for (pos, _, z), keep, flip in ((rings[0], caps[0], True), (rings[-1], caps[1], False)):
         if not keep: continue
+        cc = sum(pos, Vector()) / len(pos); rr = max((p_ - cc).length for p_ in pos)
         vs = [ends.verts.new(p_) for p_ in pos]; f = ends.faces.new(list(reversed(vs)) if flip else vs)
         for lp in f.loops:
-            k = vs.index(lp.vert); lp[euv].uv = (0.5 + 0.47 * math.cos(2 * math.pi * k / sides) * wob[k], 0.5 + 0.47 * math.sin(2 * math.pi * k / sides) * wob[k])
+            q = lp.vert.co - cc; lp[euv].uv = (0.5 + 0.47 * q.dot(u1) / rr, 0.5 + 0.47 * q.dot(u2) / rr)
 
 def board(bm, c, along, up, length, width, thick):
     """판자 한 장: along = 긴 쪽, up = 두께 쪽(바깥), 나머지 = 폭. UV = (길이 m, 폭 m) — 질감(wedge · lagging)의 결이 u(가로)라 결이 판자 길이를 따른다
