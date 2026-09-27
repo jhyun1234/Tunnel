@@ -40,3 +40,8 @@ crashlytics-build.properties
 # Blender 동작 스크립트 실행 기록 (다시 돌리면 생긴다)
 /blender/**/*.log
 __pycache__/
+
+# 에셋 스토어 묶음 — Standard Unity Asset Store EULA 는 원본 재배포 금지, 저장소가 공개라 올리지 않는다.
+# 받는 법: Unity 에디터 Package Manager → My Assets → 이름 검색 → Download → Import (docs/HANDOFF.md)
+/Assets/Kevin Iglesias/
+/Assets/Kevin Iglesias.meta
