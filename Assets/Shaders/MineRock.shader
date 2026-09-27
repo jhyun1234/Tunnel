@@ -15,6 +15,7 @@ Shader "Tunnel/MineRock"
         _BaseColor ("Rock tint", Color) = (1, 1, 1, 1)
         _CoalTint ("Coal tint", Color) = (0.45, 0.45, 0.5, 1)
         _MudTint ("Mud tint", Color) = (0.55, 0.5, 0.46, 1)
+        _OreTint ("Ore band tint (art.x 1..2 = ORE-1 광석 자리 띠)", Color) = (0.14, 0.14, 0.15, 1)
         _Tile ("Tile per 2.4 m: rock, coal, mud, hex cell", Vector) = (1, 1.4, 1.6, 1)
         _NormalScale ("Normal strength", Float) = 1.2
         _CoalGloss ("Coal gloss", Range(0, 1)) = 0.35
@@ -36,6 +37,7 @@ Shader "Tunnel/MineRock"
         half _Surface;
         half4 _CoalTint;
         half4 _MudTint;
+        half4 _OreTint;
         float4 _Tile;
         half _NormalScale;
         half _CoalGloss;
@@ -160,7 +162,7 @@ Shader "Tunnel/MineRock"
                     {
                         half3 a2, n2; half r2;
                         TriLayer(TEXTURE2D_ARGS(_CoalMap, sampler_BaseMap), _CoalNormal, pw * perM * _Tile.y + 0.37, dpx * perM * _Tile.y, dpy * perM * _Tile.y, bw, N, a2, n2, r2);
-                        alb = lerp(alb, a2 * _CoalTint.rgb, wc); nWS = normalize(lerp(nWS, n2, wc)); rough = lerp(rough, min(r2, 1.0 - _CoalGloss), wc);
+                        alb = lerp(alb, a2 * lerp(_CoalTint.rgb, _OreTint.rgb, saturate(i.art.x - 1.0)), wc);   // ORE-1: 광석 자리 띠(x 1..2)는 더 검게 — 사진의 막장 석탄 (조사 12). ART-1 무작위 띠(x ≤ 1)는 그대로 nWS = normalize(lerp(nWS, n2, wc)); rough = lerp(rough, min(r2, 1.0 - _CoalGloss), wc);
                     }
                 }
                 UNITY_BRANCH if (wm > 0.001)

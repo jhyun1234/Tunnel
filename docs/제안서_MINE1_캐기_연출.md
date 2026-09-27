@@ -64,9 +64,9 @@
 ### 5. 판정 키 (실행 파일 안에서, 값이 화면 왼쪽 위 DevHud 에 뜬다)
 | 키 | 값 | 처음 |
 |---|---|---|
-| 숫자패드 7 / 8 | 묶음 빠르기 × 0.9 / × 1.1 | 1.0 (서서 6.2 s) |
-| 숫자패드 1 / 2 | 미끄러질 조짐 확률 − / + 10 % | 35 % |
-| 숫자패드 / · * | 고개 좌우 한계 − / + 10° | 60° |
+| ↓ / ↑ (옛 숫자패드 7 / 8) | 묶음 빠르기 × 0.9 / × 1.1 | 1.0 (서서 6.2 s) |
+| Del / Backspace (옛 숫자패드 1 / 2) | 미끄러질 조짐 확률 − / + 10 % | 35 % |
+| ` / Tab (옛 숫자패드 / · *) | 고개 좌우 한계 − / + 10° | 60° |
 판정 뒤 받은 숫자를 `Tuning` 에 넣는다.
 
 ## 검사 (배포 실행 파일 `-only mine` 새 구간 + 바뀐 옛 검사)
@@ -87,10 +87,10 @@
 끝으로 전체 `bash tools/build.sh`.
 
 ## 확인 목록 (실행 파일 판정)
-1. 서서 캐기 — "광질하는 모습"으로 보이나, 까딱까딱이 아닌가 · 콱 셋 박자(숫자패드 7/8)
+1. 서서 캐기 — "광질하는 모습"으로 보이나, 까딱까딱이 아닌가 · 콱 셋 박자(↓ ↑)
 2. 숙여 캐기(Ctrl) — 짧게 콱 다섯이 어떤가
-3. 미끄러질 조짐 — 알아채지나, 고쳐 잡기(떼었다 누르기)가 할 만한가 · 확률(숫자패드 1/2)
-4. 캐는 동안 고개만 돌아가는 것 — 답답한가(숫자패드 / *)
+3. 미끄러질 조짐 — 알아채지나, 고쳐 잡기(떼었다 누르기)가 할 만한가 · 확률(Del Backspace)
+4. 캐는 동안 고개만 돌아가는 것 — 답답한가(` Tab)
 5. 광석이 밀려 나오고 기울다 빠지는 모습 · 먼지 — 진행이 보이나
 6. 괴물이 오는 무게 — 평소 콱 6 m 가 너무 조용한가
 
@@ -132,3 +132,5 @@
 - **검사(배포물)**: Mining 구간 `mine_hold_pops_standing`(콱 3 · 간격 1.27 · 빠짐 4.65 s 근처) · `mine_soft_noise_6m` · 새 `MineStage`(`-only mine`) 8: `mine_grip_points` · `mine_crouch_short`(간격 0.77 · 눈 1.00) · `mine_release_keeps_progress`(16.7 남고 다시 콱 1) · `mine_look_limited`(60.0° · 몸 0 m) · `mine_slip_loud`(쨍 1 · 15 m 괴물 5.9 m 다가와 9.5 m 앞에서 멈춤) · `mine_slip_regrip_quiet` · `mine_wear_per_bundle`(2.00 / 3.00) · `mine_monster_quick_swing`(0.21 s). 바꾼 옛 검사: `pocket_breaks_on_2nd_hit` · `pick_noise_25m` · `swing_interval_max3_per_s` → 위로, `pick_wears_per_landed_hit`(콱마다 2/3) · `pick_shakes_below_15`(자리 대신 떨림 크기) · `pick_breaks_at_zero` · Hud(1.0 s 누름) · Stalker 구간 소리는 '쨍' 을 포켓 자리에서 직접(괴물 규칙 검사 그대로). 검사 동안 조짐 확률 0(MineStage 만 1).
 - **사보타주 FAIL 확인**: `minefast`(콱 0 · 0.86 s 에 빠짐 · 25 m) · `loudsoft`(25 m) · `onehit`(콱 2 에 빠짐) · `noslip`(조짐 0 → 쨍·고쳐 잡기·닳음 3 셋 다 FAIL) · `lookfree`(144°) · `resetprogress`(떼니 50 으로).
 - **전체 `build.sh`(배포물)**: PASS 172 · FAIL 1 `booth_walk_route`(부스 걷기 봇이 마지막 귀환에서 시간 안에 못 옴 — 86 s 걸림, 곡괭이 안 씀) → 부스 구간만 다시 = **ALL PASS 21**(69 s). 느릴 때 흔들리는 검사로 적어 둔다.
+
+**판정 키 옮김(main 09-27, 사용자 "지금 main에서 옮겨라")**: 사용자 키보드가 텐키리스라 숫자패드를 못 누른다(CLAUDE.md 규칙). 빠르기 ↓ ↑ · 미끄러짐 Del Backspace · 고개 한계 ` Tab · (부스 전등 밝기 ScrLk Pause). F1 줄에 그대로 표시.

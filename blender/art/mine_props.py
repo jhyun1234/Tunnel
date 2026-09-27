@@ -52,7 +52,7 @@ def materials(root):
              log=pbr("M_Log", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.0, tint=(0.45, 0.38, 0.32)),
              coal=pbr("M_Coal", os.path.join(ART, "art_coal_Rock035_DiffRough.png"), T("Rock035", "Roughness"), os.path.join(ART, "art_coal_Rock035_nor_gl.jpg"), 0.5, tint=(0.4, 0.4, 0.45)))
 
-UV_M = dict(steel=1.0, dark_steel=0.6, paint=1.5, wood=1.5, plank=1.5, log=1.0, coal=0.5, coal_lump=0.3,
+UV_M = dict(steel=1.0, dark_steel=0.6, paint=1.5, wood=1.5, plank=1.5, log=1.0, coal=0.5, coal_lump=0.3, coal_fresh=0.3,
             timber=None, log_end=None, wedge=None, lagging=None)   # None = 그물이 UV 를 직접 가짐 (통나무 옆 = 둘레·길이 m, 잘린 끝 = 원, 판자 = 길이·폭 m — 결이 길이 방향)   # 질감 한 장 크기 m (materials 와 같은 값)
 
 def game_materials(root):

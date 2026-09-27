@@ -39,7 +39,7 @@ public class DevHud : MonoBehaviour
 
     void Update()
     {
-        if (!started) { show = startVisible; started = true; }
+        if (!started) { show = startVisible; started = true; if (!Mathf.Approximately(Tuning.ORE_SHINE, 1f)) ApplyOreShine(); }   // ORE-1: 판정에서 받은 반짝임
         Visible = show;
         acc += Time.unscaledDeltaTime;
         frames++;
@@ -67,6 +67,7 @@ public class DevHud : MonoBehaviour
             PlaceAhead(2.5f);
         }
         MineKeys(kb);
+        OreKeys(kb);
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
         if (kb.digit2Key.wasPressedThisFrame) lamp.darkAdaptAmbient *= 1.25f;
         if (kb.digit3Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(-10f);   // 곡괭이 내구도 (UI-1a, 설계서 Step 6)
@@ -113,8 +114,8 @@ public class DevHud : MonoBehaviour
             bool changed = true;
             if (kb.digit7Key.wasPressedThisFrame) look.normalScale /= 1.25f;
             else if (kb.digit8Key.wasPressedThisFrame) look.normalScale *= 1.25f;
-            else if (kb.commaKey.wasPressedThisFrame) look.roughMul *= 0.9f;
-            else if (kb.periodKey.wasPressedThisFrame) look.roughMul /= 0.9f;
+            else if (kb.commaKey.wasPressedThisFrame && !kb.shiftKey.isPressed) look.roughMul *= 0.9f;      // Shift+, . 는 광석 반짝임 (ORE-1)
+            else if (kb.periodKey.wasPressedThisFrame && !kb.shiftKey.isPressed) look.roughMul /= 0.9f;
             else if (kb.iKey.wasPressedThisFrame) look.neckRed = Mathf.Max(0f, look.neckRed - 0.1f);   // 3D-③b M1e: 목 붉기 (0 = 몸 살 색)
             else if (kb.mKey.wasPressedThisFrame) look.neckRed = Mathf.Min(1f, look.neckRed + 0.1f);
             else if (kb.qKey.wasPressedThisFrame) look.neckBright = Mathf.Max(0.2f, look.neckBright / 1.15f);   // 목 밝기
@@ -133,9 +134,9 @@ public class DevHud : MonoBehaviour
     // MAP1 판정 손잡이: 받은 숫자를 Tuning.BOOTH_LIGHT_ENERGY · BOOTH_BLOCKS 에
     void BoothKeys(Keyboard kb)
     {
-        if (boothLights.Length > 0 && (kb.numpadMinusKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame))
+        if (boothLights.Length > 0 && (kb.scrollLockKey.wasPressedThisFrame || kb.pauseKey.wasPressedThisFrame))   // 숫자패드 − + 였다 → 텐키리스(CLAUDE.md)
         {
-            float m = kb.numpadPlusKey.wasPressedThisFrame ? 1.25f : 1f / 1.25f;
+            float m = kb.pauseKey.wasPressedThisFrame ? 1.25f : 1f / 1.25f;
             foreach (var l in boothLights) l.intensity *= m;
             show = true;
         }
@@ -175,20 +176,57 @@ public class DevHud : MonoBehaviour
     string CreviceLine() => Crevice.All.Count == 0 ? "" :
         $"\nsqueeze into a closed crevice {player.squeezeS:0.00} s (SQUEEZE_S {Tuning.SQUEEZE_S:0.00}) [F7 F8] · through crevices {player.SqueezeTime(Crevice.All.Where(c => c.through).Min(c => c.Length)):0.0}~{player.SqueezeTime(Crevice.All.Where(c => c.through).Max(c => c.Length)):0.0} s · side turn {player.squeezeTurnDeg:0}° (SQUEEZE_TURN_DEG {Tuning.SQUEEZE_TURN_DEG:0}) [F9 F10] · E {(player.Squeezing ? "SQUEEZING" : Crevice.Find(player.transform.position, player.transform.forward, out _, out _) ? "READY" : "-")}";
 
-    // MINE-1 판정 손잡이: 받은 숫자를 Tuning.MINE_TEMPO · MINE_SLIP_CHANCE · MINE_LOOK_YAW_DEG 에
+    // MINE-1 판정 손잡이: 받은 숫자를 Tuning.MINE_TEMPO · MINE_SLIP_CHANCE · MINE_LOOK_YAW_DEG 에. 숫자패드였다 → 텐키리스라 비어 있는 키로(CLAUDE.md)
     void MineKeys(Keyboard kb)
     {
         if (pickaxe == null) return;
-        if (kb.numpad7Key.wasPressedThisFrame) { pickaxe.tempo = Mathf.Max(0.3f, pickaxe.tempo * 0.9f); show = true; }
-        if (kb.numpad8Key.wasPressedThisFrame) { pickaxe.tempo = Mathf.Min(3f, pickaxe.tempo * 1.1f); show = true; }
-        if (kb.numpad1Key.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Max(0f, Mathf.Round((pickaxe.slipChance - 0.1f) * 100f) / 100f); show = true; }
-        if (kb.numpad2Key.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Min(1f, Mathf.Round((pickaxe.slipChance + 0.1f) * 100f) / 100f); show = true; }
-        if (kb.numpadDivideKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Max(0f, pickaxe.lookYaw - 10f); show = true; }
-        if (kb.numpadMultiplyKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Min(180f, pickaxe.lookYaw + 10f); show = true; }
+        if (kb.downArrowKey.wasPressedThisFrame) { pickaxe.tempo = Mathf.Max(0.3f, pickaxe.tempo * 0.9f); show = true; }
+        if (kb.upArrowKey.wasPressedThisFrame) { pickaxe.tempo = Mathf.Min(3f, pickaxe.tempo * 1.1f); show = true; }
+        if (kb.deleteKey.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Max(0f, Mathf.Round((pickaxe.slipChance - 0.1f) * 100f) / 100f); show = true; }
+        if (kb.backspaceKey.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Min(1f, Mathf.Round((pickaxe.slipChance + 0.1f) * 100f) / 100f); show = true; }
+        if (kb.backquoteKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Max(0f, pickaxe.lookYaw - 10f); show = true; }
+        if (kb.tabKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Min(180f, pickaxe.lookYaw + 10f); show = true; }
     }
 
+    // ORE-1 판정 손잡이: 광석(결 덩이 coal_lump · 캘 덩이 coal_fresh) 반짝임 = 거칠기 ÷ oreShine. 받은 숫자를 Tuning.ORE_SHINE 에
+    [System.NonSerialized] public float oreShine = Tuning.ORE_SHINE;
+    System.Collections.Generic.List<(Material m, float rough0)> oreMats;
+    void OreKeys(Keyboard kb)
+    {
+        if (!kb.shiftKey.isPressed || !(kb.commaKey.wasPressedThisFrame || kb.periodKey.wasPressedThisFrame)) return;
+        oreShine = Mathf.Clamp(oreShine * (kb.periodKey.wasPressedThisFrame ? 1.25f : 1f / 1.25f), 0.2f, 5f);
+        ApplyOreShine();
+        show = true;
+    }
+    public void ApplyOreShine()                                  // 광석 조각 · 포켓 재질을 한 번 복제해(에셋을 안 바꾸게) 거칠기만 바꾼다
+    {
+        if (oreMats == null)
+        {
+            oreMats = new System.Collections.Generic.List<(Material, float)>();
+            var map = new System.Collections.Generic.Dictionary<Material, Material>();
+            var faces = GameObject.Find("OreFaces");
+            var rs = FindObjectsByType<OrePocket>(FindObjectsInactive.Exclude).SelectMany(p => p.GetComponentsInChildren<Renderer>())
+                .Concat(faces != null ? faces.GetComponentsInChildren<Renderer>() : new Renderer[0]);
+            foreach (var r in rs)
+            {
+                var ms = r.sharedMaterials;
+                for (int i = 0; i < ms.Length; i++)
+                {
+                    if (ms[i] == null || !(ms[i].name.Contains("coal_lump") || ms[i].name.Contains("coal_fresh"))) continue;
+                    if (!map.TryGetValue(ms[i], out var c)) { c = new Material(ms[i]); map[ms[i]] = c; oreMats.Add((c, c.GetFloat("roughnessFactor"))); }
+                    ms[i] = c;
+                }
+                r.sharedMaterials = ms;
+            }
+        }
+        foreach (var (m, r0) in oreMats) m.SetFloat("roughnessFactor", Mathf.Clamp(r0 / oreShine, 0.05f, 1f));
+    }
+
+    string OreLine() => oreMats == null && GameObject.Find("OreFaces") == null ? "" :
+        $"\nore shine x{oreShine:0.00} (ORE_SHINE {Tuning.ORE_SHINE:0.00}) [Shift+, Shift+.]";
+
     string MineLine() => pickaxe == null ? "" :
-        $"\nmine {(pickaxe.Mining ? $"{pickaxe.minePhase.ToUpper()} {(pickaxe.mineCrouch ? "crouch" : "stand")}" : "-")}  tempo x{pickaxe.tempo:0.00} (stand bundle {StandBundle(pickaxe.tempo):0.0} s) [num 7 8]  slip {pickaxe.slipChance * 100f:0}% [num 1 2]  look ±{pickaxe.lookYaw:0}° [num / *]  strike {pickaxe.softNoise:0} m · slip {Tuning.NOISE_PICK:0} m  bundles {pickaxe.bundles} slips {pickaxe.slips} regrips {pickaxe.regrips}";
+        $"\nmine {(pickaxe.Mining ? $"{pickaxe.minePhase.ToUpper()} {(pickaxe.mineCrouch ? "crouch" : "stand")}" : "-")}  tempo x{pickaxe.tempo:0.00} (stand bundle {StandBundle(pickaxe.tempo):0.0} s) [↓ ↑]  slip {pickaxe.slipChance * 100f:0}% [Del Bksp]  look ±{pickaxe.lookYaw:0}° [` Tab]  strike {pickaxe.softNoise:0} m · slip {Tuning.NOISE_PICK:0} m  bundles {pickaxe.bundles} slips {pickaxe.slips} regrips {pickaxe.regrips}";
 
     static float StandBundle(float tempo)
     {
@@ -201,7 +239,7 @@ public class DevHud : MonoBehaviour
         $"\nrepair broken {Repairable.All.Count(r => r.broken)}/{Repairable.All.Count} fixed {Repairable.FixedCount}  {(player.Repairing ? $"FIXING {player.repairing.kind} {player.repairing.progress * 100f:0}%" : "")}  time x{Repairable.timeMul:0.00} [F3 F4] (timber {Tuning.RepairTime("timber") * Repairable.timeMul:0.0} s)  break every {repairs.breakEvery:0} s [F11 F12]  break nearest [F2]   money ore {Economy.Ore:0} + repair {Economy.Repair:0} = {Economy.Total:0}";
 
     string BoothLine() => boothLights.Length == 0 ? "" :
-        $"\nbooth lights {boothLights[0].intensity:0.00} (BOOTH_LIGHT_ENERGY {Tuning.BOOTH_LIGHT_ENERGY:0.00}) [num - +]   blocks west {(GroupOn(1) ? "X" : "o")} east {(GroupOn(2) ? "X" : "o")} [F5 F6] (X = 막힘: 서쪽 ① 채탄장·바깥 고리 · 동쪽 ③ 노보리·바깥 고리 — 둘 다 X = 가운데만)";
+        $"\nbooth lights {boothLights[0].intensity:0.00} (BOOTH_LIGHT_ENERGY {Tuning.BOOTH_LIGHT_ENERGY:0.00}) [ScrLk Pause]   blocks west {(GroupOn(1) ? "X" : "o")} east {(GroupOn(2) ? "X" : "o")} [F5 F6] (X = 막힘: 서쪽 ① 채탄장·바깥 고리 · 동쪽 ③ 노보리·바깥 고리 — 둘 다 X = 가운데만)";
 
     [System.NonSerialized] public bool walkPreview;        // U: 세운 괴물이 걸어오기를 되풀이 (검사도 본다)
     [System.NonSerialized] public bool previewOn = true;   // 사보타주 nopreview 가 끈다 (고치기 전: U 가 세운 괴물에 안 먹던 상태)
@@ -228,6 +266,6 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
     }
 }

@@ -284,6 +284,23 @@ def vnoise3(p):
 def fbm3(p, octaves=3):
     return sum(vnoise3(p * 2 ** k) * 0.5 ** k for k in range(octaves)) / sum(0.5 ** k for k in range(octaves))
 ART_COAL_T, ART_MUD_H = 0.57, 0.35                   # 석탄 문턱(잡음 0..1 — 높을수록 석탄이 적다) · 벽 진흙 높이(바닥에서 m)
+# ORE-1(09-27, 사용자 승인 — 제안서 docs/제안서_ORE1_벽_광석.md · 조사 12): 광석 자리마다 벽을 비스듬히(30°) 가로지르는 석탄 띠 두께 1.2 m.
+#   경계 뚜렷(4 cm — 해외 12/18 · 흐림 0) · 두께가 조금 변함(±3 cm) · 자리에서 벽 따라 ±1.6 m 뒤 흐려짐. 벽을 향해 서면 오른쪽이 올라감.
+#   바깥(통로 쪽)으로 0.8 m 넘는 점(맞은편 벽)은 안 칠함. SABOTAGE=nocoal = 띠 없음(자기 검사 · Unity ore_on_coal FAIL 용)
+ORE_DIP, ORE_HALF, ORE_LEN = math.radians(30), 0.6, 1.6
+def ore_bands(co):
+    band = np.zeros(len(co))
+    if SAB == "nocoal": return band
+    wob = (fbm3(co * 3.0 + 5.1) - 0.5) * 0.06; endw = (fbm3(co * 1.5 + 9.7) - 0.5) * 0.8
+    up = np.array([0.0, 0.0, 1.0])
+    for p, (o, d) in zip(pocket_pts, POCKETS):
+        n = -np.array([d[0], d[1], 0.0]); n /= np.linalg.norm(n); along = np.array([-n[1], n[0], 0.0])
+        bu = along * math.cos(ORE_DIP) + up * math.sin(ORE_DIP); bn = -along * math.sin(ORE_DIP) + up * math.cos(ORE_DIP)
+        rel = co - np.array(p)
+        across = np.clip((ORE_HALF + wob - np.abs(rel @ bn)) / 0.04, 0, 1)
+        ends = np.clip((ORE_LEN + endw - np.abs(rel @ bu)) / 0.5, 0, 1)
+        band = np.maximum(band, across * ends * (np.abs(rel @ n) < 0.8))
+    return band
 def art_uv(me, bvh_=None):
     """석탄 = 옆으로 긴 잡음 띠(9 m × 1.1 m) · 진흙 = 바닥 1 + 벽은 바닥에서 ART_MUD_H 까지 들쭉날쭉. bvh_ 없으면 0(맨 바위)"""
     nv = len(me.vertices)
@@ -297,8 +314,14 @@ def art_uv(me, bvh_=None):
         floor = nr[:, 2] > 0.6
         edge = fbm3(co * np.array([1 / 1.3, 1 / 1.3, 1 / 0.5]))
         mud = np.where(floor, 1.0, np.clip(1 - (hgt - ART_MUD_H * (0.4 + 0.9 * edge)) / 0.25, 0, 1))
-        coal = np.clip((fbm3(co * np.array([1 / 9, 1 / 9, 1 / 1.1]) + 17.3) - ART_COAL_T) / 0.06, 0, 1) * (1 - mud)
+        coal = np.clip((fbm3(co * np.array([1 / 9, 1 / 9, 1 / 1.1]) + 17.3) - ART_COAL_T) / 0.06, 0, 1)
+        band = ore_bands(co); ore = band * (1 - mud)
+        coal = np.maximum(coal, band) * (1 - mud) + ore     # 광석 자리 띠 = x 1..2 (셰이더 MineRock 이 _OreTint 로 더 검게) · ART-1 무작위 띠 = x 0..1 그대로
         wall = ~floor
+        near = [np.linalg.norm(co - np.array(p), axis=1) < 0.5 for p in pocket_pts]
+        on = [float((ore[m & wall] > 0.5).mean()) if (m & wall).any() else 0.0 for m in near]
+        print("CHECK booth ore bands: ore band>0.5 within 0.5 m of each pocket min %.2f (want ≥ 0.6) · band verts %d" % (min(on), int((band > 0.5).sum())))
+        assert SAB == "nocoal" or min(on) >= 0.6, "FAIL: 광석 자리 둘레에 석탄 칠이 모자람 %s" % [i + 1 for i, f in enumerate(on) if f < 0.6]
         print("CHECK booth art: wall verts %d · coal>0.5 %.0f %% · mud>0.5 %.0f %% (wall) · floor verts %d"
               % (wall.sum(), 100 * (coal[wall] > 0.5).mean(), 100 * (mud[wall] > 0.5).mean(), floor.sum()))
     vi = np.empty(len(me.loops), int); me.loops.foreach_get("vertex_index", vi)

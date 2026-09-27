@@ -251,6 +251,10 @@ public static class Tuning
     public const float POCKET_WALL_OUT = 0.12f;    // m, 자리에서 통로 쪽으로 내미는 거리 — 벽 요철에 파묻히지 않게
     public const float POCKET_MESH_SCALE = 1.2f;   // Godot OrePocket.tscn Mesh 배율
     public const float POCKET_RADIUS = 0.16f;      // Godot OrePocket.tscn 충돌 구
+    // ORE-1(09-27, 제안서 docs/제안서_ORE1_벽_광석.md): 부스 광석 = 벽을 30° 로 가로지르는 석탄 띠(make_booth ore_bands) + 결 덩이 조각(make_ore GAME=1, 홀수 한국식 · 짝수 네모식)
+    public const int ORE_TRIS_MAX = 60000;         // 검사: 광석 조각 30곳 삼각형 합
+    public const float ORE_COAL_MIN = 0.6f;        // 검사: 광석 자리 둘레 0.5 m 벽 점 중 광석 띠 칠(art UV x > 1.5 — 1..2 = 광석 띠, 셰이더가 더 검게) 몫
+    public const float ORE_SHINE = 1.0f;           // 광석(결 덩이 · 캘 덩이) 반짝임 배율 = 거칠기 ÷ 이것 — 판정 키 Shift+, Shift+. (실행 파일에서 사용자가 찾음)
     public const float ORE_RADIUS = 0.12f;         // Godot Ore.tscn 충돌 구
     public const float POCKET_POP_OUT = 1.4f;      // m/s, 통로 쪽으로 튀는 속도
     public const float ORE_POP_UP = 2.2f;          // m/s

@@ -14,7 +14,8 @@ MATS = {"steel": ("rusty_metal_03", 0.3, (0.40, 0.38, 0.36), 0.6), "dark_steel":
         "paint": ("rusty_painted_metal", 0.55, (0.6, 0.6, 0.55), 0.3), "wood": ("weathered_brown_planks", 1.0, (0.5, 0.45, 0.4), 0.0),
         "plank": ("wood_planks_dirt", 1.0, (0.55, 0.5, 0.45), 0.0), "log": ("weathered_brown_planks", 1.0, (0.38, 0.32, 0.27), 0.0),
         "coal": ("Rock035", 0.0, (0.8, 0.8, 0.8), 1.0, 1.3),        # 석탄 가루 = 검정 · 거칠게 (매끈하게 하면 주황 전등이 금박처럼 번졌다 — 09-27 캡처). 가루는 덩어리가 거의 덮는다
-        "coal_lump": ("Rock035", 0.0, (0.75, 0.75, 0.75), 1.0, 0.75)}
+        "coal_lump": ("Rock035", 0.0, (0.75, 0.75, 0.75), 1.0, 0.75),
+        "coal_fresh": ("Rock035", 0.0, (0.75, 0.75, 0.75), 1.0, 0.75)}   # ORE-1 캘 덩이: coal_lump 와 같고 거칠기만 0.31~0.56 (막 벌어진 결 면 — 우리 판단, 세기는 실행 파일 판정 키)
 # 석탄 둘 다 쇠(metal 1) + 짙은 회색 바탕 = 반사율 약 1.5~2 % — 보통 재질(4 %)은 헤드램프가 1 m 안에서 면마다 하얗게·주황으로 번쩍였다(판정 ③ "빛 반사가 심하다").
 # 무연탄은 "쇠 같은 짙은 회색 윤기"라 쇠로 두고 바탕을 어둡게 하면 가루는 거의 검정, 덩어리는 면 몇 개만 은은하게 (09-27). 채도 0 — Rock035 의 푸른 기가 쇠 반사에서 파란 결정처럼 보였다  # 석탄 덩어리 = 검정 + 면마다 조금 반짝 (무연탄)
 import random, math
@@ -34,8 +35,8 @@ for name, (src, sat, tint, metal, *rk) in MATS.items():
     rough = Image.open(os.path.join(CT, src + "_Roughness.jpg")).convert("L").resize(c.size).point(lambda v, k=(rk or [1.0])[0]: min(255, int(v * k)))   # 거칠기 배율 (석탄)
     Image.merge("RGB", [Image.new("L", c.size, 255), rough, Image.new("L", c.size, int(metal * 255))]).save(os.path.join(OUT, name + "_arm.jpg"), quality=92)
     shutil.copy(os.path.join(CT, src + "_NormalGL.jpg"), os.path.join(OUT, name + "_nor_gl.jpg"))
-    if name == "coal_lump":                                  # 덩어리 = 반쯤 무광 (거칠기 0.5~0.75 얼룩) + 약한 바위 노멀 — 판정 ③ "빛 반사가 심하다": 0.16 유리는 면마다 번쩍+번짐, 0.45 은박지, 0.75 고르면 회색 돌 (09-27)
-        Image.merge("RGB", [Image.new("L", c.size, 255), tile_noise(c.size[0], 16, 13, 3).point(lambda v: int(128 + v * 0.25)), Image.new("L", c.size, int(metal * 255))]).save(os.path.join(OUT, name + "_arm.jpg"), quality=95)
+    if name in ("coal_lump", "coal_fresh"):                  # 덩어리 = 반쯤 무광 (거칠기 0.5~0.75 얼룩) + 약한 바위 노멀 — 판정 ③ "빛 반사가 심하다": 0.16 유리는 면마다 번쩍+번짐, 0.45 은박지, 0.75 고르면 회색 돌 (09-27)
+        Image.merge("RGB", [Image.new("L", c.size, 255), tile_noise(c.size[0], 16, 13, 3).point(lambda v, lo=(80 if name == "coal_fresh" else 128): int(lo + v * 0.25)), Image.new("L", c.size, int(metal * 255))]).save(os.path.join(OUT, name + "_arm.jpg"), quality=95)
         nr = Image.open(os.path.join(CT, src + "_NormalGL.jpg")).convert("RGB").resize(c.size)
         Image.blend(nr, Image.new("RGB", c.size, (128, 128, 255)), 0.55).save(os.path.join(OUT, name + "_nor_gl.jpg"), quality=95)
     print(name, c.size)

@@ -38,6 +38,8 @@ public static class BuildM1
     const string MineRockMatPath = "Assets/Tunnel/Art/M11_MineRock.mat";
     const string ArtProfilePath = "Assets/Settings/M11_BoothVolume.asset";
     const string PlazaPropsPath = "Assets/Tunnel/Art/plaza_props.gltf";          // ART-1 차례 3 광장 물건 + 굴 안 둥근 통나무 동발 (blender/art/make_plaza_props.py)
+    const string OrePocketsPath = "Assets/Tunnel/Art/ore_pockets.gltf";          // ORE-1 부스 광석 자리마다 탄층 조각 ORE_<i>_Face · _Loose · _Gap (GAME=1 blender/art/make_ore.py)
+    const string OreLumpPath = "Assets/Tunnel/Art/ore_lump.gltf";                // ORE-1 빠져 굴러 나온 모난 탄 덩이 (부스만 — 복도 M1 은 옛 ore.gltf 그대로)
     // 기본 = 새 몸 m3(Meshy 부위 조립, tools/bake_m3.sh — 사용자 판정 통과 09-22). 옛 TRELLIS 몸은 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb 로 (검사 문턱은 m3 값)
     static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_m3.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
@@ -136,8 +138,10 @@ public static class BuildM1
         }
 
         // 광맥 포켓: 조각의 SLOT_Pocket_* 자리마다 POCKET_CHANCE 로 (Godot PocketSpawner.gd). 통로 쪽 = 자리에서 조각 원점 쪽
+        // ORE-1(09-27): 부스는 광석 자리마다 벽에 붙인 탄층 조각(OreFaces 의 ORE_<i>_*) — 캘 덩이 ORE_<i>_Loose 가 포켓의 mesh(MINE-1 이 밀고 기울임), 둘레 결 덩이 · 틈은 빠진 뒤에도 남는다
         var rng = new System.Random(Tuning.MAP_SEED + 100);
         var pocketsRoot = new GameObject("Pockets").transform;
+        var oreParts = booth ? Find(pieces, "OreFaces").GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First()) : new System.Collections.Generic.Dictionary<string, Transform>();
         foreach (var slot in pieces.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Pocket_")).ToArray())
         {
             if (rng.NextDouble() >= Tuning.POCKET_CHANCE)
@@ -155,10 +159,19 @@ public static class BuildM1
             go.transform.SetPositionAndRotation(slot.position + outDir * Tuning.POCKET_WALL_OUT,
                 Quaternion.Euler((float)rng.NextDouble() * 360f, (float)rng.NextDouble() * 360f, (float)rng.NextDouble() * 360f));
             go.AddComponent<SphereCollider>().radius = Tuning.POCKET_RADIUS;
-            var pocketMesh = Instance(ore, go.transform);
-            pocketMesh.transform.localScale = Vector3.one * Tuning.POCKET_MESH_SCALE;
             var pocket = go.AddComponent<OrePocket>();
-            pocket.mesh = pocketMesh.transform;
+            if (oreParts.TryGetValue(slot.name.Replace("SLOT_Pocket_", "ORE_") + "_Loose", out Transform loose))
+            {
+                loose.SetParent(go.transform, true);
+                pocket.mesh = loose;
+            }
+            else
+            {
+                if (booth) { Debug.LogError($"{slot.name} 의 ORE_*_Loose 가 없다 (GAME=1 blender/art/make_ore.py)"); EditorApplication.Exit(15); }
+                var pocketMesh = Instance(ore, go.transform);
+                pocketMesh.transform.localScale = Vector3.one * Tuning.POCKET_MESH_SCALE;
+                pocket.mesh = pocketMesh.transform;
+            }
             pocket.outDir = outDir;
         }
 
@@ -376,7 +389,8 @@ public static class BuildM1
         var mining = new GameObject("Mining");
         var fx = mining.AddComponent<MiningFx>();
         fx.player = p;
-        fx.orePrefab = ore;
+        fx.orePrefab = booth ? AssetDatabase.LoadAssetAtPath<GameObject>(OreLumpPath) : ore;
+        if (fx.orePrefab == null) { Debug.LogError($"{OreLumpPath} 를 못 읽었다 (GAME=1 blender/art/make_ore.py)"); EditorApplication.Exit(16); }
         fx.chipMeshes = chips.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh).ToArray();
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
         fx.dustMaterial = LoadOr(booth, DustMatPath, MakeDustMaterial);
@@ -455,6 +469,9 @@ public static class BuildM1
         if (plazaPrefab == null) { Debug.LogError($"{PlazaPropsPath} 를 못 읽었다 (blender/art/make_plaza_props.py)"); EditorApplication.Exit(13); }
         var plaza = Instance(plazaPrefab, map).transform;
         plaza.name = "PlazaProps";
+        var orePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(OrePocketsPath);          // ORE-1: 광석 자리 탄층 조각 (같은 좌표). 부딪힘 없음 — 길찾기 바닥에 안 들어간다
+        if (orePrefab == null) { Debug.LogError($"{OrePocketsPath} 를 못 읽었다 (GAME=1 blender/art/make_ore.py)"); EditorApplication.Exit(14); }
+        Instance(orePrefab, map).name = "OreFaces";
         foreach (var mf in plaza.GetComponentsInChildren<MeshFilter>(true).Where(f => f.name.StartsWith("COLP_")))
         {
             mf.gameObject.AddComponent<BoxCollider>();

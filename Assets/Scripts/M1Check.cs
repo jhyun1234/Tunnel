@@ -336,10 +336,12 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art")
+        if (only != "repair" && only != "art" && only != "ore")
             yield return BoothStage(cc);
         if (only == "" || only == "art")
             yield return ArtStage(cc);
+        if (only == "" || only == "ore")
+            yield return OreStage(cc);
         if (only == "" || only == "repair")
             yield return RepairStage(cc);
         if (only == "")
@@ -499,6 +501,134 @@ public class M1Check : MonoBehaviour
         Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
         ArtLook.SabDryWall = ArtLook.SabBounceDead = ArtLook.SabPropsStay = false;
         InputSystem.RemoveDevice(kb);
+    }
+
+    // ================= ORE-1 부스 광석 (제안서 docs/제안서_ORE1_벽_광석.md, 판정 ① "둘 다 넣는다" 09-27). -only ore
+    // ① ore_model: 광석 자리 30곳 모두 새 조각 — 포켓 mesh = ORE_<i>_Loose · 둘레 결 덩이 ORE_<i>_Face 가 0.8 m 안 · 캘 덩이 뒤 0.2 m 안에 벽 ·
+    //    굴러 나올 덩이 = ore_lump · 광석 삼각형 ≤ ORE_TRIS_MAX
+    // ② ore_on_coal: 광석 자리마다 둘레 0.5 m 벽 점 중 광석 띠 칠(art UV x > 1.5) 몫 ≥ ORE_COAL_MIN (make_booth ore_bands, 30° 띠)
+    // ③ ore_shine_key: Shift+. 이 광석 재질 거칠기만 ÷ 1.25 (괴물 살 거칠기 [, .] 는 그대로) · 캡처 28_ore_<kr|grid>_<close|near> (사람이 볼 것)
+    // ④ ore_mine_booth: 부스 광석 하나를 누르고 있기로 캔다 — 콱마다 보이는 캘 덩이가 밀려 나오고(≥ 3 cm) 빠지면 결 덩이 · 틈은 남고 모난 덩이가 구름
+    // 사보타주: tinyore(한도 1000 → ①) · floatore(캘 덩이 0.5 m 띄움 → ①) · nocoal(맵 석탄 칠 0 → ②) · glueore(포켓 mesh 를 빈 것으로 — 보이는 덩이가 안 움직임 → ④)
+    IEnumerator OreStage(CharacterController cc)
+    {
+        int Idx(OrePocket p) => int.TryParse(p.mesh.name.Split('_').ElementAtOrDefault(1), out int n) ? n : -1;
+        var pockets = FindObjectsByType<OrePocket>(FindObjectsSortMode.None).OrderBy(p => Idx(p) < 0 ? 999 : Idx(p)).ToList();
+        var faces = Slot("OreFaces");
+        Transform Part(int i, string what) => faces.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == $"ORE_{i}_{what}");
+        if (sabotageName == "floatore") { foreach (var p in pockets) p.mesh.position += p.outDir * 0.5f; Physics.SyncTransforms(); }
+
+        // ①
+        var bad = new List<string>(); long tri = 0;
+        foreach (var r in faces.GetComponentsInChildren<MeshFilter>(true).Concat(pockets.SelectMany(p => p.mesh.GetComponentsInChildren<MeshFilter>(true))))
+            for (int s = 0; s < r.sharedMesh.subMeshCount; s++) tri += r.sharedMesh.GetIndexCount(s) / 3;
+        float worstGap = 0f;
+        foreach (var p in pockets)
+        {
+            int i = Idx(p); var face = i > 0 ? Part(i, "Face") : null; var gap = i > 0 ? Part(i, "Gap") : null;
+            var lr = p.mesh.GetComponentInChildren<Renderer>();
+            if (!p.mesh.name.EndsWith("_Loose") || face == null || gap == null || lr == null) { bad.Add($"{p.mesh.name}: parts"); continue; }
+            if (Vector3.Distance(face.position, p.transform.position) > 0.8f) bad.Add($"{p.mesh.name}: face {Vector3.Distance(face.position, p.transform.position):F2} m away");
+            Vector3 c = lr.bounds.center, o = c + p.outDir * 0.3f;
+            var hits = Physics.RaycastAll(o, -p.outDir, 0.8f, ~(1 << 2), QueryTriggerInteraction.Ignore).Where(h => h.collider.GetComponentInParent<OrePocket>() == null).OrderBy(h => h.distance).ToList();
+            float wall = hits.Count > 0 ? hits[0].distance - 0.3f : 9f;          // 캘 덩이 가운데에서 벽까지 (벽 겉 ≈ 가운데 · 앞면은 9 cm 바깥)
+            worstGap = Mathf.Max(worstGap, Mathf.Abs(wall));
+            if (Mathf.Abs(wall) > 0.2f) bad.Add($"{p.mesh.name}: wall {wall:F2} m behind");
+        }
+        long triMax = sabotageName == "tinyore" ? 1000 : Tuning.ORE_TRIS_MAX;
+        string lumpName = MiningFx.I.orePrefab != null ? MiningFx.I.orePrefab.name : "-";
+        Check("ore_model", pockets.Count == 30 && bad.Count == 0 && tri <= triMax && lumpName == "ore_lump",
+            $"pockets {pockets.Count} (want 30) · kr {pockets.Count(p => Idx(p) % 2 == 1)} grid {pockets.Count(p => Idx(p) > 0 && Idx(p) % 2 == 0)} · tris {tri} (≤ {triMax}) · worst loose-to-wall {worstGap:F2} m (≤ 0.2) · dropped ore '{lumpName}' · bad {bad.Count} {string.Join(" · ", bad.Take(4))}");
+
+        // ②
+        var art = ArtLook.Instance;
+        var wallPts = pockets.Select(p => p.transform.position - p.outDir * Tuning.POCKET_WALL_OUT).ToArray();
+        int[] near = new int[wallPts.Length], coal = new int[wallPts.Length]; int noUv = 0;
+        foreach (var r in art != null ? art.renderers : new Renderer[0])
+        {
+            var mf = r.GetComponent<MeshFilter>(); if (mf == null) continue;
+            var m = mf.sharedMesh; var uv = new List<Vector2>(); m.GetUVs(1, uv);
+            if (uv.Count == 0) { noUv++; continue; }
+            if (sabotageName == "nocoal") { for (int k = 0; k < uv.Count; k++) uv[k] = new Vector2(0f, uv[k].y); m.SetUVs(1, uv); }
+            var v = m.vertices; var nr = m.normals; var mw = r.transform.localToWorldMatrix;
+            for (int k = 0; k < v.Length; k++)
+            {
+                Vector3 w = mw.MultiplyPoint3x4(v[k]);
+                if (mw.MultiplyVector(nr[k]).normalized.y > 0.6f) continue;                            // 바닥 빼고
+                for (int j = 0; j < wallPts.Length; j++)
+                    if ((w - wallPts[j]).sqrMagnitude < 0.25f) { near[j]++; if (uv[k].x > 1.5f) coal[j]++; }   // x 1..2 = 광석 자리 띠 (x ≤ 1 = ART-1 무작위 띠)
+            }
+        }
+        var frac = near.Select((n, j) => n > 0 ? (float)coal[j] / n : 0f).ToArray();
+        int worst = frac.Length > 0 ? System.Array.IndexOf(frac, frac.Min()) : -1;
+        Check("ore_on_coal", art != null && noUv == 0 && frac.Length == 30 && frac.All(f => f >= Tuning.ORE_COAL_MIN),
+            $"coal share within 0.5 m of each pocket: min {(worst >= 0 ? frac[worst] : 0f):F2} at {(worst >= 0 ? pockets[worst].mesh.name : "-")} · mean {(frac.Length > 0 ? frac.Average() : 0f):F2} (want ≥ {Tuning.ORE_COAL_MIN:F2}) · wall verts counted {near.Sum()} · renderers without art UV {noUv}");
+
+        // ③ 반짝임 키 + 사람이 볼 캡처
+        var kb = InputSystem.AddDevice<Keyboard>("OreKeyboard");
+        var hud = GetComponent<DevHud>();
+        var look = stalker.GetComponentInChildren<StalkerLook>();
+        float lookRough0 = look != null ? look.roughMul : 0f;
+        var fresh = pockets[0].mesh.GetComponentInChildren<Renderer>();
+        float r0 = fresh.sharedMaterial.GetFloat("roughnessFactor");
+        bool hudWas = hud != null && hud.enabled;
+        if (hud != null) hud.enabled = true;                                  // 검사 중엔 DevHud 가 꺼져 있다 (AnimStage ⑦ 과 같이 켜고 누른다)
+        yield return null;
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftShift)); yield return null;
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftShift, Key.Period)); yield return null; yield return null;
+        InputSystem.QueueStateEvent(kb, new KeyboardState()); yield return null;
+        float r1 = fresh.sharedMaterial.GetFloat("roughnessFactor");
+        bool lookSame = look == null || Mathf.Approximately(look.roughMul, lookRough0);
+        Check("ore_shine_key", hud != null && Mathf.Abs(hud.oreShine - Tuning.ORE_SHINE * 1.25f) < 1e-3f && Mathf.Abs(r1 - Mathf.Clamp(r0 / 1.25f, 0.05f, 1f)) < 1e-3f && lookSame && fresh.sharedMaterial.name.Contains("coal_fresh"),
+            $"Shift+. → shine x{(hud != null ? hud.oreShine : 0f):F2} · loose roughness {r0:F3} → {r1:F3} (want ÷ 1.25) · material '{fresh.sharedMaterial.name}' · monster skin rough x unchanged {lookSame}");
+        if (hud != null) { hud.oreShine = Tuning.ORE_SHINE; hud.ApplyOreShine(); hud.enabled = hudWas; }
+        InputSystem.RemoveDevice(kb);
+        lamp.lampOn = true;
+        foreach (var (tag, pk) in new[] { ("kr", pockets.First(p => Idx(p) % 2 == 1)), ("grid", pockets.First(p => Idx(p) > 0 && Idx(p) % 2 == 0)) })
+            foreach (var (shot, m) in new[] { ("close", 1.0f), ("near", 1.9f) })
+            {
+                Vector3 at = OnNav(pk.transform.position + pk.outDir * m, 1.5f);
+                Teleport(cc, at + Vector3.up * 0.1f, Quaternion.LookRotation(-pk.outDir).eulerAngles.y);
+                yield return new WaitForSeconds(0.4f);
+                Vector3 d = pk.transform.position - pickaxe.cam.position;
+                player.Pitch = -Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
+                yield return Capture($"28_ore_{tag}_{shot}", _ => { });
+            }
+        player.Pitch = 0f;
+
+        // ④ 부스 광석 하나를 캔다 (걷는 바닥이 1.8 m 앞에 있는 자리)
+        if (!pickaxe.hasPick) pickaxe.Return();
+        pickaxe.durability = Tuning.PICK_DURABILITY_MAX;
+        var pk4 = pockets.OrderBy(p => (OnNav(p.transform.position + p.outDir * 1.8f, 1.5f) - (p.transform.position + p.outDir * 1.8f)).sqrMagnitude).First();
+        int i4 = Idx(pk4); var loose4 = pk4.mesh.GetComponentInChildren<Renderer>();
+        if (sabotageName == "glueore") { var glue = new GameObject("ORE_glue").transform; glue.SetParent(pk4.transform, false); pk4.mesh = glue; }
+        Vector3 stand = OnNav(pk4.transform.position + pk4.outDir * 1.8f, 1.5f);
+        Teleport(cc, stand + Vector3.up * 0.1f, Quaternion.LookRotation(-pk4.outDir).eulerAngles.y);
+        yield return new WaitForSeconds(0.5f);
+        Vector3 aim = pk4.transform.position - pickaxe.cam.position;
+        player.Pitch = -Mathf.Atan2(aim.y, new Vector2(aim.x, aim.z).magnitude) * Mathf.Rad2Deg;
+        yield return null;
+        var mouse = InputSystem.AddDevice<Mouse>("OreMouse");
+        Vector3 p0 = loose4.bounds.center, out4 = pk4.outDir; float slide = 0f;
+        var oresBefore = new HashSet<Ore>(FindObjectsByType<Ore>(FindObjectsSortMode.None));
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        float t4 = 0f;
+        for (; pk4 != null && t4 < 9f; t4 += Time.deltaTime)
+        {
+            if (loose4 != null) slide = Mathf.Max(slide, Vector3.Dot(loose4.bounds.center - p0, out4));
+            yield return null;
+        }
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return new WaitForSeconds(0.8f);
+        InputSystem.RemoveDevice(mouse);
+        var dropped = FindObjectsByType<Ore>(FindObjectsSortMode.None).FirstOrDefault(o => !oresBefore.Contains(o));
+        var dropMf = dropped != null ? dropped.GetComponentInChildren<MeshFilter>() : null;
+        string dropMesh = dropMf != null && dropMf.sharedMesh != null ? dropMf.sharedMesh.name : "-";
+        var face4 = Part(i4, "Face"); var gap4 = Part(i4, "Gap");
+        bool popped = pk4 == null;
+        Check("ore_mine_booth", popped && slide >= 0.03f && face4 != null && face4.gameObject.activeInHierarchy && gap4 != null && dropped != null,
+            $"ORE_{i4} popped {popped} in {t4:F1} s · visible loose block slid {slide * 100f:F1} cm out before popping (want ≥ 3) · face left {face4 != null && face4.gameObject.activeInHierarchy} · gap left {gap4 != null} · dropped ore mesh '{dropMesh}'");
+        player.Pitch = 0f;
     }
 
     // ================= REP-1 고칠 곳 (제안서 docs/제안서_REP1_고칠_곳.md, 승인 09-26)
