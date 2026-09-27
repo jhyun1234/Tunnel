@@ -174,6 +174,54 @@ public static class Tuning
     public const float MINE_RANGE = 3.0f;          // m
     // 초, 휘두르기 한 번 전체(들기 + 내려치기 + 멈춤 + 되돌리기). 연타해도 이보다 빠르지 않다. Godot 0.35 = 내려치기 + 되돌리기
     public static float MINE_COOLDOWN => PICK_WINDUP_TIME + PICK_DOWN_TIME + PICK_HITSTOP_TIME + PICK_UP_TIME;
+    // ---- MINE-1 캐기 연출 (제안서 docs/제안서_MINE1_캐기_연출.md, 승인 09-27). 좌클릭을 누르고 있으면 "한 묶음": 콱 여럿 → 박힌 채 당겨 비틀기 → 덩이 빠짐 → 긁기.
+    // 박자는 실제 영상에서 잰 값 (조사 11 docs/기획서/조사/11_광질_동작.md). 포켓 체력이 곧 진행 — 손을 떼도 남는다. 괴물을 칠 때만 옛 빠른 휘두르기(PICK_*)
+    // 한 번 치기 = 들기 · 꼭대기 멈춤 · 내려치기(끝 = 콱) · 박힌 채 버팀 · 빼기 (s)
+    public static readonly float[] MINE_STRIKE_STAND = { 0.40f, 0.15f, 0.15f, 0.45f, 0.10f };   // 서서, 머리 위로 크게 = 1.25 s (한국① 태백 간격 1.1~1.4)
+    public static readonly float[] MINE_STRIKE_CROUCH = { 0.25f, 0.00f, 0.12f, 0.30f, 0.08f };  // 쪼그려, 귀 높이까지 = 0.75 s (파키스탄 0.7~0.95 · 영국 Pathé 0.55~0.8)
+    public const int MINE_STRIKES_STAND = 3;
+    public const int MINE_STRIKES_CROUCH = 5;
+    public const float MINE_PRY_STAND = 0.9f;      // s, 박힌 채 자루를 당겨 비틀기 (인도 0.8~1.1 · 한국① 33 s)
+    public const float MINE_PRY_CROUCH = 0.5f;     // s, 틈에 끼워 수평으로 당김 (파키스탄 8:40)
+    public const float MINE_FALL_S = 0.6f;         // s, 덩이가 떨어지고 가루 (한국① 0.3~0.6 · 이탈리아 0.6)
+    public const float MINE_SCRAPE_STAND = 1.0f;   // s, 날 눕혀 긁기 (한국① 1.0) — 사용자 09-27 "넣는다"
+    public const float MINE_SCRAPE_CROUCH = 0.8f;
+    public const float MINE_LOWER_S = 0.2f;        // s, 떼면 곡괭이를 내리는 시간
+    public const float MINE_LOW_M = 0.8f;          // m, 광석 가운데가 발 위 이보다 낮으면 쪼그려 캐기 (Ctrl 로 숙여도 쪼그려)
+    public const float MINE_TEMPO = 1.0f;          // 묶음 시간 배율 — 판정 키 숫자패드 7 · 8
+    public const float MINE_NOISE_SOFT = 6.0f;     // m, 평소 콱 소리 (걷기 발걸음과 같다). 미끄러진 '쨍' 만 NOISE_PICK
+    public const float MINE_SLIP_CHANCE = 0.35f;   // 묶음마다 미끄러질 조짐 확률 — 판정 키 숫자패드 1 · 2
+    public const float MINE_SLIP_WARN_S = 0.8f;    // s, 조짐(꼭대기에서 떨림) — 이 안에 떼었다 다시 누르면 고쳐 잡기, 계속 누르면 '쨍'
+    public const float MINE_SLIP_WOBBLE_DEG = 4f;  // 조짐 떨림 각
+    public const float MINE_WEAR_BUNDLE = 2f;      // 한 묶음 닳음 — "캐기 30 번 = 60" (UI-1a) 그대로. 콱마다 나눈다
+    public const float MINE_WEAR_SLIP = 1f;        // 미끄러지면 더
+    public const float MINE_LOOK_YAW_DEG = 60f;    // 캐는 동안 고개 좌우 한계 (몸은 멈춤) — 판정 키 숫자패드 / · *
+    public const float MINE_LOOK_PITCH_DEG = 30f;
+    public const float MINE_PRY_LEAN_DEG = 2f;     // 비틀 때 머리가 앞으로 기우는 각 (The Long Dark 멀미 불평 — 작게)
+    public const float MINE_POCKET_SLIDE_M = 0.06f;   // 콱이 다 차면 광석이 벽에서 밀려 나온 거리 (진행이 보이게, 되돌아가지 않음)
+    public const float MINE_PRY_TILT_DEG = 25f;    // 비틀 때 덩이가 기우는 각 (파키스탄: 1.8 s 기울다 쿵)
+    public static float MineWearPerStrike(bool crouch) => MINE_WEAR_BUNDLE / (crouch ? MINE_STRIKES_CROUCH : MINE_STRIKES_STAND);
+    // 곡괭이 자세(뷰모델 노드: 카메라 기준 자리 · X 기울기 °). 쉴 때는 PICK_POS · PICK_TILT_DEG. 날은 앞(벽)을 본다 — 기울기가 클수록 날 끝이 아래로
+    // 값은 화면 위 목표로 계산했다(09-27, 시야 80° · 16:9 — 캡처 30_mine_stand_*): 콱 = 날 끝이 화면 가운데 조금 아래, 손 자리는 화면 오른쪽 아래 끝(눈 앞 0.3 m),
+    // 긁기 = 날이 화면 아래쪽. 휘두르는 판을 MINE_SWING_YAW 만큼 옆으로 돌렸다 — 오른쪽 어깨 위에서 비스듬히 내려친다(실제 영상), 날 옆모습이 화면에 0.28 → 0.48 보인다
+    // (날이 벽 쪽을 곧게 보면 1인칭에선 머리가 뒤에서만 보였다 — PICK-1 판정 ① 에서 알게 된 것)
+    public const float MINE_SWING_YAW = -35f;
+    public static readonly Vector3 MINE_RAISE_POS = new Vector3(0.24f, 0.10f, 0.26f);    // 서서 머리 위로 — 손은 화면 오른쪽 위, 머리는 뒤로 나간다
+    public const float MINE_RAISE_TILT = -110f;
+    public static readonly Vector3 MINE_RAISE_POS_LOW = new Vector3(0.32f, -0.24f, 0.42f);   // 쪼그려, 귀 높이까지만 — 머리가 화면 오른쪽 위에 걸린다
+    public const float MINE_RAISE_TILT_LOW = -30f;
+    public static readonly Vector3 MINE_HIT_POS = new Vector3(0.24f, -0.22f, 0.30f);     // 콱 — 날 끝 화면 (−0.05, −0.09) · 머리 0.58 m 앞 · 손 자리 (0.54, −0.87)
+    public const float MINE_HIT_TILT = 34f;
+    public static readonly Vector3 MINE_PRY_POS = new Vector3(0.28f, -0.30f, 0.36f);     // 박힌 채 자루를 아래·몸 쪽으로 당김 — 날 끝은 조금만 내려간다
+    public const float MINE_PRY_TILT = 36f;
+    public static readonly Vector3 MINE_SCRAPE_POS = new Vector3(0.28f, -0.30f, 0.34f);  // 날을 눕혀 발 앞을 긁어 몸 쪽으로 (날 끝 화면 −0.58 → −0.76)
+    public static readonly Vector3 MINE_SCRAPE_END = new Vector3(0.22f, -0.26f, 0.28f);
+    public const float MINE_SCRAPE_TILT = 60f;
+    public const float MINE_SCRAPE_TILT_END = 72f;
+    // 손 잡는 자리 (3D-P 가 따라간다). 곡괭이 그물 좌표 — 원점 = 자루 끝에서 15 cm, 자루 = +Y
+    public static readonly Vector3 GRIP_REAR = new Vector3(0f, -0.10f, 0f);    // 자루 끝에서 5 cm (모든 영상: 뒷손은 늘 자루 끝)
+    public static readonly Vector3 GRIP_FRONT = new Vector3(0f, 0.15f, 0f);    // 자루 끝에서 30 cm (파키스탄·인도 앞손 20~35 cm)
+
     public const float HIT_RECOIL = 0.12f;         // m, 맞은 포켓이 밀리는 거리
     public const float HIT_RECOIL_TIME = 0.10f;
     public const float CHUNK_SPIN = 4.0f;          // rad/s
@@ -253,7 +301,7 @@ public static class Tuning
     public const float PICK_BREAK_LIFE = 1.5f;     // s, 바닥에 놓였다가 줄어들며 사라지기까지
     public const float PICK_BREAK_SCALE = 0.5f;    // 자갈 메시 기준 크기 — 1.0 이면 0.6 m 앞이라 곡괭이 머리보다 크게 보였다(09-16 캡처)
     // 소음. 반경 m
-    public const float NOISE_PICK = 25.0f;         // 곡괭이가 포켓에 닿은 타격
+    public const float NOISE_PICK = 25.0f;         // 곡괭이 큰 소리: MINE-1 미끄러짐 '쨍' (평소 콱은 MINE_NOISE_SOFT). 괴물 살 소리·타격음 3D 거리도 이 값
     public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간
     public const float NOISE_HUD_PX_PER_M = 2.0f;  // 반경 1 m 당 지름 px
     // ---- S1 발소리·착지음 (제안서 S1, 설계서 sound_design.md Step 2·7). 반경·간격은 Godot Tuning.gd STANCE 표 그대로 ----

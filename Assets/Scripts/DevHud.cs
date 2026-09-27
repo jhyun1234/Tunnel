@@ -66,6 +66,7 @@ public class DevHud : MonoBehaviour
             stalker.enabled = false;
             PlaceAhead(2.5f);
         }
+        MineKeys(kb);
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
         if (kb.digit2Key.wasPressedThisFrame) lamp.darkAdaptAmbient *= 1.25f;
         if (kb.digit3Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(-10f);   // 곡괭이 내구도 (UI-1a, 설계서 Step 6)
@@ -174,6 +175,28 @@ public class DevHud : MonoBehaviour
     string CreviceLine() => Crevice.All.Count == 0 ? "" :
         $"\nsqueeze into a closed crevice {player.squeezeS:0.00} s (SQUEEZE_S {Tuning.SQUEEZE_S:0.00}) [F7 F8] · through crevices {player.SqueezeTime(Crevice.All.Where(c => c.through).Min(c => c.Length)):0.0}~{player.SqueezeTime(Crevice.All.Where(c => c.through).Max(c => c.Length)):0.0} s · side turn {player.squeezeTurnDeg:0}° (SQUEEZE_TURN_DEG {Tuning.SQUEEZE_TURN_DEG:0}) [F9 F10] · E {(player.Squeezing ? "SQUEEZING" : Crevice.Find(player.transform.position, player.transform.forward, out _, out _) ? "READY" : "-")}";
 
+    // MINE-1 판정 손잡이: 받은 숫자를 Tuning.MINE_TEMPO · MINE_SLIP_CHANCE · MINE_LOOK_YAW_DEG 에
+    void MineKeys(Keyboard kb)
+    {
+        if (pickaxe == null) return;
+        if (kb.numpad7Key.wasPressedThisFrame) { pickaxe.tempo = Mathf.Max(0.3f, pickaxe.tempo * 0.9f); show = true; }
+        if (kb.numpad8Key.wasPressedThisFrame) { pickaxe.tempo = Mathf.Min(3f, pickaxe.tempo * 1.1f); show = true; }
+        if (kb.numpad1Key.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Max(0f, Mathf.Round((pickaxe.slipChance - 0.1f) * 100f) / 100f); show = true; }
+        if (kb.numpad2Key.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Min(1f, Mathf.Round((pickaxe.slipChance + 0.1f) * 100f) / 100f); show = true; }
+        if (kb.numpadDivideKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Max(0f, pickaxe.lookYaw - 10f); show = true; }
+        if (kb.numpadMultiplyKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Min(180f, pickaxe.lookYaw + 10f); show = true; }
+    }
+
+    string MineLine() => pickaxe == null ? "" :
+        $"\nmine {(pickaxe.Mining ? $"{pickaxe.minePhase.ToUpper()} {(pickaxe.mineCrouch ? "crouch" : "stand")}" : "-")}  tempo x{pickaxe.tempo:0.00} (stand bundle {StandBundle(pickaxe.tempo):0.0} s) [num 7 8]  slip {pickaxe.slipChance * 100f:0}% [num 1 2]  look ±{pickaxe.lookYaw:0}° [num / *]  strike {pickaxe.softNoise:0} m · slip {Tuning.NOISE_PICK:0} m  bundles {pickaxe.bundles} slips {pickaxe.slips} regrips {pickaxe.regrips}";
+
+    static float StandBundle(float tempo)
+    {
+        float s = 0f;
+        foreach (float x in Tuning.MINE_STRIKE_STAND) s += x;
+        return tempo * (s * Tuning.MINE_STRIKES_STAND + Tuning.MINE_PRY_STAND + Tuning.MINE_FALL_S + Tuning.MINE_SCRAPE_STAND);
+    }
+
     string RepairLine() => repairs == null ? "" :
         $"\nrepair broken {Repairable.All.Count(r => r.broken)}/{Repairable.All.Count} fixed {Repairable.FixedCount}  {(player.Repairing ? $"FIXING {player.repairing.kind} {player.repairing.progress * 100f:0}%" : "")}  time x{Repairable.timeMul:0.00} [F3 F4] (timber {Tuning.RepairTime("timber") * Repairable.timeMul:0.0} s)  break every {repairs.breakEvery:0} s [F11 F12]  break nearest [F2]   money ore {Economy.Ore:0} + repair {Economy.Repair:0} = {Economy.Total:0}";
 
@@ -201,10 +224,10 @@ public class DevHud : MonoBehaviour
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
             (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J])\nhead test {StalkerAnim.HeadTestName(an.headTest)} [G]  face {an.HeadYaw:0}° (max {an.headYawMax:0}° [T Y])  tilt {an.HeadTiltNow:0}° (listen {an.headTilt:0}° [O P])\nneck out {an.NeckOutNow * 100f * Tuning.STALKER_MODEL_SCALE:0} cm in game (model {an.NeckOutNow * 100f:0} of {an.neckWant * 100f:0} cm [Z X], max {Tuning.STALKER_NECK_OUT_MAX_M * 100f:0})  full out in {an.neckOutS:0.00} s [C B]{(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
             (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   neck red {lk.neckRed:0.0} [I M] bright x{lk.neckBright:0.00} [Q R]\n{LureLine(lk)}   [9] freeze monster in front of me · [0] on/off" : "");
-        GUI.Label(new Rect(10, 10, 1100, 290),
+        GUI.Label(new Rect(10, 10, 1100, 330),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
     }
 }

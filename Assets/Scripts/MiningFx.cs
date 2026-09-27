@@ -120,7 +120,11 @@ public class MiningFx : MonoBehaviour
     }
 
     // 곡괭이 타격음. 맞은 자리에서 나는 3D 소리 — 소음 반경(NOISE_PICK)에서 0 이 된다
-    public void HitSound(Vector3 at, bool breaking)
+    public void HitSound(Vector3 at, bool breaking) =>
+        PickSound(at, breaking ? 1f : Tuning.HIT_VOLUME, breaking ? Tuning.HIT_BREAK_PITCH : 1f + Random.Range(-Tuning.HIT_PITCH_JITTER, Tuning.HIT_PITCH_JITTER));
+
+    // 같은 곡괭이 소리 파일을 크기·높이만 바꿔 튼다 — MINE-1 미끄러질 조짐(작고 높게 딸각) · 미끄러짐 '쨍'(크고 높게). 소리 파일 바꾸기는 SND-P
+    public void PickSound(Vector3 at, float volume, float pitch)
     {
         if (hitClips == null || hitClips.Length == 0)
             return;
@@ -132,8 +136,8 @@ public class MiningFx : MonoBehaviour
         src.rolloffMode = AudioRolloffMode.Linear;
         src.minDistance = Tuning.HIT_MIN_DISTANCE;
         src.maxDistance = Tuning.NOISE_PICK;
-        src.volume = breaking ? 1f : Tuning.HIT_VOLUME;
-        src.pitch = breaking ? Tuning.HIT_BREAK_PITCH : 1f + Random.Range(-Tuning.HIT_PITCH_JITTER, Tuning.HIT_PITCH_JITTER);
+        src.volume = volume;
+        src.pitch = pitch;
         src.Play();
         Destroy(go, src.clip.length / src.pitch + 0.1f);
     }

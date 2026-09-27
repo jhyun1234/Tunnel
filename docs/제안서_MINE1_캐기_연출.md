@@ -1,6 +1,6 @@
 # 제안서 MINE-1 — 좌클릭 누르고 있기 캐기 연출 (실제 광질 박자 · 실수하면 큰 소리)
 
-옆 가지 `pick-hands`(작업 폴더 `Tunnel/unity-pick`), 2026-09-27. **승인(09-27) — 구현 중.**
+옆 가지 `pick-hands`(작업 폴더 `Tunnel/unity-pick`), 2026-09-27. **승인(09-27) → 구현 끝, 실행 파일 판정 대기.**
 
 **왜** — 사용자(PICK-1 판정 ②, 09-27): "곡괭이질을 할 때 그냥 곡괭이를 까딱까딱 하는 걸로는 재미가 없다. 좌클릭을 누르고 있을 때 광질(실제 광질을 하는 영상 참조)하는 모습을 연출로 보여주게 하고싶다." 앞선 요청(09-26): "광석을 곡괭이질 두 번으로 캐는 것은 안 된다 — 누르면서 캐는 연출, 보여지는 연출은 최소 5~8초" · (09-27) "곡괭이로 광물을 콱 콱 콱 캐는 연출 · 먼지가 튀는 것도 현실적으로".
 **하나씩 낸다.** 이번 MINE-1 = 광석 캐기 동작·규칙. 번호만: **3D-P** 손·팔(이 곡괭이 동작의 손 잡는 자리를 따라가게) · **SND-P** 곡괭이질 소리(지금 Kenney 소리 그대로) · **ORE-1** 벽 광석 모양(main 차례).
@@ -124,3 +124,11 @@
 - 1 → 평소 콱 6 m · 조짐 35 % · 고쳐 잡기 0.8 s 그대로, 판정 키도 제안대로(빠르기 · 확률 · 고개).
 - 2 → **'쨍' = 25 m 소리 한 번**(괴물 규칙 그대로: 한 번 = 소리 쪽으로 한 칸 다가옴 · 3 s 안에 같은 자리에서 또 나면 그 자리까지). `Stalker.cs` 는 안 고친다. 검사 `mine_slip_loud` 는 "그 자리로 옴" → "한 칸 다가옴(소리 쪽으로 움직임, 그 자리까지는 안 감)"으로.
 - 3 → 긁기 1.0 s 넣는다.
+
+## 구현 (09-27)
+- **`Pickaxe.cs`** — `Mine()` 한 묶음: 들기 → 꼭대기 → (조짐) → 내려치기 → 콱(`StrikeOre`: 포켓 체력 − POCKET_HEALTH ÷ 콱 수, 소리 `MINE_NOISE_SOFT` 6 m "pick", 닳음 `MineWearPerStrike`) → 박힌 채 버팀 → 빼기, 체력 0 이면 비틀기(`OrePocket.Pry` 기울기 · 머리 앞으로 2°) → `Pop` → 긁기 → 내리기. 손을 떼면 그 자리에서 멈추고 내린다(덩이가 떨어지는 0.6 s 만 끝까지). 조짐: 꼭대기에서 떨림(4°) + 작고 높은 딸각(같은 Kenney 소리 0.3 · 1.9배) — 0.8 s 안 떼었다 다시 누르면 `regrips`, 떼고 안 누르면 멈춤, 계속 누르면 `Slip`('쨍' `NOISE_PICK` "pick_slip" 한 번, 진행 없음, 닳음 1, 옆으로 튕김). 괴물을 겨냥하면 옛 `Swing`. 자세는 묶음 시작 때 카메라 기준 → 고개를 돌려도 곡괭이는 광석을 친다. 손 잡는 자리 `GRIP_Rear`(자루 끝 5 cm) · `GRIP_Front`(30 cm)를 그물 밑 빈 점으로.
+- **자세 값은 화면 위 목표로 계산**(시야 80° · 16:9): 콱 = 날 끝이 화면 (−0.05, −0.09), 손 자리 화면 오른쪽 아래 끝(눈 앞 0.3 m). 첫 값(날이 벽 쪽을 곧게)은 캡처에서 머리가 뒤에서만 보여 **휘두르는 판을 35° 옆으로**(오른쪽 어깨 위에서 비스듬히 — 영상과 같다) → 날 옆모습이 화면에 0.28 → 0.48. 캡처 `build/Tunnel/check/30_mine_stand_*` · `31_mine_crouch_*`.
+- **`OrePocket.cs`** — 콱마다 벽에서 밀려 나옴(`MINE_POCKET_SLIDE_M` × 진행, 되돌아가지 않음) · `Pry(u)` 기울기 25° · `Pop` 공개 · 체력 1e-3 밑은 0(50 ÷ 3 을 세 번 빼면 0.00001 이 남아 콱이 하나 더 들어갔다 — 첫 검사가 잡음). **`Player.cs`** — `BeginMine/EndMine`: 몸 멈춤(W 안 먹음 · 점프·틈·고치기 막음), 고개 좌우 `lookYaw` · 위아래 30°, 낮은 광석이면 쪼그려, `mineLean`. **`MiningFx.PickSound`**(크기·높이만 바꿔 트는 곡괭이 소리). **`DevHud`** 숫자패드 7 8 · 1 2 · / * + 한 줄. **`Tuning`** `MINE_*` · `GRIP_*` · `NOISE_PICK` 주석. 기획서 7-1 표 고침.
+- **검사(배포물)**: Mining 구간 `mine_hold_pops_standing`(콱 3 · 간격 1.27 · 빠짐 4.65 s 근처) · `mine_soft_noise_6m` · 새 `MineStage`(`-only mine`) 8: `mine_grip_points` · `mine_crouch_short`(간격 0.77 · 눈 1.00) · `mine_release_keeps_progress`(16.7 남고 다시 콱 1) · `mine_look_limited`(60.0° · 몸 0 m) · `mine_slip_loud`(쨍 1 · 15 m 괴물 5.9 m 다가와 9.5 m 앞에서 멈춤) · `mine_slip_regrip_quiet` · `mine_wear_per_bundle`(2.00 / 3.00) · `mine_monster_quick_swing`(0.21 s). 바꾼 옛 검사: `pocket_breaks_on_2nd_hit` · `pick_noise_25m` · `swing_interval_max3_per_s` → 위로, `pick_wears_per_landed_hit`(콱마다 2/3) · `pick_shakes_below_15`(자리 대신 떨림 크기) · `pick_breaks_at_zero` · Hud(1.0 s 누름) · Stalker 구간 소리는 '쨍' 을 포켓 자리에서 직접(괴물 규칙 검사 그대로). 검사 동안 조짐 확률 0(MineStage 만 1).
+- **사보타주 FAIL 확인**: `minefast`(콱 0 · 0.86 s 에 빠짐 · 25 m) · `loudsoft`(25 m) · `onehit`(콱 2 에 빠짐) · `noslip`(조짐 0 → 쨍·고쳐 잡기·닳음 3 셋 다 FAIL) · `lookfree`(144°) · `resetprogress`(떼니 50 으로).
+- **전체 `build.sh`(배포물)**: PASS 172 · FAIL 1 `booth_walk_route`(부스 걷기 봇이 마지막 귀환에서 시간 안에 못 옴 — 86 s 걸림, 곡괭이 안 씀) → 부스 구간만 다시 = **ALL PASS 21**(69 s). 느릴 때 흔들리는 검사로 적어 둔다.

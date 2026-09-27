@@ -29,7 +29,13 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public float squeezeMul = 1f;      // 사보타주 squeezelong 이 2 로 — 정한 시간보다 오래 걸리는 상태
     [System.NonSerialized] public float squeezeLower;         // 0~1, 곡괭이를 내린 정도 (Pickaxe 가 본다)
     public bool Squeezing => sqRoute != null;
-    public bool Busy => frozen || Squeezing || Repairing;     // 곡괭이 던지기·줍기가 안 먹는다
+    public bool Busy => frozen || Squeezing || Repairing || mineLock;     // 곡괭이 던지기·줍기가 안 먹는다
+    // MINE-1 캐기 (Pickaxe.Mine 이 켜고 끈다): 몸은 멈추고 고개만 시작 방향에서 좌우 mineYawLimit · 위아래 MINE_LOOK_PITCH_DEG. 낮은 광석이면 쪼그려 앉는다.
+    // 비틀 때 머리가 mineLean 만큼 앞으로 기운다
+    [System.NonSerialized] public bool mineLock;
+    [System.NonSerialized] public float mineLean;
+    bool mineCrouch;
+    float mineYaw0, minePitch0, mineYawLimit;
     // REP-1 고치기: 망가진 고칠 곳을 바라보고 E 를 누르고 있는 동안 (못 걷는다, 곡괭이는 내린다 — 손 동작은 3D-P 뒤)
     [System.NonSerialized] public Repairable repairing;
     public bool Repairing => repairing != null;
@@ -50,6 +56,20 @@ public class Player : MonoBehaviour
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
 
     public void AddOre(int count) { ore += count; Economy.AddOre(count); }
+
+    public void BeginMine(bool low, float yawLimit)
+    {
+        mineLock = true;
+        mineCrouch = low;
+        mineYaw0 = transform.eulerAngles.y;
+        minePitch0 = pitch;
+        mineYawLimit = yawLimit;
+        velocity.x = velocity.z = 0f;
+    }
+
+    public void EndMine() { mineLock = false; mineCrouch = false; mineLean = 0f; }
+    public float Pitch => pitch;                                                                           // 검사가 읽는다 (위아래 시점 °, + = 아래)
+    public float MineYawOffset => mineLock ? Mathf.DeltaAngle(mineYaw0, transform.eulerAngles.y) : 0f;   // 검사가 읽는다
 
     // 화면을 짧게 흔든다. 카메라가 아니라 머리 위치만 — 조준은 그대로다
     public void Shake(float amount, float span)
@@ -89,9 +109,13 @@ public class Player : MonoBehaviour
         float yaw = transform.eulerAngles.y + d.x * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg;
         if (pant > 0f)
             yaw = pantYaw + Mathf.Clamp(Mathf.DeltaAngle(pantYaw, yaw), -Tuning.EXHAUST_YAW_LIMIT_DEG, Tuning.EXHAUST_YAW_LIMIT_DEG);
+        if (mineLock)
+            yaw = mineYaw0 + Mathf.Clamp(Mathf.DeltaAngle(mineYaw0, yaw), -mineYawLimit, mineYawLimit);
         transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         if (pant <= 0f)
             pitch = Mathf.Clamp(pitch - d.y * Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg, -Tuning.PITCH_LIMIT_DEG, Tuning.PITCH_LIMIT_DEG);
+        if (mineLock)
+            pitch = Mathf.Clamp(pitch, minePitch0 - Tuning.MINE_LOOK_PITCH_DEG, minePitch0 + Tuning.MINE_LOOK_PITCH_DEG);
     }
 
     void Update()
@@ -123,7 +147,7 @@ public class Player : MonoBehaviour
             return;
         if (kb.escapeKey.wasPressedThisFrame)
             Cursor.lockState = CursorLockMode.None;
-        if (kb.eKey.wasPressedThisFrame && cc.isGrounded && !exhausted && Crevice.Find(transform.position, transform.forward, out var route, out var endLook))
+        if (kb.eKey.wasPressedThisFrame && cc.isGrounded && !exhausted && !mineLock && Crevice.Find(transform.position, transform.forward, out var route, out var endLook))
         {
             StartSqueeze(route, endLook);
             return;
@@ -133,7 +157,9 @@ public class Player : MonoBehaviour
             (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f),
             (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f)), 1f);
 
-        repairing = kb.eKey.isPressed && cc.isGrounded && !exhausted ? Repairable.Nearest(transform.position, head.forward) : null;
+        repairing = kb.eKey.isPressed && cc.isGrounded && !exhausted && !mineLock ? Repairable.Nearest(transform.position, head.forward) : null;
+        if (mineLock)
+            input = Vector2.zero;                                  // 캐는 동안은 제자리 (MINE-1)
         if (repairing != null)
         {
             repairing.Work(dt, this);
@@ -142,7 +168,7 @@ public class Player : MonoBehaviour
         squeezeLower = Mathf.MoveTowards(squeezeLower, repairing != null ? 1f : 0f, dt * 4f);   // 곡괭이를 내린다 (틈 비집기와 같은 자리)
 
         // 자세: Ctrl 숙이기 > Shift 달리기(움직일 때만) > 걷기
-        bool wantCrouch = kb.leftCtrlKey.isPressed;
+        bool wantCrouch = kb.leftCtrlKey.isPressed || mineCrouch;
         bool wantRun = kb.leftShiftKey.isPressed && !wantCrouch && input != Vector2.zero;
         if (wantRun && stamina <= 0f && !exhausted)
             exhausted = true;
@@ -164,7 +190,7 @@ public class Player : MonoBehaviour
         bool grounded = cc.isGrounded;
         if (!grounded)
             velocity.y -= Tuning.GRAVITY * dt;
-        else if (kb.spaceKey.wasPressedThisFrame && stance != "crouch" && !exhausted)
+        else if (kb.spaceKey.wasPressedThisFrame && stance != "crouch" && !exhausted && !mineLock)
             velocity.y = Tuning.JumpVelocity;
         else
             velocity.y = -2f;              // 바닥에 붙여 둬야 isGrounded 가 유지된다
@@ -229,7 +255,7 @@ public class Player : MonoBehaviour
         breathPhase = breathAmp > 0f ? breathPhase + dt * Mathf.PI * 2f / Tuning.EXHAUST_BREATH_S : 0f;
         float breath = Mathf.Sin(breathPhase) * breathAmp;
         head.localPosition = new Vector3(0f, eye + breath * Tuning.EXHAUST_BREATH_M, 0f) + shake;
-        head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG, 0f, 0f);
+        head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG + mineLean, 0f, 0f);
         if (dof != null)                                             // 흐림은 탈진 중에만 — 풀리는 순간 바로 끈다 (3차 판정: 탈진 아닐 때 흐릿함 금지)
         {
             dof.gaussianMaxRadius.value = panting ? Tuning.EXHAUST_BLUR_RADIUS * pant * blurMul : 0f;

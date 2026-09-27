@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -105,6 +105,17 @@ public class M1Check : MonoBehaviour
             pickaxe.cooldownTime = 0f;
             pickaxe.swingTimeMul = 0.2f;
         }
+        pickaxe.slipChance = 0f;                 // MINE-1: 미끄러질 조짐은 확률이라 검사 동안 끈다 — 조짐 검사(MineStage)만 켠다
+        if (sabotage == "minefast")              // MINE-1 전: 광석도 휘두를 때마다 25 m, 두 번에 빠진다
+            pickaxe.oldMining = true;
+        if (sabotage == "loudsoft")              // 평소 콱도 25 m
+            pickaxe.softNoise = Tuning.NOISE_PICK;
+        if (sabotage == "noslip")                // 조짐이 안 온다
+            pickaxe.slipsOn = false;
+        if (sabotage == "lookfree")              // 캐는 동안 고개를 마음대로 (몸도 도는 상태)
+            pickaxe.lookYaw = 180f;
+        if (sabotage == "resetprogress")         // 떼면 진행이 0 으로
+            pickaxe.resetOnRelease = true;
         if (sabotage == "nomagnet")
             Ore.MagnetRange = 0f;
         if (sabotage == "noassist")
@@ -275,6 +286,8 @@ public class M1Check : MonoBehaviour
             yield return M1(cc, fog);
         if (only == "" || only == "mining")
             yield return Mining(cc);
+        if (only == "" || only == "mine")
+            yield return MineStage(cc);
         if (only == "" || only == "map")
             yield return MapStage(cc);
         if (only == "props" || (only == "" && Tuning.PIECE_SUFFIX != ""))   // A1 소품이 켜져 있을 때만 (09-23 판정 불통과로 옛 조각으로 되돌림 — -only props 는 언제든 직접)
@@ -1107,16 +1120,17 @@ public class M1Check : MonoBehaviour
         pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
         OrePocket pk = pockets.Find(x => !x.Breaking) ?? pockets[0];
 
-        // ① 포켓을 여러 번 치면 닿은 타격마다 PICK_WEAR_HIT
+        // ① 포켓을 여러 번 치면 콱마다 MineWearPerStrike (MINE-1: 한 묶음 MINE_WEAR_BUNDLE 을 콱 수로 나눔 — 캐기 30 번 = 60)
         StandAt(cc, pk);
         yield return null;
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN * 10f + 0.3f);
+        yield return new WaitForSeconds(10.6f);                  // 안 빠지는 포켓(damage 0) — 서서 1.25 s 마다 콱 = 8 번
         InputSystem.QueueStateEvent(mouse, new MouseState());
-        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN);
+        yield return new WaitForSeconds(Tuning.MINE_LOWER_S + 0.2f);
         int hits = pickaxe.hitsLanded;
-        Check("pick_wears_per_landed_hit", hits >= 8 && pickaxe.hasPick && pickaxe.durability == Tuning.PICK_DURABILITY_MAX - hits * Tuning.PICK_WEAR_HIT,
-            $"{hits} landed hits, durability {Tuning.PICK_DURABILITY_MAX:0} → {pickaxe.durability:0} (expect {Tuning.PICK_DURABILITY_MAX - hits * Tuning.PICK_WEAR_HIT:0})");
+        float wantDur = Tuning.PICK_DURABILITY_MAX - hits * Tuning.MineWearPerStrike(false);
+        Check("pick_wears_per_landed_hit", hits >= 8 && pickaxe.hasPick && Mathf.Abs(pickaxe.durability - wantDur) < 0.01f,
+            $"{hits} landed hits, durability {Tuning.PICK_DURABILITY_MAX:0} → {pickaxe.durability:0.00} (expect {wantDur:0.00})");
 
         // ② 한 번 던지고 주우면 PICK_WEAR_THROW
         float d0 = pickaxe.durability;
@@ -1144,20 +1158,20 @@ public class M1Check : MonoBehaviour
             yield return new WaitForSeconds(0.3f);               // 걷기 흔들림이 멎게
             float dev = 0f;
             InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-            for (t = 0f; t < 1.0f; t += Time.deltaTime)
+            for (t = 0f; t < 1.2f; t += Time.deltaTime)             // 첫 콱 0.70 s 뒤 0.5 s
             {
-                dev = Mathf.Max(dev, (pickaxe.transform.localPosition - Tuning.PICK_POS).magnitude);
+                dev = Mathf.Max(dev, pickaxe.lastShake);             // MINE-1: 캐는 동안은 자세가 움직여서 자리 대신 떨림 크기
                 yield return null;
             }
             InputSystem.QueueStateEvent(mouse, new MouseState());
-            yield return new WaitForSeconds(Tuning.MINE_COOLDOWN);
+            yield return new WaitForSeconds(Tuning.MINE_LOWER_S + 0.2f);
             if (d == 40f) { devAt40 = dev; hitsAt40 = pickaxe.hitsLanded; } else { devAt15 = dev; hitsAt15 = pickaxe.hitsLanded; }
         }
         Check("pick_shakes_below_15", hitsAt40 >= 1 && hitsAt15 >= 1 && devAt40 < 0.005f && devAt15 >= 0.02f && player.gait <= 0f,
             $"viewmodel max offset at 40: {devAt40:F3} m ({hitsAt40} hits) · at {Tuning.PICK_SHAKY_BELOW:0}: {devAt15:F3} m ({hitsAt15} hits), PICK_SHAKE_AMOUNT {Tuning.PICK_SHAKE_AMOUNT}, gait {player.gait:F2}");
 
         // ④ 1 에서 한 대 → 0: 손이 비고(뷰모델 꺼짐·던진 곡괭이 없음) 조각 PICK_BREAK_PIECES 가 생겼다가 사라진다
-        pickaxe.durability = 1f;
+        pickaxe.durability = Tuning.MineWearPerStrike(false);   // 콱 하나면 0
         pickaxe.hitsLanded = 0;
         StandAt(cc, pk);
         yield return null;
@@ -1373,7 +1387,7 @@ public class M1Check : MonoBehaviour
         yield return null;
         int noise0 = NoiseBus.Total;
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForSeconds(1.0f);                   // MINE-1: 첫 콱이 0.70 s
         InputSystem.QueueStateEvent(mouse, new MouseState());
         yield return new WaitForSeconds(Tuning.MINE_COOLDOWN);
         pickaxe.damage = dmg0;
@@ -1901,18 +1915,30 @@ public class M1Check : MonoBehaviour
         yield return Capture("7_mining_view", v => view = v);
         Check("mining_view_not_burnt", view.z < MaxBurntNearWall, $"burnt {view.z * 100f:F1} % lum {view.x:F3} dim {lamp.nearDim:F2}");
 
-        // 누르고 있으면 두 번째 타격에 캐진다. 그동안 귀(AudioListener)에 들어온 소리 크기를 잰다
+        // MINE-1: 누르고 있으면 한 묶음 — 서서 콱 셋(간격 1.25 s) → 박힌 채 비틀기 → 덩이 빠짐. 두 번째 콱엔 안 빠진다. 그동안 귀(AudioListener)에 들어온 소리 크기를 잰다
         int noise0 = NoiseBus.Total, ore0 = player.ore;
+        pickaxe.strikeTimes.Clear();
         var audio = new float[512];
         float loudest = 0f;
+        bool early = false;
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        float t = 0f;
-        while (first != null && t < 2f) { t += Time.deltaTime; loudest = Mathf.Max(loudest, ListenerRms(audio)); yield return null; }
-        InputSystem.QueueStateEvent(mouse, new MouseState());
+        float press = Time.time, t = 0f;
+        while (first != null && t < 9f) { t += Time.deltaTime; loudest = Mathf.Max(loudest, ListenerRms(audio)); early |= first != null && first.Breaking && pickaxe.strikeTimes.Count < Tuning.MINE_STRIKES_STAND; yield return null; }
+        float popT = Time.time - press;
+        bool stand = !pickaxe.mineCrouch;
+        var hitAt = new List<float>(pickaxe.strikeTimes);
         for (float u = 0f; u < 0.3f; u += Time.deltaTime) { loudest = Mathf.Max(loudest, ListenerRms(audio)); yield return null; }
         int strikes = NoiseBus.Total - noise0;
-        Check("pocket_breaks_on_2nd_hit", first == null && strikes == 2, $"strikes {strikes}, broke {first == null} after {t:F2} s");
-        Check("pick_noise_25m", NoiseBus.LastKind == "pick" && Mathf.Approximately(NoiseBus.LastRadius, Tuning.NOISE_PICK), $"{NoiseBus.LastKind} {NoiseBus.LastRadius} m");
+        string lastKind = NoiseBus.LastKind; float lastR = NoiseBus.LastRadius;
+        // (좌클릭은 누른 채 — 긁기를 하는 동안 광석이 구른다. 뗀 것은 광석을 주운 뒤)
+        float[] stS = Tuning.MINE_STRIKE_STAND;
+        float cycle = stS[0] + stS[1] + stS[2] + stS[3] + stS[4], wantPop = cycle * Tuning.MINE_STRIKES_STAND + Tuning.MINE_PRY_STAND;
+        bool gapsOk = hitAt.Count == Tuning.MINE_STRIKES_STAND;
+        string gaps = "";
+        for (int i = 1; i < hitAt.Count; i++) { float g = hitAt[i] - hitAt[i - 1]; gaps += $"{g:F2} "; gapsOk &= Mathf.Abs(g - cycle) <= 0.1f; }
+        Check("mine_hold_pops_standing", first == null && stand && gapsOk && !early && Mathf.Abs(popT - wantPop) <= 0.3f,
+            $"strikes {hitAt.Count} (want {Tuning.MINE_STRIKES_STAND}), gaps {gaps}s (want {cycle:F2} ±0.1), popped {first == null} at {popT:F2} s (want {wantPop:F2} ±0.3), early {early}, stand {stand}");
+        Check("mine_soft_noise_6m", strikes == Tuning.MINE_STRIKES_STAND && lastKind == "pick" && Mathf.Approximately(lastR, Tuning.MINE_NOISE_SOFT), $"noises {strikes}, last {lastKind} {lastR} m (want pick {Tuning.MINE_NOISE_SOFT} m)");
         Check("pick_hit_audible", loudest > 0.005f, $"listener rms max {loudest:F4}");
 
         // 광석: 1.4 초(자석 전)까지 구르고 멈춰 있다, 그 뒤 빨려와 줍힌다
@@ -1926,17 +1952,242 @@ public class M1Check : MonoBehaviour
         t = 0f;
         while (player.ore == ore0 && t < 4f) { t += Time.deltaTime; yield return null; }
         Check("ore_picked_up", player.ore == ore0 + 1, $"ore {player.ore} (+{t:F1} s)");
-
-        // 안 캐지는 포켓을 1초 누르고 있으면 휘두르기는 3번 이하 (한 번에 MINE_COOLDOWN)
-        StandAt(cc, second);
-        yield return new WaitForSeconds(0.6f);
-        second.health = 1e6f;
-        noise0 = NoiseBus.Total;
-        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        yield return new WaitForSeconds(1f);
         InputSystem.QueueStateEvent(mouse, new MouseState());
-        strikes = NoiseBus.Total - noise0;
-        Check("swing_interval_max3_per_s", strikes >= 2 && strikes <= 3, $"strikes {strikes} in 1 s (swing {Tuning.MINE_COOLDOWN:F2} s)");
+        yield return new WaitForSeconds(Tuning.MINE_LOWER_S + 0.1f);
+
+        second.health = 1e6f;                                            // 뒤 구간(Pick·Hud)이 안 빠지는 포켓으로 쓴다. 옛 swing_interval_max3_per_s 는 괴물 휘두르기에만 남아 MineStage 가 박자를 본다
+    }
+
+    // ================= MINE-1 캐기 연출 (제안서 docs/제안서_MINE1_캐기_연출.md, 승인 09-27). 서서 한 묶음·박자는 Mining 이 본다
+    // 쪼그려 박자 · 떼도 진행 · 고개만 · 미끄러짐 '쨍'(한 번 = 한 칸) · 고쳐 잡기 · 묶음 닳음 · 손 잡는 자리 · 괴물은 옛 휘두르기 + 사람이 볼 연속 캡처(30_mine_* · 31_mine_*)
+    IEnumerator MineStage(CharacterController cc)
+    {
+        var mouse = InputSystem.AddDevice<Mouse>("MineMouse");
+        var kb = InputSystem.AddDevice<Keyboard>("MineKeyboard");
+        var st = stalker;
+        lamp.lampOn = true;
+        player.frozen = false;
+        st.enabled = false;
+        if (!pickaxe.hasPick) pickaxe.Return();
+        pickaxe.durability = Tuning.PICK_DURABILITY_MAX;
+        var pockets = new List<OrePocket>(FindObjectsByType<OrePocket>(FindObjectsSortMode.None));
+        pockets.RemoveAll(x => x.Breaking || x.health < Tuning.POCKET_HEALTH);
+        pockets.Sort((a, b) => (a.transform.position - MidTunnel).sqrMagnitude.CompareTo((b.transform.position - MidTunnel).sqrMagnitude));
+        OrePocket Fresh() { var x = pockets.Find(q => q != null && !q.Breaking && Mathf.Approximately(q.health, Tuning.POCKET_HEALTH)); pockets.Remove(x); return x; }
+        var hard = pockets.Find(x => x.health > Tuning.POCKET_HEALTH) ?? pockets[pockets.Count - 1];   // 안 빠지는 포켓 — 박자·고개·조짐을 여러 번 본다
+        pockets.Remove(hard);
+        hard.health = 1e6f;
+        Debug.Log("MINE pocket heights above feet (m): " + string.Join(" ", FindObjectsByType<OrePocket>(FindObjectsSortMode.None).Select(x => (x.transform.position.y - 0.1f).ToString("F2"))));
+        void Aim(OrePocket pk)                                    // 포켓 가운데를 보게 위아래만 돌린다 (마우스와 같은 길 Player.Look)
+        {
+            Vector3 d = pk.transform.position - pickaxe.cam.position;
+            float want = -Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
+            player.Look(new Vector2(0f, (player.Pitch - want) / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg)));
+        }
+        void Level() => player.Look(new Vector2(0f, player.Pitch / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg)));
+        MouseState Lmb() => new MouseState().WithButton(MouseButton.Left);
+        IEnumerator Release()                                     // 떼고 곡괭이가 다 내려올 때까지 (덩이가 떨어지는 MINE_FALL_S 는 떼도 끝까지 간다)
+        {
+            InputSystem.QueueStateEvent(mouse, new MouseState());
+            for (float w = 0f; pickaxe.Mining && w < 3f; w += Time.deltaTime) yield return null;
+            yield return null;
+        }
+        IEnumerator StandAim(OrePocket pk) { StandAt(cc, pk); yield return null; Aim(pk); yield return null; }
+        float t;
+
+        // ① 손 잡는 자리: GRIP_Rear 자루 끝에서 5 cm · GRIP_Front 30 cm (자루 그물의 가장 낮은 점 기준)
+        var handle = pickaxe.mesh.GetComponentsInChildren<MeshFilter>(true).FirstOrDefault(m => m.name == "PICK_Handle");
+        float endY = handle != null ? handle.transform.localPosition.y + handle.sharedMesh.bounds.min.y : 99f;
+        float rearCm = pickaxe.gripRear != null ? (pickaxe.gripRear.localPosition.y - endY) * 100f : -1f, frontCm = pickaxe.gripFront != null ? (pickaxe.gripFront.localPosition.y - endY) * 100f : -1f;
+        Check("mine_grip_points", pickaxe.gripRear != null && pickaxe.gripRear.parent == pickaxe.mesh && Mathf.Abs(rearCm - 5f) <= 1f && Mathf.Abs(frontCm - 30f) <= 1f,
+            $"GRIP_Rear {rearCm:F1} cm · GRIP_Front {frontCm:F1} cm from handle end (want 5 · 30 ±1), handle end y {endY:F3}");
+
+        // ② 쪼그려: Ctrl 숙이고 누르고 있으면 콱 다섯 박자(0.75 s), 눈 높이 CROUCH_EYE
+        yield return StandAim(hard);
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftCtrl));
+        yield return new WaitForSeconds(0.35f);
+        Aim(hard);
+        yield return null;
+        pickaxe.strikeTimes.Clear();
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        yield return new WaitForSeconds(4.3f);
+        float eyeY = pickaxe.cam.position.y - player.transform.position.y;
+        bool crouchBundle = pickaxe.mineCrouch && pickaxe.Mining;
+        var cr = new List<float>(pickaxe.strikeTimes);
+        yield return Release();
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return new WaitForSeconds(0.3f);
+        float[] stC = Tuning.MINE_STRIKE_CROUCH;
+        float cycC = stC[0] + stC[1] + stC[2] + stC[3] + stC[4];
+        bool crOk = cr.Count >= Tuning.MINE_STRIKES_CROUCH;
+        string crGaps = "";
+        for (int i = 1; i < cr.Count; i++) { float g = cr[i] - cr[i - 1]; crGaps += $"{g:F2} "; crOk &= Mathf.Abs(g - cycC) <= 0.1f; }
+        Check("mine_crouch_short", crouchBundle && crOk && Mathf.Abs(eyeY - Tuning.CROUCH_EYE) <= 0.1f,
+            $"crouch bundle {crouchBundle}, strikes {cr.Count} in 4.3 s, gaps {crGaps}s (want {cycC:F2} ±0.1), eye {eyeY:F2} m (want {Tuning.CROUCH_EYE})");
+
+        // ③ 떼도 진행이 남는다: 콱 둘 뒤 떼고 1 s → 체력 1/3, 다시 누르면 콱 하나 + 비틀기로 빠진다
+        var pc = Fresh();
+        yield return StandAim(pc);
+        pickaxe.strikeTimes.Clear();
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        t = 0f;
+        while (pickaxe.strikeTimes.Count < 2 && t < 4f) { t += Time.deltaTime; yield return null; }
+        yield return new WaitForSeconds(0.1f);
+        yield return Release();
+        yield return new WaitForSeconds(1f);
+        float h1 = pc.health;
+        pickaxe.strikeTimes.Clear();
+        Aim(pc);
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        t = 0f;
+        while (pc != null && t < 5f) { t += Time.deltaTime; yield return null; }
+        int more = pickaxe.strikeTimes.Count;
+        yield return Release();
+        Check("mine_release_keeps_progress", Mathf.Abs(h1 - Tuning.POCKET_HEALTH / 3f) <= 0.5f && pc == null && more == 1,
+            $"health after 2 strikes and release {h1:F1} (want {Tuning.POCKET_HEALTH / 3f:F1}), second hold: {more} strike(s), popped {pc == null} in {t:F1} s");
+
+        // ④ 캐는 동안 몸은 멈추고 고개만 MINE_LOOK_YAW_DEG: 마우스를 크게 돌리고 W 를 눌러도 몸 자리 그대로, 고개는 한계에서 멈추고, 콱은 계속된다
+        yield return StandAim(hard);
+        Vector3 at = player.transform.position;
+        float yaw0 = player.transform.eulerAngles.y;
+        pickaxe.strikeTimes.Clear();
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        yield return new WaitForSeconds(1.0f);
+        int before = pickaxe.strikeTimes.Count;
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+        for (int i = 0; i < 10; i++) { var ms = Lmb(); ms.delta = new Vector2(400f, 0f); InputSystem.QueueStateEvent(mouse, ms); yield return null; }
+        float yawOff = player.MineYawOffset;
+        yield return new WaitForSeconds(1.6f);
+        int after = pickaxe.strikeTimes.Count;
+        float moved = Flat(player.transform.position - at);
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return Release();
+        Check("mine_look_limited", Mathf.Abs(Mathf.Abs(yawOff) - Tuning.MINE_LOOK_YAW_DEG) <= 1f && moved < 0.05f && after > before,
+            $"head turned {yawOff:F1}° (limit {Tuning.MINE_LOOK_YAW_DEG}°), body moved {moved:F3} m with W held, strikes {before} → {after} while looking away");
+        Teleport(cc, at, yaw0);
+        Level();
+
+        // ⑤ 미끄러짐 '쨍': 조짐 동안 계속 누르면 NOISE_PICK 한 번 — 15 m 밖에서 배회하던 괴물이 소리 쪽으로 한 칸(7 m)만 다가온다(그 자리까진 안 옴, 사용자 09-27 "약하게").
+        //    그 콱은 진행이 안 되고, 더 닳는다
+        int slipNoise = 0;
+        Action<Vector3, float, string, object> count = (p_, r_, k_, w_) => { if (k_ == "pick_slip") slipNoise++; };
+        NoiseBus.Made += count;
+        lamp.lampOn = false;                                      // 괴물 눈이 램프를 보고 오지 않게 — 귀만
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.1f);
+        yield return StandAim(hard);
+        Vector3 from = new Vector3(0f, 0.1f, Mathf.Clamp(hard.transform.position.z + 15f, st.zMin + 1f, st.zMax));
+        if (Mathf.Abs(from.z - hard.transform.position.z) < 12f) from.z = Mathf.Clamp(hard.transform.position.z - 15f, st.zMin + 1f, st.zMax);
+        st.Teleport(from);
+        st.enabled = true;
+        yield return null;
+        pickaxe.slipChance = 1f;
+        pickaxe.strikeTimes.Clear();
+        int slips0 = pickaxe.slips;
+        float dur0 = pickaxe.durability;
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        t = 0f;
+        while (pickaxe.slips == slips0 && t < 3f) { t += Time.deltaTime; yield return null; }
+        int strikesAtSlip = pickaxe.strikeTimes.Count;
+        float wearSlip = dur0 - pickaxe.durability;
+        yield return Release();
+        pickaxe.slipChance = 0f;
+        yield return new WaitForSeconds(3f);                                  // 7 m ÷ 5 m/s
+        float came = Flat(st.transform.position - from), toSpot = Flat(hard.transform.position - st.transform.position);
+        Check("mine_slip_loud", pickaxe.slips == slips0 + 1 && slipNoise == 1 && strikesAtSlip == 0 && Mathf.Abs(wearSlip - Tuning.MINE_WEAR_SLIP) < 0.01f && st.hits == 1 && came > 4f && came < 9f && toSpot > 4f,
+            $"slips +{pickaxe.slips - slips0}, 'pick_slip' noises {slipNoise} ({Tuning.NOISE_PICK} m), strikes counted at the slip {strikesAtSlip}, wear {wearSlip:F2} (want {Tuning.MINE_WEAR_SLIP}), monster {Flat(hard.transform.position - from):F1} m away heard x{st.hits}, came {came:F1} m, {toSpot:F1} m from the spot, state {st.state}");
+        st.enabled = false;
+        st.Teleport(st.homePos);
+        lamp.lampOn = true;
+
+        // ⑥ 고쳐 잡기: 조짐 때 떼었다가 MINE_SLIP_WARN_S 안에 다시 누르면 '쨍' 없이 그 콱을 친다
+        yield return StandAim(hard);
+        pickaxe.slipChance = 1f;
+        pickaxe.strikeTimes.Clear();
+        slipNoise = 0;
+        int reg0 = pickaxe.regrips, sl0 = pickaxe.slips;
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        t = 0f;
+        while (pickaxe.minePhase != "warn" && t < 2f) { t += Time.deltaTime; yield return null; }
+        bool warned = pickaxe.minePhase == "warn";
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        yield return new WaitForSeconds(0.2f);
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        yield return new WaitForSeconds(1.0f);
+        int regStrikes = pickaxe.strikeTimes.Count;
+        yield return Release();
+        pickaxe.slipChance = 0f;
+        NoiseBus.Made -= count;
+        Check("mine_slip_regrip_quiet", warned && pickaxe.regrips == reg0 + 1 && pickaxe.slips == sl0 && slipNoise == 0 && regStrikes >= 1,
+            $"warned {warned}, regrips +{pickaxe.regrips - reg0}, slips +{pickaxe.slips - sl0}, 'pick_slip' noises {slipNoise}, strikes after regrip {regStrikes}");
+
+        // ⑦ 한 묶음 닳음 MINE_WEAR_BUNDLE (캐기 30 번 = 60), 미끄러지면 + MINE_WEAR_SLIP
+        float wear0 = 0f, wear1 = 0f;
+        for (int k = 0; k < 2; k++)
+        {
+            var pw = Fresh();
+            yield return StandAim(pw);
+            pickaxe.slipChance = k;
+            float d0 = pickaxe.durability;
+            InputSystem.QueueStateEvent(mouse, Lmb());
+            t = 0f;
+            while (pw != null && t < 9f) { t += Time.deltaTime; yield return null; }
+            yield return Release();
+            if (k == 0) wear0 = d0 - pickaxe.durability; else wear1 = d0 - pickaxe.durability;
+        }
+        pickaxe.slipChance = 0f;
+        Check("mine_wear_per_bundle", Mathf.Abs(wear0 - Tuning.MINE_WEAR_BUNDLE) < 0.01f && Mathf.Abs(wear1 - Tuning.MINE_WEAR_BUNDLE - Tuning.MINE_WEAR_SLIP) < 0.01f,
+            $"bundle wear {wear0:F2} (want {Tuning.MINE_WEAR_BUNDLE}), with a slip {wear1:F2} (want {Tuning.MINE_WEAR_BUNDLE + Tuning.MINE_WEAR_SLIP})");
+
+        // ⑧ 사람이 볼 연속 캡처: 서서 한 묶음 · 쪼그려 1.8 s (0.2 s 마다). 박자 검사와 따로 — 캡처가 프레임을 늦춘다
+        var pv = Fresh();
+        yield return StandAim(pv);
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        for (int i = 0; i < 36; i++)
+        {
+            yield return new WaitForEndOfFrame();
+            ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"30_mine_stand_{i:00}.png"));
+            yield return new WaitForSeconds(0.2f);
+            if (pv == null && !pickaxe.Mining) break;
+        }
+        yield return Release();
+        yield return StandAim(hard);
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftCtrl));
+        yield return new WaitForSeconds(0.35f);
+        Aim(hard);
+        InputSystem.QueueStateEvent(mouse, Lmb());
+        for (int i = 0; i < 9; i++)
+        {
+            yield return new WaitForEndOfFrame();
+            ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"31_mine_crouch_{i:00}.png"));
+            yield return new WaitForSeconds(0.2f);
+        }
+        yield return Release();
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return new WaitForSeconds(0.3f);
+
+        // ⑨ 괴물을 겨냥하면 옛 빠른 휘두르기 (묶음이 아니다)
+        Vector3 S = new Vector3(0f, 0.1f, 20f);
+        st.Teleport(S, 180f);
+        st.hp = Tuning.STALKER_HP;
+        st.hitsSeen = 0;
+        Teleport(cc, S - Vector3.forward * 1.6f, 0f);
+        Level();
+        yield return null;
+        int b0 = pickaxe.bundles;
+        float c0 = Time.time;
+        yield return Click(mouse);
+        t = 0f;
+        while (st.hitsSeen == 0 && t < 1f) { t += Time.deltaTime; yield return null; }
+        float qs = Time.time - c0;
+        Check("mine_monster_quick_swing", st.hitsSeen == 1 && qs < 0.4f && pickaxe.bundles == b0,
+            $"monster hit after {qs:F2} s (want < 0.4, old swing {Tuning.PICK_WINDUP_TIME + Tuning.PICK_DOWN_TIME:F2} s), bundles +{pickaxe.bundles - b0}");
+        yield return new WaitForSeconds(0.5f);
+        st.hp = Tuning.STALKER_HP;
+        st.Teleport(st.homePos);
+        st.enabled = false;
+        pickaxe.durability = Tuning.PICK_DURABILITY_MAX;
+        InputSystem.RemoveDevice(mouse);
+        InputSystem.RemoveDevice(kb);
     }
 
     // M5: 체력·스턴·철수. 플레이어를 괴물 앞 2.2 m(사거리 3 m 안)에 세우고 한 번 클릭 = 한 대. 괴물은 매번 z 20 에 북쪽을 보고 선다
@@ -3423,7 +3674,7 @@ public class M1Check : MonoBehaviour
         st.Teleport(new Vector3(0f, 0.1f, st.zMax));
         yield return null;
         float d0 = Flat(south.transform.position - st.transform.position);
-        yield return Click(mouse);
+        NoiseBus.Make(south.transform.position, Tuning.NOISE_PICK, "pick_slip", player);   // MINE-1: 곡괭이 25 m = 미끄러짐 '쨍' (묶음은 MineStage 가 본다)
         yield return new WaitForSeconds(2f);
         Check("stalker_ignores_beyond_25m", d0 > 30f && st.hits == 0 && st.state == Stalker.State.Wander, $"noise at {d0:F1} m, hits {st.hits}, state {st.state}");
 
@@ -3432,7 +3683,7 @@ public class M1Check : MonoBehaviour
         Vector3 from = new Vector3(0f, 0.1f, Mathf.Min(mid.transform.position.z + 20f, st.zMax));
         st.Teleport(from);
         yield return null;
-        yield return Click(mouse);
+        NoiseBus.Make(mid.transform.position, Tuning.NOISE_PICK, "pick_slip", player);
         yield return new WaitForSeconds(3f);      // 7 m ÷ 4.0 = 1.75 s
         float moved = Flat(st.transform.position - from);
         float toPocket = Flat(mid.transform.position - st.transform.position);
@@ -3443,9 +3694,9 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(Tuning.STALKER_HEAR_CONFIRM_S);   // 앞 소리와 이어지지 않게
         st.Teleport(from);
         yield return null;
-        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN * 1.6f);      // 2타
-        InputSystem.QueueStateEvent(mouse, new MouseState());
+        NoiseBus.Make(mid.transform.position, Tuning.NOISE_PICK, "pick_slip", player);     // 3 s 안 두 번
+        yield return new WaitForSeconds(0.5f);
+        NoiseBus.Make(mid.transform.position, Tuning.NOISE_PICK, "pick_slip", player);
         // 길을 비켜 남쪽 4 m 에서 포켓 쪽을 본다 — 괴물이 플레이어 몸에 막히지 않게, 오는 장면을 찍는다
         Teleport(cc, new Vector3(-Mathf.Sign(mid.transform.position.x) * 1.0f, 0.1f, mid.transform.position.z - 4f), 0f);
         float t = 0f;
@@ -3466,9 +3717,9 @@ public class M1Check : MonoBehaviour
         StandAt(cc, mid);
         st.Teleport(from);
         yield return null;
-        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-        yield return new WaitForSeconds(Tuning.MINE_COOLDOWN * 1.6f);
-        InputSystem.QueueStateEvent(mouse, new MouseState());
+        NoiseBus.Make(mid.transform.position, Tuning.NOISE_PICK, "pick_slip", player);
+        yield return new WaitForSeconds(0.5f);
+        NoiseBus.Make(mid.transform.position, Tuning.NOISE_PICK, "pick_slip", player);
         Teleport(cc, new Vector3(-Mathf.Sign(mid.transform.position.x) * 1.0f, 0.1f, mid.transform.position.z - 4f), 0f);
         t = 0f;
         while (st.state != Stalker.State.Search && t < 8f) { t += Time.deltaTime; yield return null; }
