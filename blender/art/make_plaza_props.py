@@ -114,7 +114,7 @@ colp("Cage", (0, 0, 1.5), (2.8, 2.4, 3.0))
 # ================= B2 광차 — Meshy 광차(사용자 09-27 58차 선택): 조사 10 공통점으로 만든 mine_car_v2 세 방향 그림 → Meshy 그림 → 3D (MINER_ASSET_PIPELINE.md 기록)
 #   원본 glb 는 저장소 밖(Documents/MineTunnel). 그물은 plaza_props.bin 으로, 그림 셋은 glb 에서 그대로 꺼내 plaza_src/meshy_car2/ 로 (이름 = 규칙 _diff · _arm · _nor_gl)
 MESHY_CAR = os.path.join(os.path.expanduser("~"), "Documents", "MineTunnel", "mesh", "props", "meshy_car2.glb")
-def meshy_car(path, length=2.05, width=1.0):
+def meshy_car(path, length=2.33):
     import struct
     raw = open(path, "rb").read(); n = struct.unpack("<I", raw[12:16])[0]; doc = json.loads(raw[20:20 + n]); binc = raw[20 + n + 8:]
     mat = doc["materials"][0]; pbr = mat["pbrMetallicRoughness"]; tex = lambda k: doc["textures"][k["index"]]["source"]
@@ -129,8 +129,17 @@ def meshy_car(path, length=2.05, width=1.0):
     for x in new: bpy.data.objects.remove(x, do_unlink=True)
     ws = [v.co for v in me.vertices]; lo = Vector(map(min, *ws)); hi = Vector(map(max, *ws))
     if hi.y - lo.y > hi.x - lo.x: me.transform(Matrix.Rotation(math.pi / 2, 4, "Z")); ws = [v.co for v in me.vertices]; lo = Vector(map(min, *ws)); hi = Vector(map(max, *ws))
-    k = length / (hi.x - lo.x)                                                   # 길이를 새 광차 2.05 m 에 · 폭은 Meshy 가 0.89 로 좁혀서 1.0 으로 늘림(사용자 선택 때 말함)
-    me.transform(Matrix.Diagonal((k, width / ((hi.y - lo.y) * k), k, 1)) @ Matrix.Translation(-Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))))
+    k = length / (hi.x - lo.x)                                                   # 크기 = 넣은 그림의 Blender 광차(늘어진 고리까지 2.33 m) — 한 배율 (09-27 첫 판은 고리까지 2.05 로 줄여 몸통이 0.88 배였다)
+    body = [v for v in ws if v.z > lo.z + 0.6 * (hi.z - lo.z) * 0.5]              # 몸통 가운데 = 고리(낮게 늘어짐)를 뺀 윗부분의 가운데
+    bc = Vector(((min(v.x for v in body) + max(v.x for v in body)) / 2, (min(v.y for v in body) + max(v.y for v in body)) / 2, lo.z))
+    me.transform(Matrix.Diagonal((k, k, k, 1)) @ Matrix.Translation(-bc))
+    # 석탄: Meshy 의 찰흙 같은 무더기(사용자 09-27)를 지우고 coal_heap 으로 — 테두리 안쪽의 위를 보는 면 중 테두리보다 높은 것
+    ws = [v.co for v in me.vertices]; bx0 = min(v.x for v in ws if v.z > 0.9); bx1 = max(v.x for v in ws if v.z > 0.9); hy = max(abs(v.y) for v in ws)   # 0.9 m 위 = 몸통 통만 (범퍼 · 핀 · 고리는 아래)
+    rim = max(v.z for v in ws if abs(v.y) > hy - 0.04 and abs(v.x - (bx0 + bx1) / 2) < 0.5)
+    bm = bmesh.new(); bm.from_mesh(me)
+    kill = [f for f in bm.faces if f.normal.z > 0.3 and f.calc_center_median().z > rim - 0.03 and abs(f.calc_center_median().y) < hy - 0.06 and bx0 + 0.06 < f.calc_center_median().x < bx1 - 0.06]
+    bmesh.ops.delete(bm, geom=kill, context="FACES"); bm.to_mesh(me); bm.free()
+    print("CHECK meshy car: body x %.2f..%.2f · half width %.2f · rim %.2f m · coal faces removed %d" % (bx0, bx1, hy, rim, len(kill)))
     m = bpy.data.materials.new("PM_meshy_car2"); m.use_nodes = True; nt = m.node_tree; b = next(n_ for n_ in nt.nodes if n_.type == "BSDF_PRINCIPLED")
     def img(r, data):
         n_ = nt.nodes.new("ShaderNodeTexImage"); n_.image = bpy.data.images.load(files[r]); n_.image.colorspace_settings.name = "Non-Color" if data else "sRGB"; return n_
@@ -139,7 +148,9 @@ def meshy_car(path, length=2.05, width=1.0):
     nt.links.new(sep.outputs["Green"], b.inputs["Roughness"]); nt.links.new(sep.outputs["Blue"], b.inputs["Metallic"])
     nm = nt.nodes.new("ShaderNodeNormalMap"); nt.links.new(img("nor_gl", True).outputs["Color"], nm.inputs["Color"]); nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
     me.materials.clear(); me.materials.append(m)
-    car = bpy.data.objects.new("MineCar", me); sc.collection.objects.link(car); own([car]); return car
+    car = bpy.data.objects.new("MineCar", me); sc.collection.objects.link(car)
+    for c in mp.coal_heap(M, bx1 - bx0 - 0.14, 2 * hy - 0.14, rim - 0.03, 0.2, cx=(bx0 + bx1) / 2): c.parent = car
+    own([car]); return car
 def on_path(path, x):                                 # 꺾은 선에서 x 자리의 (점, 방향)
     for a, b in zip(path, path[1:]):
         if (a[0] - x) * (b[0] - x) <= 0 and a[0] != b[0]:
@@ -170,10 +181,12 @@ def arch_pair(tag, mouth, toward, width=3.1, height=3.15, gap=1.1):
         for a, b in zip(pts, pts[1:]): mp.ibeam(bm, a, b)
         arches.append((pts, o))
     (pa, oa), (pb_, ob) = arches
-    for k in range(2, len(shape) - 2):                                         # 판자: 두 아치의 같은 점 사이, 바깥쪽 0.1 m
+    import random; rl = random.Random(hash(tag) & 0xffff)
+    for k in range(2, len(shape) - 2):                                         # 덧판: 아치 바깥에 걸친 검게 된 거친 널 · 폭 제각각 · 사이 틈 · 몇 장 빠짐 (조사 11 R6 — 주황 타일처럼 보였다 09-27)
+        if rl.random() < 0.15: continue
         m_ = (pa[k] + pb_[k]) / 2; out = (m_ - (oa + ob) / 2); out.z = max(out.z, 0.0); out = out.normalized()
-        mp.box(pb, m_ + out * 0.1, (0.2, gap + 0.1, 0.035), Matrix((d.cross(out), d, out)).transposed())   # 판자 축: 아치 따라 · 굴 따라 · 바깥 — 끝은 아치 날개 뒤에 숨는다(더 길면 광장 쪽 바위에서 이빨처럼 삐져나왔다)
-    own([mp.group("PROP_Arch_" + tag, [mp.obj("Arch_" + tag, bm, M["steel"]), mp.obj("Lagging_" + tag, pb, M["plank"])])])
+        mp.board(pb, m_ + out * 0.09 + d * rl.uniform(-0.05, 0.05), d, out, gap + rl.uniform(-0.05, 0.12), rl.uniform(0.13, 0.22), 0.035)   # 끝은 아치 날개 뒤
+    own([mp.group("PROP_Arch_" + tag, [mp.obj("Arch_" + tag, bm, M["steel"]), mp.obj("Lagging_" + tag, pb, M["lagging"])])])
 for tag, mouth, toward in EXITS: arch_pair(tag, mouth, toward)
 
 # ================= P1 관 · 밸브 — 북쪽 벽 3.6 m, 서쪽 벽에서 동쪽 벽까지 (pipe02 1.95 m × 8 + 가운데 밸브 pipe08), 이음매마다 벽 받침
@@ -273,21 +286,80 @@ assembly("wooden_bucket_01", ("wooden_bucket_01", "wooden_bucket_01_handle"), Ma
 yl = wall_y(-2.5, 1.0, -3.5, -1)
 assembly("wooden_ladder", ("wooden_ladder_steps", "wooden_ladder_supports"), Matrix.Translation((-2.5, yl + 0.3, floor_z(-2.5, yl + 0.3))))
 
-# ================= B5 굴 안 둥근 통나무 동발 — make_booth 의 SLOT_TimberSet_<i>(X = 가로 · 크기 = (기둥 반간격, 1, 기둥 높이)) 마다, 40 m 칸으로 묶음
-tmb = {}
+# ================= B5 굴 안 나무 동발 다시 (사용자 09-27 "갱목 나무들 모델링을 현실적으로" → 조사 11 docs/기획서/조사/11_갱목_동발_레퍼런스.md)
+#   make_booth 의 SLOT_TimberSet_<i>(X = 가로 · 크기 = (기둥 반간격, 1, 기둥 높이)) 마다. 공통점: 거친 통나무(껍질 군데군데 · 탄가루 막 · 세로 금, 고리 줄무늬 없음)
+#   · 기둥 위가 안으로 기운 사다리꼴(약 6°) · 굵은 쪽을 위로 · 캡을 기둥 머리 위에 얹고 양 끝이 5~15 cm 나옴 · 캡-기둥 사이 밝은 쐐기
+#   · 덧판: 캡 위(바위 쪽)에 갱도 방향으로 걸침 + 기둥 뒤(바위 쪽)에 가로로 — 폭·길이 제각각 · 틈 · 몇 장 빠짐, 오래된 것은 검고 새 것만 밝음.
+#   덧판은 이웃 틀(1.5 m 앞)이 있을 때만 · 전등 둘레(천장)와 벽에 붙은 것(광맥 · 고칠 곳 · 괴물 굴 · 개구멍 · 대피소 · 바위 틈) 둘레(옆)는 비운다
+import random
+from mathutils.kdtree import KDTree
+SETS = []
 for nm, o in SLOT.items():
     if not nm.startswith("SLOT_TimberSet_"): continue
     mw = o.matrix_world; P = mw.translation.copy(); lat = (mw.to_3x3() @ Vector((1, 0, 0))); hw = lat.length; lat.normalize()
-    ph_ = (mw.to_3x3() @ Vector((0, 0, 1))).length
-    key = "g%d_%d" % (math.floor(P.x / CHUNK_M), math.floor(P.y / CHUNK_M)); bm = tmb.setdefault(key, bmesh.new())
-    for s_ in (-1, 1):                                                       # 기둥 둘 (지름 0.22, 안쪽으로 조금 기욺) + 위 통나무(지름 0.24, 양 끝이 바위에 조금 박힘)
-        mp.rod(bm, P + lat * (s_ * hw) - Vector((0, 0, 0.05)), P + lat * (s_ * (hw - 0.06)) + Vector((0, 0, ph_)), 0.11, seg=10)
-    mp.rod(bm, P + lat * -(hw + 0.2) + Vector((0, 0, ph_ + 0.12)), P + lat * (hw + 0.2) + Vector((0, 0, ph_ + 0.12)), 0.12, seg=10)
-n_sets = sum(1 for nm in SLOT if nm.startswith("SLOT_TimberSet_"))
-for key, bm in tmb.items():
-    me = bpy.data.meshes.new("TMB_" + key); bm.to_mesh(me); bm.free(); me.materials.append(M["log"])
-    for p in me.polygons: p.use_smooth = True
-    o = bpy.data.objects.new("TMB_" + key, me); sc.collection.objects.link(o); own([o])
+    SETS.append((int(nm.rsplit("_", 1)[1]), P, lat, hw, (mw.to_3x3() @ Vector((0, 0, 1))).length))
+SETS.sort()
+kd = KDTree(len(SETS))
+for i, (_, P, *_r) in enumerate(SETS): kd.insert(P, i)
+kd.balance()
+def near_kd(prefixes):
+    pts = [o.matrix_world.translation.copy() for nm, o in SLOT.items() if nm.startswith(prefixes)]
+    t = KDTree(max(1, len(pts)))
+    for i, p_ in enumerate(pts): t.insert(p_, i)
+    t.balance(); return t, len(pts)
+LAMPS, n_l = near_kd(("SLOT_Light_", "SLOT_DeadLight_"))
+WALLS, n_w = near_kd(("SLOT_Pocket_", "SLOT_Repair_", "SLOT_GapBig_", "SLOT_GapSmall_", "SLOT_Niche_", "SLOT_Crawl_", "SLOT_Crevice_"))
+def clear(t, n, p_, r): return n == 0 or t.find(p_)[2] > r
+LEAN = math.tan(math.radians(6))
+tmb = {}; stat = dict(sets=0, roof=0, side=0)
+for idx, (sid, P, lat, hw, ph_) in enumerate(SETS):
+    rnd = random.Random(sid * 7919)
+    key = "g%d_%d" % (math.floor(P.x / CHUNK_M), math.floor(P.y / CHUNK_M))
+    side_, ends_, wedge_, lag_, fresh_ = tmb.setdefault(key, [bmesh.new() for _ in range(5)])
+    along = Vector((lat.y, -lat.x, 0.0)); lean = ph_ * LEAN; Z = Vector((0, 0, 1))
+    tops = []
+    for s_ in (-1, 1):                                                        # 기둥 둘: 굵은 쪽(뿌리)을 위로
+        rb = rnd.uniform(0.095, 0.12); rt = rb * 1.12
+        top = P + lat * (s_ * (hw - lean)) + Z * ph_
+        mp.rough_log(side_, ends_, P + lat * (s_ * hw) - Z * 0.08, top, rb, rt, rnd, caps=(False, False))
+        tops.append((top, rt, s_))
+        for w_ in (-1, 1):                                                    # 캡과 기둥 머리 사이 쐐기 (막 쪼갠 밝은 나무, 갱도 쪽으로 삐져나옴)
+            if rnd.random() < 0.8: mp.board(wedge_, top + along * (w_ * (rt + 0.02)) + lat * rnd.uniform(-0.04, 0.04) + Z * 0.012, along, Z, rnd.uniform(0.1, 0.16), rnd.uniform(0.05, 0.08), 0.028)
+    rc = rnd.uniform(0.11, 0.135); zc = ph_ + rc * 0.9
+    ext_l, ext_r = rnd.uniform(0.05, 0.15), rnd.uniform(0.05, 0.15)          # 캡 양 끝이 기둥 바깥으로 5~15 cm
+    ca = P + lat * -(hw - lean + tops[0][1] + ext_l) + Z * zc; cb = P + lat * (hw - lean + tops[1][1] + ext_r) + Z * zc
+    if rnd.random() < 0.5: ca, cb = cb, ca
+    mp.rough_log(side_, ends_, ca, cb, rc * 1.06, rc * 0.94, rnd)
+    stat["sets"] += 1
+    nb = [j for (q, j, dist) in kd.find_range(P + along * 1.5, 0.45) if j != idx]   # 이웃 틀 (1.5 m 앞)
+    if not nb: continue
+    _, Q, lat2, hw2, ph2 = SETS[nb[0]]; span = Q - P; mid = (P + Q) / 2; dirv = span.normalized()
+    top_z = max(ph_, ph2) + 2 * rc + 0.01
+    if clear(LAMPS, n_l, mid + Z * top_z, 1.8):                               # 천장 덧판: 캡 위에 갱도 방향으로 (전등 둘레는 비움 — 전등을 가리지 않게)
+        x = -(hw - lean) + 0.02; stat["roof"] += 1
+        while x < hw - lean - 0.02:
+            w_ = rnd.uniform(0.12, 0.22)
+            if rnd.random() > 0.12:
+                c = mid + lat * (x + w_ / 2) + Z * (top_z + 0.018 + rnd.uniform(-0.01, 0.015)) + dirv * rnd.uniform(-0.1, 0.1)
+                mp.board(fresh_ if rnd.random() < 0.12 else lag_, c, dirv, Z, span.length + rnd.uniform(0.12, 0.4), w_, 0.035)
+            x += w_ + rnd.uniform(0.015, 0.07)
+    for s_ in (-1, 1):                                                        # 옆 덧판: 기둥 뒤(바위 쪽)에 가로로, 반쯤만 · 벽에 붙은 것 둘레는 비움
+        if rnd.random() > 0.55 or not clear(WALLS, n_w, mid + lat * (s_ * hw) + Z * 1.2, 1.8): continue
+        z = rnd.uniform(0.3, 0.45); stat["side"] += 1
+        while z < min(ph_, ph2) - 0.2:
+            h_ = rnd.uniform(0.12, 0.2)
+            if rnd.random() > 0.2:
+                off = hw - lean * (z / ph_) + 0.13
+                mp.board(fresh_ if rnd.random() < 0.1 else lag_, mid + lat * (s_ * off) + Z * (z + h_ / 2) + dirv * rnd.uniform(-0.1, 0.1), dirv, lat * s_, span.length + rnd.uniform(0.1, 0.35), h_, 0.035)
+            z += h_ + rnd.uniform(0.03, 0.12)
+n_sets = stat["sets"]
+for key, bms in tmb.items():
+    for suf, bm, mat, smooth in zip(("", "_End", "_Wedge", "_Lag", "_LagNew"), bms, (M["timber"], M["log_end"], M["wedge"], M["lagging"], M["wedge"]), (True, False, False, False, False)):
+        if not bm.faces: bm.free(); continue
+        me = bpy.data.meshes.new("TMB_" + key + suf); bm.to_mesh(me); bm.free(); me.materials.append(mat)
+        for p in me.polygons: p.use_smooth = smooth
+        o = bpy.data.objects.new("TMB_" + key + suf, me); sc.collection.objects.link(o); own([o])
+print("CHECK timber sets: %d · roof lagging %d · side lagging %d" % (stat["sets"], stat["roof"], stat["side"]))
 
 # ================= 마무리: 글자 → 그물 · UV · 세기 · 내보내기
 dg = bpy.context.evaluated_depsgraph_get()
@@ -355,6 +427,11 @@ if not FAST:
     shot("4_south", (0, 2.5, 1.7), (-3, -5.4, 1.0))
     shot("5_ne_duct", (2.0, 0.5, 1.7), (7.0, 3.5, 3.8))
     shot("6_tunnel_timber", (-14.7, 2.9, 1.7), (-24, 4.8, 1.6))
+    shot("7_cart", (car_p.x + 1.2, car_p.y - 1.5, 2.1), (car_p.x, car_p.y, 1.0), lens=28)
+    for tag, (sid, P, lat, hw, ph_) in (("9_timber_close", SETS[len(SETS) // 3]), ("10_timber_run", SETS[len(SETS) // 2])):   # 굴 안 동발: 가까이 · 줄지어
+        along = Vector((lat.y, -lat.x, 0.0)); back = 1.4 if tag.startswith("9") else 4.0
+        shot(tag, P - along * back + lat * 0.3 + Vector((0, 0, 1.6)), P + along * 3.0 + Vector((0, 0, 1.5 if tag.startswith("1") else 1.9)), lens=18)
+    shot("8_cart_top", (car_p.x + 0.3, car_p.y - 0.5, 2.6), (car_p.x, car_p.y, 1.2), lens=24)
     head.data.energy = 0
     cam.data.type = "ORTHO"; cam.data.ortho_scale = 19; cam.location = (0, -0.5, 30); cam.rotation_euler = (0, 0, 0)
     for o in MAP:

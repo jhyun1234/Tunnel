@@ -470,6 +470,11 @@ public class M1Check : MonoBehaviour
             art.Set(true); yield return Capture($"27_art_{nm}_new", _ => { });
             art.Set(false); yield return Capture($"27_art_{nm}_old", _ => { });
         }
+        // 광차 석탄 가까이 (사용자 09-27 "찰흙처럼 보인다" → 모난 덩어리) — 광차 옆 1.3 m 에서 35° 내려다봄, 새 모습만
+        var car = Slot("MineCar").GetComponent<Renderer>().bounds.center;
+        Vector3 carFrom = OnNav(car + Flat3(spawn - car).normalized * 1.3f);
+        Teleport(cc, carFrom + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(car - carFrom)).eulerAngles.y);
+        art.Set(true); player.Pitch = 35f; yield return Capture("27_art_cart_new", _ => { }); player.Pitch = 0f;
         art.Set(true);
         Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
         ArtLook.SabDryWall = ArtLook.SabBounceDead = ArtLook.SabPropsStay = false;

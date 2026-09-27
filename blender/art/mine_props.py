@@ -52,13 +52,15 @@ def materials(root):
              log=pbr("M_Log", T("weathered_brown_planks", "Color"), T("weathered_brown_planks", "Roughness"), T("weathered_brown_planks", "NormalGL"), 1.0, tint=(0.45, 0.38, 0.32)),
              coal=pbr("M_Coal", os.path.join(ART, "art_coal_Rock035_DiffRough.png"), T("Rock035", "Roughness"), os.path.join(ART, "art_coal_Rock035_nor_gl.jpg"), 0.5, tint=(0.4, 0.4, 0.45)))
 
-UV_M = dict(steel=1.0, dark_steel=0.6, paint=1.5, wood=1.5, plank=1.5, log=1.0, coal=0.5)   # 질감 한 장 크기 m (materials 와 같은 값)
+UV_M = dict(steel=1.0, dark_steel=0.6, paint=1.5, wood=1.5, plank=1.5, log=1.0, coal=0.5, coal_lump=0.3,
+            timber=None, log_end=None, wedge=None, lagging=None)   # None = 그물이 UV 를 직접 가짐 (통나무 옆 = 둘레·길이 m, 잘린 끝 = 원, 판자 = 길이·폭 m — 결이 길이 방향)   # 질감 한 장 크기 m (materials 와 같은 값)
 
 def game_materials(root):
     """게임용 재질 (glTF 로 나감): props_tex 그림(prop_textures.py 가 채도·색까지 구움) + UV 한 벌. arm = (1, 거칠기, 쇠)"""
     TX = os.path.join(root, "Assets", "Tunnel", "Art", "props_tex"); out = {}
     for k, size in UV_M.items():
-        m = bpy.data.materials.new("PM_" + k); m.use_nodes = True; m["uv_m"] = size
+        m = bpy.data.materials.new("PM_" + k); m.use_nodes = True
+        if size: m["uv_m"] = size
         nt = m.node_tree; b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
         def img(suf, data):
             n = nt.nodes.new("ShaderNodeTexImage"); n.image = bpy.data.images.load(os.path.join(TX, k + suf), check_existing=True)
@@ -204,6 +206,28 @@ def mine_car(M, coal=True):
         parts.append(obj("CarCoal", cb, M["coal"], smooth=True))
     return group("PROP_MineCar", parts)
 
+def coal_heap(M, L, W, z_edge, peak, cx=0.0, n=1400, seed=5):
+    """석탄 무더기 (사용자 09-27 "찰흙처럼 보인다" → 조사 10 사진: 검은 잔 알갱이(분탄) 위에 모난 덩어리, 테두리 위로 봉긋).
+    가루 언덕 한 겹(석탄 질감, 거의 검정) + 모난 덩어리 n 개(2~9 cm, 작은 것이 많게, 언덕을 거의 덮게 — 면이 각진 검은 윤기). 원점 = 광차 좌표, 가운데 x = cx
+    (첫 판 260 개 · 점 9 개는 얇은 조각처럼 떠 보였다 — 09-27 확인 그림)"""
+    import random; rnd = random.Random(seed); hx, hy = L / 2, W / 2
+    def h(x, y):
+        u, w_ = (x - cx) / hx, y / hy
+        return z_edge + peak * max(0.0, 1 - u * u) ** 0.8 * max(0.0, 1 - w_ * w_) ** 0.8
+    fb = bmesh.new(); bmesh.ops.create_grid(fb, x_segments=28, y_segments=14, size=0.5)
+    for v in fb.verts:
+        x, y = cx + 2 * v.co.x * hx, 2 * v.co.y * hy; v.co = Vector((x, y, h(x, y) + rnd.uniform(-0.012, 0.012)))
+    lb = bmesh.new()
+    for i in range(n):
+        sz = 0.02 + 0.06 * rnd.random() ** 1.6
+        x, y = cx + rnd.uniform(-hx + sz, hx - sz), rnd.uniform(-hy + sz, hy - sz)
+        R = Matrix.Rotation(rnd.uniform(0, 6.3), 3, "Z") @ Matrix.Rotation(rnd.uniform(0, 6.3), 3, "X")
+        c = Vector((x, y, h(x, y) - sz * 0.35)); sq = Vector((1.0, rnd.uniform(0.7, 1.0), rnd.uniform(0.55, 0.9)))
+        vs = [lb.verts.new(c + R @ (Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))).normalized() * sz * rnd.uniform(0.7, 1.0) * sq)) for _ in range(18)]
+        r = bmesh.ops.convex_hull(lb, input=vs)
+        bmesh.ops.delete(lb, geom=list({g for g in r["geom_interior"] + r["geom_unused"] if isinstance(g, bmesh.types.BMVert)}), context="VERTS")
+    return [obj("CoalFines", fb, M["coal"], smooth=True), obj("CoalLumps", lb, M["coal_lump"])]   # 덩어리도 그림 재질 — 그림 없는 색만 재질(0.012)은 게임에서 면마다 하얗게 떴다(09-27 캡처, 까닭 못 찾음)
+
 def mine_car_v2(M, coal=True):
     """광차 다시(09-27, 조사 10 docs/기획서/조사/10_광차_레퍼런스.md 공통점): 2톤 — 전체 2.07 × 1.00 × 1.21 m(문경 실물 [10]).
     쇠판 U자 몸통(옆 곧음 + 아래 둥금, 11/21) · 맨 위 테두리 띠 한 줄(17/21) · 따로 된 ㄷ자 쇠 밑틀 둘(11/21) · 작은 원판 바퀴 넷(지름 0.34, 축 사이 0.76, 몸통 밑 가운데 — 15/15, 표 [7])
@@ -255,14 +279,44 @@ def mine_car_v2(M, coal=True):
             box(wh, (sx * 0.38, sy * 0.225, 0.20), (0.16, 0.05, 0.13))                                          # 축 상자 (밑틀에)
         rod(wh, (sx * 0.38, -0.36, 0.17), (sx * 0.38, 0.36, 0.17), 0.0375, seg=10)                              # 축 굵기 7.5 cm
     parts = [obj("CarBody", bm, M["steel"]), obj("CarFrame", fr, M["dark_steel"]), obj("CarRing", ring, M["dark_steel"]), obj("CarWheels", wh, M["dark_steel"])]
-    if coal:
-        cb = bmesh.new(); bmesh.ops.create_grid(cb, x_segments=16, y_segments=10, size=0.5)
-        import random; rnd = random.Random(11)
-        for v in cb.verts:
-            u, w_ = 2 * v.co.x, 2 * v.co.y
-            v.co = Vector((u * (L / 2 - 0.03), w_ * (W / 2 - 0.03), zt - 0.02 + 0.22 * max(0.0, 1 - u * u) ** 0.8 * max(0.0, 1 - w_ * w_) ** 0.8 + rnd.uniform(-0.025, 0.025)))
-        parts.append(obj("CarCoal", cb, M["coal"], smooth=True))
+    if coal: parts += coal_heap(M, L - 0.06, W - 0.06, zt - 0.02, 0.22)
     return group("PROP_MineCar", parts)
+
+def rough_log(side, ends, a, b, r0, r1, rnd, sides=8, step=0.6, bend=0.012, caps=(True, True)):
+    """거친 통나무 한 토막 a→b (조사 11 docs/기획서/조사/11_갱목_동발_레퍼런스.md): 단면이 조금 울퉁불퉁(±7 %) · 한쪽이 굵음(r0→r1) · 살짝 휨
+    · 옆 UV = (둘레 m, 길이 m) — 질감 timber 의 세로 결 · 세로 금이 길이 방향으로 (몸통을 도는 고리 줄무늬 0/21) · 잘린 끝 = log_end 원 UV(나이테).
+    side / ends = bmesh (옆 · 끝을 다른 재질로)"""
+    a, b = Vector(a), Vector(b); d = b - a; L = d.length; t = d / L
+    up = Vector((0, 0, 1)) if abs(t.z) < 0.9 else Vector((1, 0, 0)); u1 = t.cross(up).normalized(); u2 = t.cross(u1)
+    n = max(2, int(L / step) + 1); ph = rnd.uniform(0, 6.283); bdir = u1 * math.cos(ph) + u2 * math.sin(ph); bamp = rnd.uniform(0.3, 1.0) * bend * L
+    wob = [rnd.uniform(0.93, 1.07) for _ in range(sides)]; uvl = side.loops.layers.uv.verify(); circ = 2 * math.pi * (r0 + r1) / 2
+    rings = []
+    for i in range(n):
+        s_ = i / (n - 1); c = a + d * s_ + bdir * (bamp * 4 * s_ * (1 - s_)); r = r0 + (r1 - r0) * s_
+        pos = [c + (u1 * math.cos(2 * math.pi * k / sides) + u2 * math.sin(2 * math.pi * k / sides)) * (r * wob[k] * rnd.uniform(0.98, 1.02)) for k in range(sides)]
+        rings.append((pos, [side.verts.new(p_) for p_ in pos + pos[:1]], s_ * L))
+    for (p0, v0, l0), (p1, v1, l1) in zip(rings, rings[1:]):
+        for k in range(sides):
+            f = side.faces.new((v0[k], v0[k + 1], v1[k + 1], v1[k]))
+            for lp, (uu, vv) in zip(f.loops, ((k, l0), (k + 1, l0), (k + 1, l1), (k, l1))): lp[uvl].uv = (uu / sides * circ, vv)
+    euv = ends.loops.layers.uv.verify()
+    for (pos, _, _), keep, flip in ((rings[0], caps[0], True), (rings[-1], caps[1], False)):
+        if not keep: continue
+        vs = [ends.verts.new(p_) for p_ in pos]; f = ends.faces.new(list(reversed(vs)) if flip else vs)
+        for lp in f.loops:
+            k = vs.index(lp.vert); lp[euv].uv = (0.5 + 0.47 * math.cos(2 * math.pi * k / sides) * wob[k], 0.5 + 0.47 * math.sin(2 * math.pi * k / sides) * wob[k])
+
+def board(bm, c, along, up, length, width, thick):
+    """판자 한 장: along = 긴 쪽, up = 두께 쪽(바깥), 나머지 = 폭. UV = (길이 m, 폭 m) — 질감(wedge · lagging)의 결이 u(가로)라 결이 판자 길이를 따른다
+    (상자 투영이면 결이 판자를 가로질러 널 이음 무늬가 타일처럼 보였다 — 09-27)"""
+    along = Vector(along).normalized(); up = Vector(up).normalized(); across = up.cross(along).normalized(); up = along.cross(across)
+    uvl = bm.loops.layers.uv.verify(); c = Vector(c); o0 = rnd_off = (c.x * 1.7 + c.y * 2.3) % 1.0   # 판자마다 질감 자리를 달리
+    V = {(i, j, k): bm.verts.new(c + along * (i * length / 2) + across * (j * width / 2) + up * (k * thick / 2)) for i in (-1, 1) for j in (-1, 1) for k in (-1, 1)}
+    for keys, uax, vax in (([(-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)], 0, 1), ([(-1, 1, -1), (1, 1, -1), (1, -1, -1), (-1, -1, -1)], 0, 1),
+                           ([(-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)], 0, 2), ([(-1, 1, 1), (1, 1, 1), (1, 1, -1), (-1, 1, -1)], 0, 2),
+                           ([(1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)], 1, 2), ([(-1, -1, 1), (-1, 1, 1), (-1, 1, -1), (-1, -1, -1)], 1, 2)):
+        f = bm.faces.new([V[k_] for k_ in keys]); size = (length, width, thick)
+        for lp, k_ in zip(f.loops, keys): lp[uvl].uv = (k_[uax] * size[uax] / 2 + o0, k_[vax] * size[vax] / 2 + o0 * 3.1)
 
 def timber_set(M, width=3.0, height=2.9):
     """나무 동발 한 틀: 껍질 벗긴 둥근 통나무 기둥 둘(지름 0.22, 안쪽으로 약간 기욺) + 위 통나무(지름 0.24) + 쐐기"""

@@ -41,6 +41,7 @@ public class Player : MonoBehaviour
     CharacterController cc;
     Vector3 velocity;
     float pitch;
+    public float Pitch { get => pitch; set => pitch = value; }   // 검사 캡처가 내려다보게 (ART-1 광차 석탄)
     float eye = Tuning.EYE_HEIGHT;
     float shakeLeft, shakeAmount, shakeSpan;
     [System.NonSerialized] public float gait;   // 걸음 위상(라디안). π 마다 한 발이 땅에 닿는다 — 발소리와 곡괭이 흔들림이 이 하나를 같이 본다. 멈추면 0
