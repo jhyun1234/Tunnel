@@ -7,6 +7,9 @@
 - **알게 된 것**: ① 에디터(재생 아님)에서 사람형 동작은 PlayableGraph 로는 T 자세 그대로 → `AnimationMode.SampleAnimationClip` ② 한 번에 카메라 둘로 찍으면 살이 한 번만 계산돼 머리 숨김이 3인칭에도 묻음 → `SkinnedMeshRenderer.forceMatrixRecalculationPerRender` ③ 벽 머리 높이를 치는 동작은 닿는 순간 자루가 거의 선다(Kevin 곡괭이도 같음 — 방향 오류 아님) ④ 1인칭에서 손은 거의 안 보이고(들 때 머리 위 · 칠 때 가슴 아래로 화면 밖) 자루와 머리가 광석을 찍는 게 보인다 — 사용자는 이대로 통과.
 - 옆 가지 폴더 `Tunnel/unity-pick` **지움**(사용자 지시, `git worktree remove`). 그 폴더에만 있던 `build/refs/mine` · `build/refs/pick` · `build/pick1` 은 main `build/` 로 복사(대조 같음). 가지 이름 `pick-hands` 는 남김(이미 main 에 합쳐짐).
 - 커밋 안 한 것 둘(`DevHud.cs` -film 3줄 · `preview_upright.py`)은 여전히 09-22 영상 작업 — 건드리지 말 것.
+- **SND-P 곡괭이 소리(60차, 진행 중)** — 사용자 허락으로 받음: 실제 영상 소리 `build/refs/snd/real/`(조사 11 영상 6개, 비교만 · 게임에 안 넣음) · 무료 후보 16개 `build/refs/snd/cand/`(`SOURCES.md` = 출처 · 라이선스, Freesound 는 미리듣기 음질). 재는 도구 `tools/snd_measure.py`(음 튐 · 울림 · 밝기 · 꼬리) · 같은 크기 자르기 `tools/snd_listen.py`(−30 LUFS, 크기만 조절 — −20 은 짧은 타격이 넘쳐 찌그러짐) · 겹치기 `tools/snd_mix.py`.
+  - 잰 것: 지금 Kenney = 한 음(2~3.4 kHz)이 또렷이 튐(37~46) → "팅". 실제(한국 MBC 0.85 s 간격 4번 · 파키스탄 0.59 s 간격 5번) = 음 튐 12~15 · 울림 0.02~0.08 s · 밝기 약 3.7 kHz → 음 없이 짧은 "딱". 현장 잡음 때문에 사라지는 시간 · 부스러기 꼬리는 못 잼. 석탄을 친 무료 녹음은 없음(모두 바위).
+  - 사용자: 후보 1~6 을 듣고 **"3 · 4 · 6 을 적절하게 섞으면"** → `snd_mix.py` 가 한 타격으로 겹침(딱 = 6 Pixabay · 쿵 = 4 CC0 · 와작 = 3 CC0, 60 Hz 밑 마이크 울렁임 걷어 냄 — 후보4 "낮은 소리 51 %" 는 88 % 가 40 Hz 밑이었음) · 섞기 A 고르게 / B 묵직하게 / C 날카롭게 + 비교 "번갈아" → `build/refs/snd/listen/` 보냄, **사용자 귀 판정 대기.** Pixabay 원본은 공개 저장소에 올리지 않는다(섞은 결과만 — Mixamo 원본 FBX 규칙과 같은 뜻).
 
 **09-27 끝(59차, 판정 뒤) — ORE-1 실행 파일 판정 ② 사용자 "통과" → ORE-1 끝**(한국식·네모식 번갈아 · `ORE_SHINE` 1.0 · 석탄 띠 그대로). 사용자 순서 ART-1 ✓ → ORE-1 ✓ → 3D-P + PICK-1(PICK-1 ✓, 3D-P 손은 아직) → MINE-1(합침, **판정 대기** — 키는 ↓↑ · Del Backspace · Esc 아래 키 Tab) → SND-P → REP-2~5. 남은 번호 ORE-2(막장 끝으로 모으기 · 높이 섞기 · 막장 소품).
 - **사용자(09-27 세션 끝)**: "다음 세션에서 캐기에 대한 모션을 어떤 방식을 가지고 갈지 말하겠다" — MINE-1(합친 누르고 있기 캐기)은 통과가 아니다. 사용자가 방식을 말하기 전에는 MINE-1 을 고치거나 새 제안서를 쓰지 않는다.
