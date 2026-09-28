@@ -14,7 +14,10 @@ public class MiningFx : MonoBehaviour
     public Mesh[] chipMeshes;
     public Material chipMaterial;
     public Material dustMaterial;
-    public AudioClip[] hitClips;                        // Kenney Impact Sounds impactMining_* (CC0)
+    public AudioClip[] hitClips;                        // 평소 콱 · 덩이 빠짐: 섞기 B pick_hit_* (SND-P, Assets/Audio/PickHit/SOURCES.txt)
+    public AudioClip[] slipClips;                       // 미끄러질 조짐 딸각 · 미끄러짐 쨍: Kenney Impact Sounds impactMining_* (CC0, Assets/Audio/PickSlip)
+    [System.NonSerialized] public float hitVolume = Tuning.HIT_VOLUME;   // 판정 키 Shift+[ Shift+] (DevHud)
+    [System.NonSerialized] public float hitDistance = Tuning.MINE_NOISE_SOFT;   // 콱이 들리는 거리 · 사보타주 farhit (옛 25 m)
 
     public const int IgnoreRaycastLayer = 2;
     readonly List<GameObject> chips = new List<GameObject>();
@@ -119,23 +122,25 @@ public class MiningFx : MonoBehaviour
         ore.spawnPos = at;
     }
 
-    // 곡괭이 타격음. 맞은 자리에서 나는 3D 소리 — 소음 반경(NOISE_PICK)에서 0 이 된다
+    // 곡괭이 타격음(평소 콱 · 덩이 빠짐). 맞은 자리에서 나는 3D 소리 — 괴물이 듣는 거리(MINE_NOISE_SOFT 6 m)에서 0 이 된다
     public void HitSound(Vector3 at, bool breaking) =>
-        PickSound(at, breaking ? 1f : Tuning.HIT_VOLUME, breaking ? Tuning.HIT_BREAK_PITCH : 1f + Random.Range(-Tuning.HIT_PITCH_JITTER, Tuning.HIT_PITCH_JITTER));
+        Play(hitClips, at, breaking ? 1f : hitVolume, breaking ? Tuning.HIT_BREAK_PITCH : 1f + Random.Range(-Tuning.HIT_PITCH_JITTER, Tuning.HIT_PITCH_JITTER), hitDistance);
 
-    // 같은 곡괭이 소리 파일을 크기·높이만 바꿔 튼다 — MINE-1 미끄러질 조짐(작고 높게 딸각) · 미끄러짐 '쨍'(크고 높게). 소리 파일 바꾸기는 SND-P
-    public void PickSound(Vector3 at, float volume, float pitch)
+    // MINE-1 미끄러질 조짐(작고 높게 딸각) · 미끄러짐 '쨍'(크고 높게) — Kenney 소리를 크기·높이만 바꿔 튼다. NOISE_PICK(25 m)에서 0
+    public void SlipSound(Vector3 at, float volume, float pitch) => Play(slipClips, at, volume, pitch, Tuning.NOISE_PICK);
+
+    void Play(AudioClip[] clips, Vector3 at, float volume, float pitch, float maxDistance)
     {
-        if (hitClips == null || hitClips.Length == 0)
+        if (clips == null || clips.Length == 0)
             return;
         var go = new GameObject("HitSound");
         go.transform.position = at;
         var src = go.AddComponent<AudioSource>();
-        src.clip = hitClips[Random.Range(0, hitClips.Length)];
+        src.clip = clips[Random.Range(0, clips.Length)];
         src.spatialBlend = 1f;
         src.rolloffMode = AudioRolloffMode.Linear;
         src.minDistance = Tuning.HIT_MIN_DISTANCE;
-        src.maxDistance = Tuning.NOISE_PICK;
+        src.maxDistance = maxDistance;
         src.volume = volume;
         src.pitch = pitch;
         src.Play();

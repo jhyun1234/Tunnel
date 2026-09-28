@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -127,6 +127,10 @@ public class M1Check : MonoBehaviour
             lamp.GetComponent<Light>().GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer | Pickaxe.ViewModelRenderingLayer;
         if (sabotage == "mute")
             MiningFx.I.hitClips = new AudioClip[0];
+        if (sabotage == "ringhit")              // SND-P 전: 평소 콱이 Kenney "팅"
+            MiningFx.I.hitClips = MiningFx.I.slipClips;
+        if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
+            MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
             stalker.earMul = 0.4f;
         if (sabotage == "bigears")              // 귀 ×2 = 50 m — 30 m 밖에서도 온다
@@ -1633,7 +1637,8 @@ public class M1Check : MonoBehaviour
         st.enabled = true;
     }
 
-    // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 타격, 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다
+    // S1: 내 소리 순서. 숙이기 < 걷기 < 달리기 < 착지 < 미끄러짐 '쨍', 이웃끼리 RMS 2배(6 dB). 발소리는 괴물 귀에도 들어간다.
+    // SND-P(09-28): 꼭대기가 타격 → '쨍'. 평소 콱은 6 m 라 걷기의 ½~2 배(pick_soft_like_walk), 파일마다 "팅" 음이 없어야 한다(hit_sound_no_ring)
     IEnumerator SoundStage(CharacterController cc)
     {
         var st = stalker;
@@ -1684,8 +1689,9 @@ public class M1Check : MonoBehaviour
         // ② 착지·타격을 발 앞(2 m 안 = 최대 음량)에서 튼다 — 사다리는 거리 감쇠 전 크기로 비교한다
         Teleport(cc, P, 0f);
         yield return new WaitForSeconds(0.3f);
-        //    변주 파일마다 크기가 달라 착지는 가장 큰 파일, 타격은 가장 작은 파일로 비교한다 (어느 짝이 나와도 순서가 지켜지게)
-        float land = 0f, hit = 99f;
+        //    변주 파일마다 크기가 달라 착지는 가장 큰 파일, 쨍은 가장 작은 파일로 비교한다 (어느 짝이 나와도 순서가 지켜지게)
+        var fx = MiningFx.I;
+        float land = 0f, slip = 99f;
         Vector3 at = P + Vector3.forward * 1f + Vector3.up * 1.5f;
         foreach (var clip in NoiseSound.I.landClips)
         {
@@ -1694,16 +1700,19 @@ public class M1Check : MonoBehaviour
             for (float t = 0f; t < clip.length + 0.2f; t += Time.deltaTime) { one = Mathf.Max(one, ListenerRms(audio)); yield return null; }
             land = Mathf.Max(land, one);
         }
-        foreach (var clip in MiningFx.I.hitClips)
+        var slipAll = fx.slipClips;
+        foreach (var clip in slipAll)                                     // 게임과 같은 길: Pickaxe.Slip 의 SlipSound(크기 1 · 높이 1.5)
         {
             float one = 0f;
-            NoiseSound.Play3D(at, clip, Tuning.HIT_VOLUME, Tuning.NOISE_PICK);
-            for (float t = 0f; t < clip.length + 0.2f; t += Time.deltaTime) { one = Mathf.Max(one, ListenerRms(audio)); yield return null; }
-            hit = Mathf.Min(hit, one);
+            fx.slipClips = new[] { clip };
+            fx.SlipSound(at, 1f, 1.5f);
+            for (float t = 0f; t < clip.length / 1.5f + 0.2f; t += Time.deltaTime) { one = Mathf.Max(one, ListenerRms(audio)); yield return null; }
+            slip = Mathf.Min(slip, one);
         }
-        if (hit > 90f) hit = 0f;                                          // 타격 파일이 없다(사보타주 mute)
-        float[] ladder = { rms[0], rms[1], rms[2], land, hit };
-        string[] ladderNames = { "crouch", "walk", "run", "land", "hit" };
+        fx.slipClips = slipAll;
+        if (slip > 90f) slip = 0f;
+        float[] ladder = { rms[0], rms[1], rms[2], land, slip };
+        string[] ladderNames = { "crouch", "walk", "run", "land", "slip" };
         bool ladderOk = true;
         string ladderInfo = "";
         for (int i = 0; i < 5; i++)
@@ -1719,6 +1728,48 @@ public class M1Check : MonoBehaviour
             ladderInfo += "; ";
         }
         Check("sound_ladder_6db", ladderOk && ladder[0] > 0.0005f, ladderInfo);
+
+        // SND-P ② 평소 콱: 파일마다(게임과 같은 길 HitSound) 가장 작은 것 · 가장 큰 것이 걷기의 ½~2 배. 3D 소리가 5 m 에선 들리고 7 m 에선 0 (6 m = 괴물이 듣는 거리)
+        //    크기 ×4 사보타주(loudhit)는 뺐다 — AudioSource 크기가 1.0 에서 멈춰 지금 파일로는 1.5 배가 끝이다. 2 배 위는 파일이 커질 때(ringhit = Kenney, 7.7~10 배)만 난다
+        var hitAll = fx.hitClips;
+        float hitMin = 99f, hitMax = 0f;
+        foreach (var clip in hitAll)
+        {
+            float one = 0f;
+            fx.hitClips = new[] { clip };
+            fx.HitSound(at, false);
+            for (float t = 0f; t < clip.length + 0.2f; t += Time.deltaTime) { one = Mathf.Max(one, ListenerRms(audio)); yield return null; }
+            hitMin = Mathf.Min(hitMin, one); hitMax = Mathf.Max(hitMax, one);
+        }
+        if (hitMin > 90f) hitMin = 0f;                                    // 타격 파일이 없다(사보타주 mute)
+        float[] farRms = new float[2];
+        float[] farM = { 5f, 7f };
+        for (int i = 0; i < 2 && hitAll.Length > 0; i++)
+        {
+            fx.hitClips = new[] { hitAll[0] };
+            fx.HitSound(pickaxe.cam.position + Vector3.forward * farM[i], false);
+            for (float t = 0f; t < hitAll[0].length + 0.2f; t += Time.deltaTime) { farRms[i] = Mathf.Max(farRms[i], ListenerRms(audio)); yield return null; }
+        }
+        fx.hitClips = hitAll;
+        float walk = rms[1];
+        Check("pick_soft_like_walk", hitMin >= walk * 0.5f && hitMax <= walk * 2f && farRms[0] > 0.001f && farRms[1] < 0.0005f,
+            $"strike (vol {fx.hitVolume:0.000}) min {hitMin:F4} x{hitMin / Mathf.Max(walk, 1e-6f):F2} · max {hitMax:F4} x{hitMax / Mathf.Max(walk, 1e-6f):F2} of walk {walk:F4} (want x0.5~2) · " +
+            $"at 5 m {farRms[0]:F4} (want > 0.001) · at 7 m {farRms[1]:F5} (want < 0.0005, heard to {fx.hitDistance:0} m)");
+
+        // SND-P ③ 평소 콱 파일에 "팅" 음이 없다 — 실행 파일 안의 소리 데이터로 잰다 (tools/snd_measure.py ring_db 와 같은 잣대. Kenney 37~46, 섞기 B 7~18)
+        string ringInfo = "";
+        float ringMax = 0f;
+        bool ringRead = true;
+        foreach (var clip in hitAll)
+        {
+            if (clip.loadState != AudioDataLoadState.Loaded) { clip.LoadAudioData(); for (float t = 0f; t < 2f && clip.loadState == AudioDataLoadState.Loading; t += Time.deltaTime) yield return null; }
+            float r = RingDb(clip);
+            ringRead &= r >= 0f;
+            ringMax = Mathf.Max(ringMax, r);
+            ringInfo += $"{clip.name} {r:F1}; ";
+        }
+        Check("hit_sound_no_ring", hitAll.Length == 8 && ringRead && ringMax < 25f,
+            $"{hitAll.Length} files (want 8), loudest ring {ringMax:F1} dB (want < 25): {ringInfo}");
 
         // ③ 괴물 귀: 램프 끄고 12 m 앞 괴물 쪽으로 달리면 온다(14 m), 8 m 에서 걷기(6 m)·3 m 에서 숙이기(2 m)는 안 온다 — 멀어지는 쪽으로 움직인다
         lamp.lampOn = false;
@@ -4026,6 +4077,56 @@ public class M1Check : MonoBehaviour
 
     static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
     static Vector3 Flat3(Vector3 v) => new Vector3(v.x, 0f, v.z);
+
+    // 소리 파일에서 가장 도드라진 음(300~8000 Hz)이 옆 소리보다 얼마나 튀나 (dB). 크면 "팅" — tools/snd_measure.py ring_db 를 옮긴 것:
+    // 봉우리(5 ms 창 크기 최대, 첫 40 ms 안) 뒤 30~150 ms 의 1024 샘플 창(128 걸음, Hann) 크기 평균 → dB, 바닥은 최대 − 50,
+    // 주파수마다 앞뒤 15 칸의 가운데값보다 얼마나 높은가의 최댓값. 데이터를 못 읽으면 −1
+    static float RingDb(AudioClip clip)
+    {
+        var all = new float[clip.samples * clip.channels];
+        if (clip.samples == 0 || !clip.GetData(all, 0)) return -1f;
+        int ch = clip.channels, n = clip.samples, sr = clip.frequency, N = 1024, hop = 128;
+        var x = new float[n];
+        for (int i = 0; i < n; i++) x[i] = all[i * ch];
+        var sq = new double[n + 1];
+        for (int i = 0; i < n; i++) sq[i + 1] = sq[i] + x[i] * x[i];
+        int w = sr / 200, p = 0;
+        double best = -1;
+        for (int i = 0; i < Mathf.Min(n, (int)(0.04f * sr)); i++)
+        {
+            double e = sq[Mathf.Min(n, i + w / 2)] - sq[Mathf.Max(0, i - w / 2)];
+            if (e > best) { best = e; p = i; }
+        }
+        int j0 = Mathf.FloorToInt(300f * N / sr) + 1, j1 = Mathf.CeilToInt(8000f * N / sr) - 1, nb = j1 - j0 + 1;
+        var cosT = new float[N]; var sinT = new float[N]; var win = new float[N];
+        for (int k = 0; k < N; k++) { cosT[k] = Mathf.Cos(2f * Mathf.PI * k / N); sinT[k] = Mathf.Sin(2f * Mathf.PI * k / N); win[k] = 0.5f - 0.5f * cosT[k]; }
+        var mag = new double[nb];
+        var fr = new float[N];
+        int frames = 0;
+        for (int c = Mathf.CeilToInt((p + 0.03f * sr) / hop) * hop; c <= p + 0.15f * sr; c += hop, frames++)
+        {
+            for (int k = 0; k < N; k++) { int i = c - N / 2 + k; fr[k] = i >= 0 && i < n ? x[i] * win[k] : 0f; }
+            for (int b = 0; b < nb; b++)
+            {
+                int j = j0 + b; double re = 0, im = 0;
+                for (int k = 0; k < N; k++) { int t = j * k % N; re += fr[k] * cosT[t]; im -= fr[k] * sinT[t]; }
+                mag[b] += Math.Sqrt(re * re + im * im);
+            }
+        }
+        if (frames == 0) return -1f;
+        var db = mag.Select(m => 20.0 * Math.Log10(m / frames + 1e-12)).ToArray();
+        double top = db.Max();
+        for (int b = 0; b < nb; b++) db[b] = Math.Max(db[b], top - 50);
+        double ring = 0;
+        for (int b = 0; b < nb; b++)
+        {
+            int lo = Mathf.Max(0, b - 15), hi = Mathf.Min(nb, b + 16);
+            var s = db.Skip(lo).Take(hi - lo).OrderBy(v => v).ToArray();
+            double med = s.Length % 2 == 1 ? s[s.Length / 2] : (s[s.Length / 2 - 1] + s[s.Length / 2]) / 2;
+            ring = Math.Max(ring, db[b] - med);
+        }
+        return (float)ring;
+    }
 
     static float ListenerRms(float[] buffer)
     {

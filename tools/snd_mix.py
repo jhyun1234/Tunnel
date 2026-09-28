@@ -1,6 +1,7 @@
 """곡괭이 타격 소리 겹쳐 만들기 (SND-P, 사용자 09-27 "후보 3·4·6 을 적절하게 섞으면").
 
   python tools/snd_mix.py            # build/refs/snd/mix/ 에 섞기별 타격 8개 + 들어 볼 줄(0.85 s 간격 6번)
+  python tools/snd_mix.py --game     # 섞기 B 8개 → Assets/Audio/PickHit/pick_hit_000~007.ogg (제안서 SND-P 승인 09-28)
 
 재료(build/refs/snd/cand/, git 에서 뺌 — Pixabay 원본은 따로 나눠 주면 안 된다):
   딱  = 후보6 c13 Pixabay "Mine Stone with a Pickaxe"  — 첫 20 ms 높은 소리 57 %, 20~100 ms 에 −14 dB 로 빨리 끝남
@@ -9,7 +10,7 @@
 (60 Hz 아래 마이크 울렁임을 걷어 낸 뒤 잰 값)
 타격마다 봉우리를 맞춰 겹친다. 섞기마다 딱·쿵·와작의 크기(dB)만 다르다.
 """
-import os, sys
+import os, sys, subprocess, uuid
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import butter, sosfilt
@@ -52,12 +53,64 @@ def layer(parts):
     return y
 
 
+def win_rms(y, w=1024, hop=256):
+    # 검사(M1Check.ListenerRms)와 같은 잣대: 1024 샘플 창 RMS 의 최댓값
+    return max(np.sqrt((y[i:i + w] ** 2).mean()) for i in range(0, max(1, len(y) - w), hop))
+
+
+def game(pool, picks):
+    """섞기 B 8개를 게임 파일로. 8개의 짧은 창 크기를 모두 같게 맞춘다 — 가장 뾰족한 파일의 봉우리가 0.95 가 되는 크기로
+    (첫 판은 가운데값에 맞추고 넘는 것만 낮췄더니 가장 작은 것이 절반이었다). 게임 속 크기는 Tuning.HIT_VOLUME 이 정한다 —
+    Unity 가 파일마다 다시 키우지 않게 .meta 의 normalize 를 끈다(meta 가 없을 때만 새로 쓴다)."""
+    gd, gk, gw = MIXES["섞기B_묵직하게"]
+    ys = [layer([(*pool["딱"][pk["딱"]], gd), (*pool["쿵"][pk["쿵"]], gk), (*pool["와작"][pk["와작"]], gw)]) for pk in picks]
+    target = float(min(0.95 * win_rms(y) / np.abs(y).max() for y in ys))
+    out = "Assets/Audio/PickHit/"
+    for i, y in enumerate(ys):
+        y = y * target / win_rms(y)
+        path = f"{out}pick_hit_{i:03d}.ogg"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-", "-c:a", "libvorbis", "-q:a", "5", path],
+                       input=y.astype(np.float32).tobytes(), check=True)
+        if not os.path.exists(path + ".meta"):
+            with open(path + ".meta", "w", newline="\n") as f:
+                f.write(META.format(guid=uuid.uuid4().hex))
+        print(f"  {path} {len(y) / SR:.2f} s  win rms {win_rms(y):.3f}  peak {np.abs(y).max():.2f}")
+
+
+META = """fileFormatVersion: 2
+guid: {guid}
+AudioImporter:
+  externalObjects: {{}}
+  serializedVersion: 8
+  defaultSettings:
+    serializedVersion: 2
+    loadType: 0
+    sampleRateSetting: 0
+    sampleRateOverride: 44100
+    compressionFormat: 1
+    quality: 1
+    conversionMode: 0
+    preloadAudioData: 0
+  platformSettingOverrides: {{}}
+  forceToMono: 0
+  normalize: 0
+  loadInBackground: 0
+  ambisonic: 0
+  3D: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+"""
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     rng = np.random.default_rng(927)
     pool = {k: hits(CAND + v) for k, v in SRC.items()}
     print(" · ".join(f"{k} 타격 {len(v)}" for k, v in pool.items()))
     picks = [{k: rng.integers(len(v)) for k, v in pool.items()} for _ in range(N)]   # 섞기끼리 같은 조합 — 비율만 다르게 들린다
+    if "--game" in sys.argv:
+        return game(pool, picks)
     for name, (gd, gk, gw) in MIXES.items():
         seq = np.zeros(int((0.85 * 5 + LEN + 0.2) * SR))
         for i, pk in enumerate(picks):

@@ -285,8 +285,9 @@ public static class Tuning
     // 곡괭이 전용 등 (사용자 09-14 "곡괭이가 하얗게 뜨는 게 거슬린다"). Unity 전용: 헤드램프는 곡괭이를 안 비추고, 이 약한 등만 비춘다
     public const float PICK_LIGHT_ENERGY = 3.0f;
     public const float PICK_LIGHT_RANGE = 2.0f;    // m
-    // 타격음 (Kenney Impact Sounds, CC0). 3D 소리, 소음 반경(NOISE_PICK)에서 0 이 된다
-    public const float HIT_VOLUME = 0.8f;
+    // 평소 콱 타격음 (섞기 B, SND-P 09-28). 3D 소리, 괴물이 듣는 거리(MINE_NOISE_SOFT 6 m)에서 0 이 된다.
+    // 크기 = 걷기 발소리의 ½~2 배(검사 pick_soft_like_walk) — 판정 키 Shift+[ Shift+] 로 사용자가 찾는다. 덩이 빠짐은 1.0
+    public const float HIT_VOLUME = 0.65f;          // 첫 값 0.36 은 걷기의 0.52~0.58 배(검사 실측 09-28) → 걷기와 같게
     public const float HIT_PITCH_JITTER = 0.07f;   // 매번 같은 소리로 안 들리게
     public const float HIT_BREAK_PITCH = 0.8f;     // 덩이가 빠지는 타격은 낮고 크게
     public const float HIT_MIN_DISTANCE = 2.0f;    // m, 이 안에서는 최대 음량
@@ -305,7 +306,7 @@ public static class Tuning
     public const float PICK_BREAK_LIFE = 1.5f;     // s, 바닥에 놓였다가 줄어들며 사라지기까지
     public const float PICK_BREAK_SCALE = 0.5f;    // 자갈 메시 기준 크기 — 1.0 이면 0.6 m 앞이라 곡괭이 머리보다 크게 보였다(09-16 캡처)
     // 소음. 반경 m
-    public const float NOISE_PICK = 25.0f;         // 곡괭이 큰 소리: MINE-1 미끄러짐 '쨍' (평소 콱은 MINE_NOISE_SOFT). 괴물 살 소리·타격음 3D 거리도 이 값
+    public const float NOISE_PICK = 25.0f;         // 곡괭이 큰 소리: MINE-1 미끄러짐 '쨍' (평소 콱은 MINE_NOISE_SOFT). 괴물 살 소리·'쨍' 3D 거리도 이 값 (평소 콱 3D 거리는 MINE_NOISE_SOFT — SND-P)
     public const float NOISE_HUD_FADE = 1.0f;      // 초, 왼쪽 아래 원이 사라지는 시간
     public const float NOISE_HUD_PX_PER_M = 2.0f;  // 반경 1 m 당 지름 px
     // ---- S1 발소리·착지음 (제안서 S1, 설계서 sound_design.md Step 2·7). 반경·간격은 Godot Tuning.gd STANCE 표 그대로 ----
@@ -315,7 +316,8 @@ public static class Tuning
     public const float STEP_INTERVAL_CROUCH = 1.2f; // Godot STANCE["crouch"].step (설계서 제안값 0.8 보다 Godot 값이 우선)
     public const float NOISE_STEP_RUN = 14.0f;     // Godot STANCE["run"].radius — 두 칸 건너에서도
     public const float STEP_INTERVAL_RUN = 0.32f;  // Godot STANCE["run"].step
-    // Unity 전용 제안값. 설계서 Step 2 사다리: 이웃끼리 2배(6 dB), 꼭대기는 HIT_VOLUME 0.8. 파일마다 소리 크기가 달라 검사(-only sound)의 RMS 실측으로 맞춘다
+    // Unity 전용 제안값. 설계서 Step 2 사다리: 이웃끼리 2배(6 dB). 꼭대기는 SND-P(09-28)부터 미끄러짐 '쨍'(Kenney 1.0 · 높이 1.5) — 평소 콱은 6 m 라 걷기 크기.
+    // 아래 실측은 옛 꼭대기(Kenney 타격 0.8)로 맞춘 것. 파일마다 소리 크기가 달라 검사(-only sound)의 RMS 실측으로 맞춘다
     // 실측(09-16, -only sound): 타격 0.8 = RMS 0.504. 파일 소리 크기가 달라 설계서 값(0.05/0.1/0.2/0.4)으로는 달리기 −27 dB·착지가 타격의 1/8 →
     // 꼭대기 0.504 에서 절반씩 내려 놓은 값. 여유는 맨 아래(숙이기)에 둔다 — 정확히 2배씩이면 프레임 흔들림에 깨진다
     // 타격은 5변주 중 가장 작은 파일(RMS 0.399, 1024 샘플 창)이 꼭대기 — 어느 파일이 나와도 순서가 지켜지게

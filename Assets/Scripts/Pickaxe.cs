@@ -246,7 +246,7 @@ public class Pickaxe : MonoBehaviour
                 for (float t = 0f; t < Tuning.MINE_SLIP_WARN_S; t += Time.deltaTime)
                 {
                     poseWobble = Mathf.Sin(t * 45f) * Tuning.MINE_SLIP_WOBBLE_DEG;
-                    if (t >= next) { MiningFx.I.PickSound(point, 0.3f, 1.9f); next += Tuning.MINE_SLIP_WARN_S / 3f; }
+                    if (t >= next) { MiningFx.I.SlipSound(point, 0.3f, 1.9f); next += Tuning.MINE_SLIP_WARN_S / 3f; }
                     var mouse = Mouse.current;
                     bool down = mouse != null && mouse.leftButton.isPressed;
                     if (!hasPick || player.frozen) break;
@@ -363,7 +363,7 @@ public class Pickaxe : MonoBehaviour
         slips++;
         minePhase = "slip";
         NoiseBus.Make(point, Tuning.NOISE_PICK, "pick_slip", player);
-        MiningFx.I.PickSound(point, 1f, 1.5f);
+        MiningFx.I.SlipSound(point, 1f, 1.5f);
         MiningFx.I.Chips(point, (cam.position - point).normalized);
         player.Shake(Tuning.SHAKE_AMOUNT, Tuning.SHAKE_TIME);
         posePos = Tuning.MINE_HIT_POS + new Vector3(0.10f, 0.04f, -0.05f);   // 옆으로 튕긴다

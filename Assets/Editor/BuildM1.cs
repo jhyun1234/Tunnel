@@ -45,7 +45,8 @@ public static class BuildM1
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";
-    const string HitSoundDir = "Assets/Audio/PickHit";   // Kenney Impact Sounds impactMining_* (CC0)
+    const string HitSoundDir = "Assets/Audio/PickHit";   // 평소 콱 · 덩이 빠짐: 섞기 B pick_hit_* (SND-P, tools/snd_mix.py --game)
+    const string SlipSoundDir = "Assets/Audio/PickSlip"; // 미끄러질 조짐 · 쨍: Kenney Impact Sounds impactMining_* (CC0)
     const string PlayerSoundDir = "Assets/Audio/Player";  // 발소리·착지 (Freesound CC0, SOURCES.txt)
     const int PieceCount = 6;              // 직선 조각 한 종류를 줄지어 42 m — 달리기 판정 길이 + 이음새 확인
 
@@ -78,11 +79,13 @@ public static class BuildM1
             EditorApplication.Exit(3);
             return;
         }
-        var hitClips = AssetDatabase.FindAssets("t:AudioClip", new[] { HitSoundDir })
-            .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g))).ToArray();
-        if (hitClips.Length == 0)
+        AudioClip[] DirClips(string dir) => AssetDatabase.FindAssets("t:AudioClip", new[] { dir })
+            .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g))).OrderBy(c => c.name).ToArray();
+        var hitClips = DirClips(HitSoundDir);
+        var slipClips = DirClips(SlipSoundDir);
+        if (hitClips.Length == 0 || slipClips.Length == 0)
         {
-            Debug.LogError($"{HitSoundDir} 에 소리 파일이 없다");
+            Debug.LogError($"{HitSoundDir} 또는 {SlipSoundDir} 에 소리 파일이 없다 (hit {hitClips.Length}, slip {slipClips.Length})");
             EditorApplication.Exit(4);
             return;
         }
@@ -395,6 +398,7 @@ public static class BuildM1
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
         fx.dustMaterial = LoadOr(booth, DustMatPath, MakeDustMaterial);
         fx.hitClips = hitClips;
+        fx.slipClips = slipClips;
         var noiseSound = mining.AddComponent<NoiseSound>();
         noiseSound.player = p;
         noiseSound.stepClips = stepClips;

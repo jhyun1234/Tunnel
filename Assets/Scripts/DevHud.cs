@@ -53,8 +53,8 @@ public class DevHud : MonoBehaviour
         if (kb == null || fog == null)
             return;
         if (kb.vKey.wasPressedThisFrame) fog.enabled.value = !fog.enabled.value;
-        if (kb.rightBracketKey.wasPressedThisFrame) fog.density.value *= 1.5f;
-        if (kb.leftBracketKey.wasPressedThisFrame) fog.density.value /= 1.5f;
+        if (kb.rightBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed) fog.density.value *= 1.5f;   // Shift+[ ] 는 콱 크기 (SND-P)
+        if (kb.leftBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed) fog.density.value /= 1.5f;
         if (kb.equalsKey.wasPressedThisFrame) lamp.energy *= 1.25f;
         if (kb.minusKey.wasPressedThisFrame) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;
@@ -68,6 +68,7 @@ public class DevHud : MonoBehaviour
         }
         MineKeys(kb);
         OreKeys(kb);
+        HitKeys(kb);
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
         if (kb.digit2Key.wasPressedThisFrame) lamp.darkAdaptAmbient *= 1.25f;
         if (kb.digit3Key.wasPressedThisFrame && pickaxe != null) pickaxe.Adjust(-10f);   // 곡괭이 내구도 (UI-1a, 설계서 Step 6)
@@ -222,6 +223,18 @@ public class DevHud : MonoBehaviour
         foreach (var (m, r0) in oreMats) m.SetFloat("roughnessFactor", Mathf.Clamp(r0 / oreShine, 0.05f, 1f));
     }
 
+    // SND-P 판정 손잡이: 평소 콱 크기. 받은 숫자를 Tuning.HIT_VOLUME 에 — 너무 키우면 검사 pick_soft_like_walk(걷기의 ½~2 배)가 FAIL
+    void HitKeys(Keyboard kb)
+    {
+        var fx = MiningFx.I;
+        if (fx == null || !kb.shiftKey.isPressed || !(kb.leftBracketKey.wasPressedThisFrame || kb.rightBracketKey.wasPressedThisFrame)) return;
+        fx.hitVolume = Mathf.Clamp(Mathf.Round(fx.hitVolume * (kb.rightBracketKey.wasPressedThisFrame ? 1.1f : 0.9f) * 1000f) / 1000f, 0.02f, 1f);
+        show = true;
+    }
+
+    static string HitLine() => MiningFx.I == null ? "" :
+        $"\nhit vol {MiningFx.I.hitVolume:0.000} (HIT_VOLUME {Tuning.HIT_VOLUME:0.000}) [Shift+[ Shift+]]  heard to: strike {Tuning.MINE_NOISE_SOFT:0} m, slip {Tuning.NOISE_PICK:0} m";
+
     string OreLine() => oreMats == null && GameObject.Find("OreFaces") == null ? "" :
         $"\nore shine x{oreShine:0.00} (ORE_SHINE {Tuning.ORE_SHINE:0.00}) [Shift+, Shift+.]";
 
@@ -266,6 +279,6 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + HitLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
     }
 }
