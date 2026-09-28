@@ -396,6 +396,10 @@ public static class BuildM1
         if (fx.orePrefab == null) { Debug.LogError($"{OreLumpPath} 를 못 읽었다 (GAME=1 blender/art/make_ore.py)"); EditorApplication.Exit(16); }
         fx.chipMeshes = chips.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh).ToArray();
         fx.chipMaterial = chips.GetComponentInChildren<MeshRenderer>().sharedMaterial;
+        var lump = AssetDatabase.LoadAssetAtPath<GameObject>(OreLumpPath);                         // DUST-1: 광질 조각 = 모난 탄 덩이를 줄여서 (두 씬 다)
+        fx.coalMesh = lump != null ? lump.GetComponentInChildren<MeshFilter>().sharedMesh : null;
+        fx.coalMaterial = lump != null ? lump.GetComponentInChildren<MeshRenderer>().sharedMaterial : null;
+        if (fx.coalMesh == null || fx.coalMaterial == null) { Debug.LogError($"{OreLumpPath} 그물·재질을 못 읽었다 (DUST-1 조각)"); EditorApplication.Exit(17); }
         fx.dustMaterial = LoadOr(booth, DustMatPath, MakeDustMaterial);
         fx.hitClips = hitClips;
         fx.slipClips = slipClips;

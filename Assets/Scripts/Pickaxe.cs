@@ -435,7 +435,8 @@ public class Pickaxe : MonoBehaviour
         minePhase = "slip";
         NoiseBus.Make(point, Tuning.NOISE_PICK, "pick_slip", player);
         MiningFx.I.SlipSound(point, 1f, 1.5f);
-        MiningFx.I.Chips(point, (cam.position - point).normalized);
+        MiningFx.I.Chips(point, (cam.position - point).normalized, Tuning.DEBRIS_SLIP);
+        MiningFx.I.Dust(point, (cam.position - point).normalized, Tuning.DUST_SLIP);
         player.Shake(Tuning.SHAKE_AMOUNT, Tuning.SHAKE_TIME);
         posePos = Tuning.MINE_HIT_POS + new Vector3(0.10f, 0.04f, -0.05f);   // 옆으로 튕긴다
         poseTilt = Tuning.MINE_HIT_TILT - 20f;

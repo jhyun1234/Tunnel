@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -129,6 +129,10 @@ public class M1Check : MonoBehaviour
             MiningFx.I.hitClips = new AudioClip[0];
         if (sabotage == "ringhit")              // SND-P 전: 평소 콱이 Kenney "팅"
             MiningFx.I.hitClips = MiningFx.I.slipClips;
+        if (sabotage == "olddust")              // DUST-1 전: 빛나는 둥근 먼지 · 베이지 조각
+            MiningFx.I.oldDust = true;
+        if (sabotage == "whitechips")           // 조각만 옛 바위 재질
+            MiningFx.I.whiteChips = true;
         if (sabotage == "nomotion")             // MINE-2 전: 캐기 동작 표 없이 코드 자세 (다른 컴퓨터에서 빌드한 것과 같다)
             pickaxe.useMotion = false;
         if (sabotage == "rawtempo")             // 동작 표를 늘려 맞추지 않고 Kevin 원래 박자 (0.967 s)
@@ -637,7 +641,127 @@ public class M1Check : MonoBehaviour
         Check("ore_mine_booth", popped && slide >= 0.03f && face4 != null && face4.gameObject.activeInHierarchy && gap4 != null && dropped != null,
             $"ORE_{i4} popped {popped} in {t4:F1} s · visible loose block slid {slide * 100f:F1} cm out before popping (want ≥ 3) · face left {face4 != null && face4.gameObject.activeInHierarchy} · gap left {gap4 != null} · dropped ore mesh '{dropMesh}'");
         player.Pitch = 0f;
+
+        // ⑤ 사람이 볼 연속 캡처 (먼지 조사 09-28, 사용자 "광질 먼지가 현실과 거리가 멀어 거슬린다"): 부스 석탄 벽 한 묶음 + 덩이 빠진 뒤 1.5 s — 0.1 s 마다.
+        //    검사는 아니다(캡처가 프레임을 늦춘다). 먼지 · 자갈을 고친 뒤 같은 자리에서 다시 찍어 나란히 비교한다
+        var pk5 = pockets.Where(p => p != null).OrderBy(p => (OnNav(p.transform.position + p.outDir * 1.6f, 1.5f) - (p.transform.position + p.outDir * 1.6f)).sqrMagnitude).FirstOrDefault();
+        if (pk5 != null && pickaxe.hasPick)
+        {
+            Teleport(cc, OnNav(pk5.transform.position + pk5.outDir * 1.6f, 1.5f) + Vector3.up * 0.1f, Quaternion.LookRotation(-pk5.outDir).eulerAngles.y);
+            yield return new WaitForSeconds(0.5f);
+            Vector3 aim5 = pk5.transform.position - pickaxe.cam.position;
+            player.Pitch = -Mathf.Atan2(aim5.y, new Vector2(aim5.x, aim5.z).magnitude) * Mathf.Rad2Deg;
+            yield return null;
+            var mouse5 = InputSystem.AddDevice<Mouse>("DustMouse");
+            InputSystem.QueueStateEvent(mouse5, new MouseState().WithButton(MouseButton.Left));
+            float popAt = -1f, t5 = 0f;
+            for (int f = 0; f < 120 && (popAt < 0f || t5 - popAt < 1.5f); f++)
+            {
+                yield return new WaitForSeconds(0.1f);
+                t5 += 0.1f;
+                if (pk5 == null && popAt < 0f) popAt = t5;
+                yield return new WaitForEndOfFrame();
+                ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"45_booth_dust_{f:000}.png"));
+            }
+            InputSystem.QueueStateEvent(mouse5, new MouseState());
+            yield return new WaitForSeconds(0.3f);
+            InputSystem.RemoveDevice(mouse5);
+            player.Pitch = 0f;
+        }
+
+        // ⑥ DUST-1 (제안서 docs/제안서_DUST1_광질_먼지.md): 부스 석탄 벽에 콱 한 번 — 조각(석탄 재질 · 크기 · 수 · 떨어짐 · 4 s 뒤 사라짐) ·
+        //    가루(뿜기 짧고 작게 · 흘러내림은 아래로) · 화면(친 자리 둘레가 빛나 보이지 않나 — 콱 직전과 0.3 s 뒤를 곡괭이를 빼고 견줌)
+        yield return DustStage(cc);
     }
+
+    IEnumerator DustStage(CharacterController cc)
+    {
+        var fx = MiningFx.I;
+        var pk6 = FindObjectsByType<OrePocket>(FindObjectsSortMode.None).Where(p => !p.Breaking)
+            .OrderBy(p => (OnNav(p.transform.position + p.outDir * 1.6f, 1.5f) - (p.transform.position + p.outDir * 1.6f)).sqrMagnitude).FirstOrDefault();
+        if (pk6 == null || !pickaxe.hasPick) { Check("mine_debris_coal", false, "no pocket or no pick left for the dust stage"); yield break; }
+        Teleport(cc, OnNav(pk6.transform.position + pk6.outDir * 1.6f, 1.5f) + Vector3.up * 0.1f, Quaternion.LookRotation(-pk6.outDir).eulerAngles.y);
+        yield return new WaitForSeconds(0.6f);
+        Vector3 aim6 = pk6.transform.position - pickaxe.cam.position;
+        player.Pitch = -Mathf.Atan2(aim6.y, new Vector2(aim6.x, aim6.z).magnitude) * Mathf.Rad2Deg;
+        yield return null;
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var stack = mainCam.GetUniversalAdditionalCameraData().cameraStack;
+        Camera vm = stack.Count > 0 ? stack[0] : null;
+        float bob0 = pickaxe.bobMul;
+        pickaxe.bobMul = 0f;                                          // 화면을 견주려고 머리를 멈춘다
+        var before = new HashSet<GameObject>(fx.LiveChips);
+        fx.lastPuff = fx.lastStream = fx.lastMotes = null;
+        var mouse6 = InputSystem.AddDevice<Mouse>("DustCheckMouse");
+        InputSystem.QueueStateEvent(mouse6, new MouseState().WithButton(MouseButton.Left));
+        for (float t = 0f; t < 3f && pickaxe.minePhase != "down"; t += Time.deltaTime) yield return null;
+        if (vm != null) vm.enabled = false;
+        yield return new WaitForEndOfFrame();
+        var clean = ScreenCapture.CaptureScreenshotAsTexture();
+        int s0 = pickaxe.strikeTimes.Count;
+        for (float t = 0f; t < 2f && pickaxe.strikeTimes.Count == s0; t += Time.deltaTime) yield return null;
+        float tStrike = Time.time;
+        Vector3 hitAt = pk6 != null ? pk6.transform.position : pickaxe.cam.position + pickaxe.cam.forward * 1.5f;
+        yield return null;
+        var mine = fx.LiveChips.Where(c => c != null && !before.Contains(c)).ToList();
+        var puff = fx.lastPuff; var stream = fx.lastStream;
+        float puffLife = puff != null ? puff.main.startLifetime.constantMax : 99f, puffSize = puff != null ? puff.main.startSize.constantMax : 99f;   // 뿜기는 1 s 안에 스스로 사라지니 지금 읽는다
+        while (Time.time - tStrike < 0.3f) yield return null;
+        yield return new WaitForEndOfFrame();
+        var dusty = ScreenCapture.CaptureScreenshotAsTexture();
+        if (vm != null) vm.enabled = true;
+        InputSystem.QueueStateEvent(mouse6, new MouseState());
+        float streamVy = 0f; int streamN = 0;
+        if (stream != null)
+        {
+            var parts = new ParticleSystem.Particle[stream.particleCount];
+            streamN = stream.GetParticles(parts);
+            for (int i = 0; i < streamN; i++) streamVy += parts[i].velocity.y + parts[i].totalVelocity.y * 0f;
+            if (streamN > 0) streamVy /= streamN;
+        }
+        // 화면: 친 자리 둘레 360 × 360 px 에서 콱 직전보다 밝기가 0.06 넘게 오른 픽셀의 비율 (어두워진 것 — 검은 조각 — 은 안 센다)
+        Vector3 sp = mainCam.WorldToScreenPoint(hitAt);
+        int half = 180, brighter = 0, total = 0;
+        float meanUp = 0f;
+        for (int y = Mathf.Max(0, (int)sp.y - half); y < Mathf.Min(clean.height, (int)sp.y + half); y++)
+            for (int x = Mathf.Max(0, (int)sp.x - half); x < Mathf.Min(clean.width, (int)sp.x + half); x++)
+            {
+                float d = dusty.GetPixel(x, y).grayscale - clean.GetPixel(x, y).grayscale;
+                total++;
+                if (d > 0.06f) brighter++;
+                meanUp += Mathf.Max(0f, d);
+            }
+        float glowFrac = total > 0 ? brighter / (float)total : 1f;
+        meanUp = total > 0 ? meanUp / total : 1f;
+        Destroy(clean); Destroy(dusty);
+        // 조각
+        float SizeCm(GameObject c) { var m = c.GetComponent<MeshFilter>().sharedMesh.bounds.size; var l = c.transform.lossyScale; return (m.x * l.x + m.y * l.y + m.z * l.z) / 3f * 100f; }
+        var sizes = mine.Where(c => c != null).Select(SizeCm).OrderBy(v => v).ToList();
+        bool coal = mine.Count > 0 && mine.All(c => c != null && c.GetComponent<MeshRenderer>().sharedMaterial == fx.coalMaterial);
+        Check("mine_debris_coal", mine.Count >= 5 && coal && sizes.Count > 0 && sizes[0] >= 1.2f && sizes[sizes.Count - 1] <= 14f,
+            $"pieces from one strike {mine.Count} (want ≥ 5), coal material {coal}, sizes {string.Join(" ", sizes.Select(v => v.ToString("F1")))} cm (want 1.2~14)");
+        while (Time.time - tStrike < 0.6f) yield return null;
+        var alive06 = mine.Where(c => c != null).ToList();
+        float meanY = alive06.Count > 0 ? alive06.Average(c => c.transform.position.y) : 99f;
+        while (Time.time - tStrike < 2.0f) yield return null;
+        int onFloor = 0;
+        foreach (var c in mine.Where(c => c != null))
+            if (Physics.Raycast(c.transform.position + Vector3.up * 0.05f, Vector3.down, out var h, 1.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) && h.distance - 0.05f <= 0.3f) onFloor++;
+        float floorFrac = mine.Count > 0 ? onFloor / (float)mine.Count : 0f;
+        while (Time.time - tStrike < 4.8f) yield return null;
+        int left = mine.Count(c => c != null);
+        Check("mine_debris_falls", alive06.Count > 0 && meanY < hitAt.y && floorFrac >= 0.8f && left == 0,
+            $"0.6 s: {alive06.Count} alive, mean height {meanY:F2} m vs hit {hitAt.y:F2} m (want lower) · 2.0 s: {onFloor}/{mine.Count} within 30 cm of the floor (want ≥ 80 %) · 4.8 s: {left} left (want 0, life {Tuning.DEBRIS_LIFE} + fade {Tuning.CHUNK_FADE} s)");
+        // 가루
+        Check("mine_dust_short", puffLife <= 1.0f && puffSize <= 0.3f && streamN > 0 && streamVy < 0f,
+            $"puff life ≤ {puffLife:F2} s (want ≤ 1) · size ≤ {puffSize:F2} m (want ≤ 0.3) · stream {streamN} bits, mean vertical speed {streamVy:F2} m/s at 0.3 s (want < 0, running down the face)");
+        Check("mine_dust_not_glow", glowFrac < DustGlowMax,
+            $"0.3 s after the strike, {glowFrac * 100f:F1} % of the 360 px square around the hit got brighter by > 0.06 (want < {DustGlowMax * 100f:F0} %), mean rise {meanUp:F4} — pick hidden, head bob off");
+        InputSystem.RemoveDevice(mouse6);
+        pickaxe.bobMul = bob0;
+        player.Pitch = 0f;
+    }
+    const float DustGlowMax = 0.10f;   // 잰 값(09-28): 옛 빛나는 둥근 먼지(사보타주 olddust) 42.5 % · 새 가루 1.4~1.7 %
 
     // ================= REP-1 고칠 곳 (제안서 docs/제안서_REP1_고칠_곳.md, 승인 09-26)
     // ① 망가진 갱목 앞에서 E 를 8 s 누르면 고쳐지고 돈이 값만큼 ② 4 s 누르고 떼었다 다시 → 진행이 남는다 ③ 고치는 동안 종류 반경의 소리(갱목 25 m · 전등 4 m), 전등은 켜진다

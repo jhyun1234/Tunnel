@@ -29,8 +29,8 @@ public class OrePocket : MonoBehaviour
             return;
         health = Mathf.Max(0f, health - damage);
         if (health < 1e-3f) health = 0f;                     // 50 ÷ 3 을 세 번 빼면 0.00001 이 남아 콱이 하나 더 들어갔다 (09-27 첫 검사)
-        MiningFx.I.Dust(hitPoint, -hitDir, Tuning.HIT_DUST);
-        MiningFx.I.Chips(hitPoint, -hitDir);
+        MiningFx.I.Dust(hitPoint, -hitDir, 1f);
+        MiningFx.I.Chips(hitPoint, -hitDir, Tuning.DEBRIS_PER_HIT);
         if (recoil != null)
             StopCoroutine(recoil);
         recoil = StartCoroutine(Recoil(transform.InverseTransformDirection(hitDir).normalized));
@@ -74,7 +74,8 @@ public class OrePocket : MonoBehaviour
         Vector3 o = new Vector3(-hitDir.x, 0f, -hitDir.z).normalized;
         if (o == Vector3.zero)
             o = outDir;
-        MiningFx.I.Dust(transform.position, o, Tuning.BREAK_DUST);
+        MiningFx.I.Dust(transform.position, o, Tuning.DUST_BREAK);
+        MiningFx.I.Chips(transform.position + o * 0.1f, o, Tuning.DEBRIS_BREAK);
         Vector3 side = Vector3.Cross(o, Vector3.up) * Random.Range(-1f, 1f) * Tuning.ORE_POP_SIDE;
         MiningFx.I.SpawnOre(transform.position + o * 0.3f, o * Tuning.POCKET_POP_OUT + side + Vector3.up * Tuning.ORE_POP_UP);
         Destroy(gameObject);

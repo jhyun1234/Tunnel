@@ -232,8 +232,35 @@ public static class Tuning
     public const float HIT_RECOIL_TIME = 0.10f;
     public const float CHUNK_SPIN = 4.0f;          // rad/s
     public const float CHUNK_FADE = 0.5f;          // 초, 자갈이 줄어들며 사라지는 시간
-    public const int CHUNK_LIMIT = 40;             // 살아 있는 자갈 상한
-    // 먼지. Godot(0.22 m 알 12·60개)을 그대로 옮기니 밝은 점으로 보여 "먼지인지 모르겠다"(사용자 09-14) →
+    public const int CHUNK_LIMIT = 60;             // 살아 있는 조각 상한 (DUST-1: 콱마다 7 · 덩이 빠짐 16 이라 40 → 60)
+    // DUST-1 (제안서 docs/제안서_DUST1_광질_먼지.md, 승인 09-28 — 사용자 "광질 먼지가 현실과 거리가 멀어 거슬린다").
+    // 실제 광질 영상: 조각은 검고 모난 석탄(알갱이~주먹) — 튀자마자 떨어져 발밑에 쌓인다(인도 자리아 · 태백) · 날 끝에서 10~25 cm 회색 가루가
+    // 0.3~0.5 s 에 옅어진다(파키스탄) · 무거운 가루는 벽을 타고 흘러내린다(태백) · 램프 빛 속에서만 가는 알갱이가 반짝이며 떨어진다(영국 Ayle). 빛나는 덩어리 · 불꽃 없음
+    public const float DUST_MUL = 1.0f;            // 광질 가루 양 배율 — 판정 키 Shift+9 · Shift+0
+    public const float DUST_BREAK = 2.5f;          // 덩이 빠질 때 가루 양 (콱 = 1). 크기 · 수명은 √양 배 (0.6~1.6)
+    public const float DUST_SLIP = 0.4f;           // 미끄러짐 — 날이 긁은 만큼
+    public const int PUFF_COUNT = 40;              // 날 끝 가루 뿜기 — 작은 알갱이를 많이 (10 cm 둥근 알 10 개는 작은 빛 공으로 읽혔다, 09-28 캡처)
+    public const float PUFF_SIZE_MIN = 0.03f, PUFF_SIZE_MAX = 0.08f, PUFF_GROW = 2.0f;   // m, 수명 끝 크기 배율
+    public const int HAZE_COUNT = 3;               // 뿜기 뒤에 아주 옅은 막 — 가루 덩이에 몸을 준다
+    public const float HAZE_SIZE_MIN = 0.18f, HAZE_SIZE_MAX = 0.28f;
+    public static readonly Color HAZE_COLOR = new Color(0.42f, 0.41f, 0.39f, 0.12f);
+    public const float PUFF_LIFE_MIN = 0.35f, PUFF_LIFE_MAX = 0.7f;
+    public const float PUFF_SPEED_MIN = 0.5f, PUFF_SPEED_MAX = 1.4f, PUFF_DRAG = 4.0f, PUFF_GRAVITY = 0.3f;   // 곡괭이 자루가 친 자리를 가리니 조금 밖으로 퍼지게
+    public static readonly Color PUFF_COLOR = new Color(0.42f, 0.41f, 0.39f, 0.40f);    // 램프를 받은 잿빛 (옛 따뜻한 0.40 · 0.37 · 0.33 · 큰 알은 크림색 공으로 빛났다 · 첫 판 0.20 · 0.35 는 석탄에 묻혀 안 보였다)
+    public const int STREAM_COUNT = 24;            // 벽을 타고 흘러내리는 가는 줄 알갱이 (늘인 입자)
+    public const float STREAM_SIZE_MIN = 0.006f, STREAM_SIZE_MAX = 0.014f, STREAM_LENGTH = 3f;
+    public const float STREAM_LIFE_MIN = 0.5f, STREAM_LIFE_MAX = 1.0f, STREAM_SPEED_MIN = 0.1f, STREAM_SPEED_MAX = 0.5f, STREAM_GRAVITY = 1.0f;
+    public static readonly Color STREAM_COLOR = new Color(0.30f, 0.29f, 0.28f, 0.9f);
+    public const int MOTE_COUNT = 30;              // 램프 빛 속에서 천천히 떨어지는 가는 알갱이
+    public const float MOTE_SIZE_MIN = 0.006f, MOTE_SIZE_MAX = 0.012f, MOTE_RADIUS = 0.25f;
+    public const float MOTE_LIFE_MIN = 2.0f, MOTE_LIFE_MAX = 3.0f, MOTE_SPEED_MIN = 0.03f, MOTE_SPEED_MAX = 0.2f, MOTE_GRAVITY = 0.05f;
+    public static readonly Color MOTE_COLOR = new Color(0.75f, 0.72f, 0.68f, 1.0f);
+    public const int DEBRIS_PER_HIT = 7, DEBRIS_BREAK = 16, DEBRIS_SLIP = 3;   // 석탄 조각 수
+    public const float DEBRIS_SIZE_MIN = 0.02f, DEBRIS_SIZE_MAX = 0.06f;      // m (ORE-1 모난 탄 덩이 그물을 줄여서)
+    public const float DEBRIS_BIG = 0.10f, DEBRIS_BIG_CHANCE = 0.3f;         // 가끔 주먹만 한 것 하나
+    public const float DEBRIS_POP_MIN = 0.5f, DEBRIS_POP_MAX = 1.5f;         // m/s, 밖으로 조금 튀었다 곧 떨어진다
+    public const float DEBRIS_LIFE = 4.0f;         // s, 바닥에 누워 있다가 CHUNK_FADE 에 줄어들며 사라짐 (사용자 09-28 "4 초 뒤 사라짐")
+    // (옛 — DUST-1 전, 사보타주 olddust 만) 먼지. Godot(0.22 m 알 12·60개)을 그대로 옮기니 밝은 점으로 보여 "먼지인지 모르겠다"(사용자 09-14) →
     // Unity 전용: 크고 옅은 뭉게가 천천히 퍼지며 커진다. 알이 커진 만큼 수는 줄였다
     public const int HIT_DUST = 6;                 // 알, 평타 먼지
     public const int BREAK_DUST = 24;              // 알, 덩이가 빠질 때 먼지
@@ -249,7 +276,7 @@ public static class Tuning
     public static readonly Color DUST_COLOR = new Color(0.40f, 0.37f, 0.33f, 0.30f);
     public const float SHAKE_AMOUNT = 0.06f;       // m, 덩이가 빠질 때만 흔든다
     public const float SHAKE_TIME = 0.15f;
-    public const int CHIP_PER_HIT = 2;
+    public const int CHIP_PER_HIT = 2;             // (옛 — 사보타주 olddust 만) 베이지 조각
     public const float CHIP_POP = 2.4f;            // m/s
     public const float CHIP_LIFE = 1.2f;           // 초
     // 자리당 켜질 확률. Godot 0.10 — M2 판정용 갱도(자리 24)는 전부 켠다 (사용자 09-14)

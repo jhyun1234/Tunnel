@@ -59,9 +59,9 @@ public class DevHud : MonoBehaviour
         if (kb.minusKey.wasPressedThisFrame) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;
         BoothKeys(kb);
-        if ((kb.digit0Key.wasPressedThisFrame || kb.numpad0Key.wasPressedThisFrame) && stalker != null) stalker.enabled = !stalker.enabled;
+        if ((kb.digit0Key.wasPressedThisFrame && !kb.shiftKey.isPressed || kb.numpad0Key.wasPressedThisFrame) && stalker != null) stalker.enabled = !stalker.enabled;   // Shift+9 · 0 은 광질 가루 양 (DUST-1)
         // 9 = 판정용: 괴물 행동을 끄고 내 앞 2.5 m 에 나를 보게 세운다 (사용자 09-17 "계속 접근해서 확인할 수 없다"). 0 으로 다시 켠다
-        if ((kb.digit9Key.wasPressedThisFrame || kb.numpad9Key.wasPressedThisFrame) && stalker != null)
+        if ((kb.digit9Key.wasPressedThisFrame && !kb.shiftKey.isPressed || kb.numpad9Key.wasPressedThisFrame) && stalker != null)
         {
             stalker.enabled = false;
             PlaceAhead(2.5f);
@@ -230,13 +230,18 @@ public class DevHud : MonoBehaviour
     void HitKeys(Keyboard kb)
     {
         var fx = MiningFx.I;
+        if (fx != null && kb.shiftKey.isPressed && (kb.digit9Key.wasPressedThisFrame || kb.digit0Key.wasPressedThisFrame))   // DUST-1 판정 손잡이: 광질 가루 양 → Tuning.DUST_MUL
+        {
+            fx.dustMul = Mathf.Clamp(Mathf.Round(fx.dustMul * (kb.digit0Key.wasPressedThisFrame ? 1.25f : 0.8f) * 100f) / 100f, 0.1f, 5f);
+            show = true;
+        }
         if (fx == null || !kb.shiftKey.isPressed || !(kb.leftBracketKey.wasPressedThisFrame || kb.rightBracketKey.wasPressedThisFrame)) return;
         fx.hitVolume = Mathf.Clamp(Mathf.Round(fx.hitVolume * (kb.rightBracketKey.wasPressedThisFrame ? 1.1f : 0.9f) * 1000f) / 1000f, 0.02f, 1f);
         show = true;
     }
 
     static string HitLine() => MiningFx.I == null ? "" :
-        $"\nhit vol {MiningFx.I.hitVolume:0.000} (HIT_VOLUME {Tuning.HIT_VOLUME:0.000}) [Shift+[ Shift+]]  heard to: strike {Tuning.MINE_NOISE_SOFT:0} m, slip {Tuning.NOISE_PICK:0} m";
+        $"\nhit vol {MiningFx.I.hitVolume:0.000} (HIT_VOLUME {Tuning.HIT_VOLUME:0.000}) [Shift+[ Shift+]]  heard to: strike {Tuning.MINE_NOISE_SOFT:0} m, slip {Tuning.NOISE_PICK:0} m   mine dust x{MiningFx.I.dustMul:0.00} (DUST_MUL {Tuning.DUST_MUL:0.00}) [Shift+9 Shift+0]";
 
     string OreLine() => oreMats == null && GameObject.Find("OreFaces") == null ? "" :
         $"\nore shine x{oreShine:0.00} (ORE_SHINE {Tuning.ORE_SHINE:0.00}) [Shift+, Shift+.]";
