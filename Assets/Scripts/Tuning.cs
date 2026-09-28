@@ -206,6 +206,12 @@ public static class Tuning
     // 긁기 = 날이 화면 아래쪽. 휘두르는 판을 MINE_SWING_YAW 만큼 옆으로 돌렸다 — 오른쪽 어깨 위에서 비스듬히 내려친다(실제 영상), 날 옆모습이 화면에 0.28 → 0.48 보인다
     // (날이 벽 쪽을 곧게 보면 1인칭에선 머리가 뒤에서만 보였다 — PICK-1 판정 ① 에서 알게 된 것)
     public const float MINE_SWING_YAW = -35f;
+    // MINE-2 (승인 09-28): 캐기 동작 표 — 에디터 MineMotionBake 가 Kevin 캐기 동작에서 잰다(Resources, git 에서 뺌). 없으면 위 MINE-1 자세로
+    public const string MINE_MOTION_RESOURCE = "Generated/MineMotion";
+    public const float MINE_MOTION_BOB = 0.2f;           // 동작의 눈 움직임을 머리에 이만큼 (09-27 시험 20 % — 멀미) — 판정 키 Shift+↓ ↑
+    public const float MINE_MOTION_CROUCH_SCALE = 0.5f;  // 쪼그려: 표를 내려친 자세 쪽으로 이만큼만 (귀 높이까지)
+    public const float MINE_MOTION_BLEND_S = 0.2f;       // 묶음 첫 들기를 들고 있던 자세에서 이어 붙이는 시간
+    public static readonly Vector3 PICK_BLADE_TIP = new Vector3(-0.252f, 0.47f, 0f);   // 뾰족한 날 끝 (pick_meshy.glb 뿌리 기준, −X 쪽)
     public static readonly Vector3 MINE_RAISE_POS = new Vector3(0.24f, 0.10f, 0.26f);    // 서서 머리 위로 — 손은 화면 오른쪽 위, 머리는 뒤로 나간다
     public const float MINE_RAISE_TILT = -110f;
     public static readonly Vector3 MINE_RAISE_POS_LOW = new Vector3(0.32f, -0.24f, 0.42f);   // 쪼그려, 귀 높이까지만 — 머리가 화면 오른쪽 위에 걸린다

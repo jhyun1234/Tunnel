@@ -34,6 +34,9 @@ public class Player : MonoBehaviour
     // 비틀 때 머리가 mineLean 만큼 앞으로 기운다
     [System.NonSerialized] public bool mineLock;
     [System.NonSerialized] public float mineLean;
+    // MINE-2: 캐기 동작의 머리 흔들림 (Pickaxe 가 넣는다 — 몸 기준 자리 m · 숙임 °)
+    [System.NonSerialized] public Vector3 mineBob;
+    [System.NonSerialized] public float mineBobPitch;
     bool mineCrouch;
     float mineYaw0, minePitch0, mineYawLimit;
     // REP-1 고치기: 망가진 고칠 곳을 바라보고 E 를 누르고 있는 동안 (못 걷는다, 곡괭이는 내린다 — 손 동작은 3D-P 뒤)
@@ -68,7 +71,7 @@ public class Player : MonoBehaviour
         velocity.x = velocity.z = 0f;
     }
 
-    public void EndMine() { mineLock = false; mineCrouch = false; mineLean = 0f; }
+    public void EndMine() { mineLock = false; mineCrouch = false; mineLean = 0f; mineBob = Vector3.zero; mineBobPitch = 0f; }
     public float MineYawOffset => mineLock ? Mathf.DeltaAngle(mineYaw0, transform.eulerAngles.y) : 0f;   // 검사가 읽는다
 
     // 화면을 짧게 흔든다. 카메라가 아니라 머리 위치만 — 조준은 그대로다
@@ -254,8 +257,8 @@ public class Player : MonoBehaviour
         breathAmp = Mathf.MoveTowards(breathAmp, breathTarget, dt / Tuning.EXHAUST_TIME);
         breathPhase = breathAmp > 0f ? breathPhase + dt * Mathf.PI * 2f / Tuning.EXHAUST_BREATH_S : 0f;
         float breath = Mathf.Sin(breathPhase) * breathAmp;
-        head.localPosition = new Vector3(0f, eye + breath * Tuning.EXHAUST_BREATH_M, 0f) + shake;
-        head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG + mineLean, 0f, 0f);
+        head.localPosition = new Vector3(0f, eye + breath * Tuning.EXHAUST_BREATH_M, 0f) + shake + mineBob;
+        head.localRotation = Quaternion.Euler(pitch + lookDown + breath * Tuning.EXHAUST_BREATH_DEG + mineLean + mineBobPitch, 0f, 0f);
         if (dof != null)                                             // 흐림은 탈진 중에만 — 풀리는 순간 바로 끈다 (3차 판정: 탈진 아닐 때 흐릿함 금지)
         {
             dof.gaussianMaxRadius.value = panting ? Tuning.EXHAUST_BLUR_RADIUS * pant * blurMul : 0f;

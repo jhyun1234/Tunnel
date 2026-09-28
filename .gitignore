@@ -45,3 +45,8 @@ __pycache__/
 # 받는 법: Unity 에디터 Package Manager → My Assets → 이름 검색 → Download → Import (docs/HANDOFF.md)
 /Assets/Kevin Iglesias/
 /Assets/Kevin Iglesias.meta
+
+# MINE-2: Kevin 캐기 동작에서 잰 표 — 에셋 스토어 약관(원본 재배포 금지), 이 컴퓨터 빌드에만 (MineMotionBake)
+/Assets/Resources/Generated/
+/Assets/Resources/Generated.meta
+/Assets/Resources.meta

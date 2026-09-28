@@ -181,8 +181,11 @@ public class DevHud : MonoBehaviour
     void MineKeys(Keyboard kb)
     {
         if (pickaxe == null) return;
-        if (kb.downArrowKey.wasPressedThisFrame) { pickaxe.tempo = Mathf.Max(0.3f, pickaxe.tempo * 0.9f); show = true; }
-        if (kb.upArrowKey.wasPressedThisFrame) { pickaxe.tempo = Mathf.Min(3f, pickaxe.tempo * 1.1f); show = true; }
+        bool shift = kb.shiftKey.isPressed;                         // Shift+↓ ↑ 는 캐기 동작의 머리 흔들림 (MINE-2)
+        if (kb.downArrowKey.wasPressedThisFrame && !shift) { pickaxe.tempo = Mathf.Max(0.3f, pickaxe.tempo * 0.9f); show = true; }
+        if (kb.upArrowKey.wasPressedThisFrame && !shift) { pickaxe.tempo = Mathf.Min(3f, pickaxe.tempo * 1.1f); show = true; }
+        if (kb.downArrowKey.wasPressedThisFrame && shift) { pickaxe.bobMul = Mathf.Max(0f, Mathf.Round(pickaxe.bobMul * 10f - 1f) / 10f); show = true; }
+        if (kb.upArrowKey.wasPressedThisFrame && shift) { pickaxe.bobMul = Mathf.Min(1f, Mathf.Round(pickaxe.bobMul * 10f + 1f) / 10f); show = true; }
         if (kb.deleteKey.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Max(0f, Mathf.Round((pickaxe.slipChance - 0.1f) * 100f) / 100f); show = true; }
         if (kb.backspaceKey.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Min(1f, Mathf.Round((pickaxe.slipChance + 0.1f) * 100f) / 100f); show = true; }
         if (kb.backquoteKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Max(0f, pickaxe.lookYaw - 10f); show = true; }
@@ -239,7 +242,8 @@ public class DevHud : MonoBehaviour
         $"\nore shine x{oreShine:0.00} (ORE_SHINE {Tuning.ORE_SHINE:0.00}) [Shift+, Shift+.]";
 
     string MineLine() => pickaxe == null ? "" :
-        $"\nmine {(pickaxe.Mining ? $"{pickaxe.minePhase.ToUpper()} {(pickaxe.mineCrouch ? "crouch" : "stand")}" : "-")}  tempo x{pickaxe.tempo:0.00} (stand bundle {StandBundle(pickaxe.tempo):0.0} s) [↓ ↑]  slip {pickaxe.slipChance * 100f:0}% [Del Bksp]  look ±{pickaxe.lookYaw:0}° [` Tab]  strike {pickaxe.softNoise:0} m · slip {Tuning.NOISE_PICK:0} m  bundles {pickaxe.bundles} slips {pickaxe.slips} regrips {pickaxe.regrips}";
+        $"\nmine {(pickaxe.Mining ? $"{pickaxe.minePhase.ToUpper()} {(pickaxe.mineCrouch ? "crouch" : "stand")}" : "-")}  tempo x{pickaxe.tempo:0.00} (stand bundle {StandBundle(pickaxe.tempo):0.0} s) [↓ ↑]  slip {pickaxe.slipChance * 100f:0}% [Del Bksp]  look ±{pickaxe.lookYaw:0}° [` Tab]  strike {pickaxe.softNoise:0} m · slip {Tuning.NOISE_PICK:0} m  bundles {pickaxe.bundles} slips {pickaxe.slips} regrips {pickaxe.regrips}" +
+        $"\nmine motion {(pickaxe.MotionOn ? pickaxe.motion.clipName : "none (code poses)")}  head bob {pickaxe.bobMul * 100f:0}% (MINE_MOTION_BOB {Tuning.MINE_MOTION_BOB * 100f:0}%) [Shift+↓ Shift+↑]";
 
     static float StandBundle(float tempo)
     {

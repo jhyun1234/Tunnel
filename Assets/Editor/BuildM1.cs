@@ -758,6 +758,7 @@ public static class BuildM1
 
     public static void BuildWindows()
     {
+        if (MineMotionBake.Bake() == null) { Debug.LogError("BUILD MineMotionBake 실패"); EditorApplication.Exit(1); return; }   // MINE-2: 캐기 동작 표 (Kevin 묶음이 없으면 건너뜀)
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
             scenes = new[] { IntroScenePath, ScenePath, BoothScenePath },   // 0 = 인트로(UI-2), 1 = 42 m 복도(검사용), 2 = 부스 맵(MAP1, 인트로 "시작")

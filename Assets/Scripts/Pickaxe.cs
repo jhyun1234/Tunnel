@@ -16,6 +16,11 @@ using UnityEngine.Rendering;
 // 내구도 (UI-1a): 콱마다 MINE_WEAR_BUNDLE ÷ 콱 수(한 묶음 = 2, 캐기 30 번 = 60), 미끄러지면 MINE_WEAR_SLIP, 괴물 타격 −1, 던지기 −5.
 // PICK_SHAKY_BELOW 이하면 닿은 타격 뒤 뷰모델이 떨린다. 0 이 되는 순간 Break — 손에서 조각나 바닥에 떨어졌다 사라지고 빈손. 42 m 판은 DevHud 3/4 키(Adjust)
 // 손 잡는 자리 GRIP_Rear · GRIP_Front (3D-P 의 팔이 따라간다) — 곡괭이 그물 밑 빈 점.
+// MINE-2 (제안서 docs/제안서_MINE2_캐기_동작.md, 승인 09-28): 캐기 동작 표(MineMotion — Kevin 캐기 동작에서 잰 곡괭이 자리, 이 컴퓨터 빌드에만)가 있으면
+//   들기 · 꼭대기 · 내려치기 · 박힌 채 버팀 · 빼기를 표로 움직인다. 표를 토막 내어 MINE-1 박자(조사)에 늘려 맞춘다 — 버팀 = 표의 버팀(내려친 순간 → 빼기 시작),
+//   빼기 + 들기 = 빼기 시작 → 뒤로 가장 크게 든 순간, 꼭대기 = 그 자세 그대로, 내려치기 = 든 순간 → 내려친 순간. 쪼그려는 표를 내려친 자세 쪽으로 MINE_MOTION_CROUCH_SCALE 만큼 작게.
+//   내려친 순간 날 끝이 MINE-1 콱 자리(화면) 쪽을 보도록 표 전체를 눈 둘레로 돌린다(09-27 시험에서 카메라가 광석을 내려다본 것과 같다). 동작의 눈 움직임은 MINE_MOTION_BOB 만 머리에.
+//   비틀기 · 긁기 · 미끄러짐 튕김 · 조짐 떨림은 표에 없어 코드로 — 표 자세에서 이어 붙인다. 표가 없으면(다른 컴퓨터 · 사보타주 nomotion) MINE-1 코드 동작 그대로.
 public class Pickaxe : MonoBehaviour
 {
     public const int ViewModelLayer = 8;                 // ProjectSettings/TagManager "ViewModel"
@@ -46,6 +51,13 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public bool oldMining;        // 사보타주 minefast — 옛 두 번 치기(휘두를 때마다 25 m)
     [System.NonSerialized] public bool resetOnRelease;   // 사보타주 resetprogress — 떼면 진행 0
     [System.NonSerialized] public bool slipsOn = true;   // 사보타주 noslip 이 끈다 — 조짐이 안 오는 상태
+    // MINE-2 캐기 동작 표. 판정 키 Shift+↓ ↑(머리 흔들림) · 사보타주 nomotion · rawtempo
+    [System.NonSerialized] public MineMotion motion;
+    [System.NonSerialized] public bool useMotion = true;     // 사보타주 nomotion 이 끈다 — 표 없이 MINE-1 코드 동작
+    [System.NonSerialized] public bool warpTempo = true;     // 사보타주 rawtempo 가 끈다 — 늘려 맞추지 않고 Kevin 원래 박자(0.967 s)
+    [System.NonSerialized] public float bobMul = Tuning.MINE_MOTION_BOB;
+    public bool MotionOn => useMotion && motion != null && motion.Samples > 1;
+    public bool Direct => direct;                        // 검사가 읽는다: 지금 표로 움직이는 중
     // 검사가 읽는다
     [System.NonSerialized] public int bundles, slips, regrips;
     [System.NonSerialized] public string minePhase = "";   // lift top warn down stuck out slip pry fall scrape lower
@@ -66,6 +78,11 @@ public class Pickaxe : MonoBehaviour
     Quaternion mineCamRot;                               // 묶음 시작 때 카메라 방향 — 곡괭이 자세는 이 기준
     Vector3 posePos;
     float poseTilt, poseYaw, poseWobble;
+    // MINE-2: 표로 움직일 때의 자세(뷰모델 노드, 묶음 시작 카메라 기준) · 머리 흔들림 · 표의 지금 시각 · 날 끝 맞춤 회전 · 쪼그려 크기
+    bool direct;
+    Vector3 dPos, dBob;
+    Quaternion dRot = Quaternion.identity, align = Quaternion.identity;
+    float clipNow, motionScale = 1f;
 
     void Awake()
     {
@@ -78,6 +95,7 @@ public class Pickaxe : MonoBehaviour
             r.shadowCastingMode = ShadowCastingMode.Off;   // 등과 같은 자리라 그림자가 화면을 덮는다
         gripRear = Grip("GRIP_Rear", Tuning.GRIP_REAR);
         gripFront = Grip("GRIP_Front", Tuning.GRIP_FRONT);
+        motion = Resources.Load<MineMotion>(Tuning.MINE_MOTION_RESOURCE);   // 없으면 null — MINE-1 코드 동작
     }
 
     Transform Grip(string name, Vector3 at)
@@ -139,6 +157,12 @@ public class Pickaxe : MonoBehaviour
         Quaternion back = Quaternion.Inverse(cam.rotation) * mineCamRot;
         Vector3 shake = shakeLeft > 0f ? Random.insideUnitSphere * Tuning.PICK_SHAKE_AMOUNT : Vector3.zero;
         lastShake = shake.magnitude;
+        if (direct)
+        {
+            transform.localPosition = back * (dPos - dBob) + shake;   // 머리가 흔들린 만큼 빼서 곡괭이는 몸 기준 자리에
+            transform.localRotation = back * dRot * Quaternion.Euler(0f, poseWobble, poseWobble * 0.5f);
+            return;
+        }
         transform.localPosition = back * posePos + shake;
         transform.localRotation = back * Quaternion.Euler(poseTilt, poseYaw + poseWobble, poseWobble * 0.5f);
     }
@@ -226,12 +250,32 @@ public class Pickaxe : MonoBehaviour
         float raiseTilt = mineCrouch ? Tuning.MINE_RAISE_TILT_LOW : Tuning.MINE_RAISE_TILT;
         Vector3 hitDir = (pocket.transform.position - cam.position).normalized;
         int remaining = dmg > 0f ? Mathf.CeilToInt(pocket.health / dmg - 0.001f) : 1000;
+        bool mm = MotionOn;
+        direct = false;
+        if (mm)
+        {
+            // 박자: 늘려 맞추면 MINE-1 표 그대로, 아니면(rawtempo) 표의 원래 시간
+            var m = motion;
+            if (!warpTempo) { st = new[] { m.Span(m.releaseT, m.topT), 0f, m.Span(m.topT, m.strikeT), m.Span(m.strikeT, m.releaseT), 0f }; T = 1f; }
+            motionScale = mineCrouch ? Tuning.MINE_MOTION_CROUCH_SCALE : 1f;
+            m.Eval(m.strikeT, out var ps, out var qs, out _, out _);
+            Vector3 tipK = ps + qs * Vector3.Scale(mesh.localScale, Tuning.PICK_BLADE_TIP);
+            Vector3 tipM = Tuning.MINE_HIT_POS + Quaternion.Euler(Tuning.MINE_HIT_TILT, Tuning.MINE_SWING_YAW, 0f) * (mesh.localPosition + mesh.localRotation * Vector3.Scale(mesh.localScale, Tuning.PICK_BLADE_TIP));
+            align = Quaternion.FromToRotation(tipK, tipM);
+            direct = true;
+            dPos = transform.localPosition;
+            dRot = transform.localRotation;
+            dBob = Vector3.zero;
+            clipNow = m.releaseT;
+        }
+        bool firstLift = true;
         int slipAt = !slipsOn ? -1 : slipChance >= 1f ? 0 : Random.value < slipChance ? Random.Range(0, Mathf.Max(1, Mathf.Min(remaining, per))) : -1;
         bool held = true;
         for (int k = 0; held && pocket.health > 0f; k++)
         {
             minePhase = "lift";
-            yield return PoseTo(raise, raiseTilt, st[0] * T, EaseOut, pocket);
+            if (mm) { yield return ClipTo(motion.topT, st[0] * T, pocket, firstLift ? Tuning.MINE_MOTION_BLEND_S : 0f); firstLift = false; }
+            else yield return PoseTo(raise, raiseTilt, st[0] * T, EaseOut, pocket);
             if (!(held = Held(pocket))) break;
             minePhase = "top";
             for (float t = 0f; t < st[1] * T && (held = Held(pocket)); t += Time.deltaTime) yield return null;
@@ -260,19 +304,32 @@ public class Pickaxe : MonoBehaviour
                 else slip = true;
             }
             minePhase = "down";
-            yield return PoseTo(Tuning.MINE_HIT_POS, Tuning.MINE_HIT_TILT, st[2] * T, EaseIn, slip ? null : pocket);
+            if (mm) yield return ClipTo(motion.strikeT, st[2] * T, slip ? null : pocket);
+            else yield return PoseTo(Tuning.MINE_HIT_POS, Tuning.MINE_HIT_TILT, st[2] * T, EaseIn, slip ? null : pocket);
             if (!slip && !(held = Held(pocket))) break;
             if (slip)
             {
                 Slip(point);                                        // 튕긴 채 잠깐 — 그 콱은 안 친 셈, 다음 콱으로
                 for (float t = 0f; t < 0.25f * T && (held = Held(pocket)); t += Time.deltaTime) yield return null;
                 if (!held) break;
+                if (mm) { clipNow = motion.releaseT; firstLift = true; }   // 튕겼으니 버팀은 없다 — 튕긴 자세에서 이어 들기
                 continue;
             }
             StrikeOre(pocket, point, hitDir, dmg);
             if (!hasPick) { held = false; break; }                 // 이 콱에 부서졌다
             minePhase = "stuck";
             float stuck = st[3] * T;
+            if (mm)
+            {
+                yield return ClipTo(motion.releaseT, stuck, pocket);   // 표의 버팀(박힌 채 튕김 · 잔떨림)을 늘려서
+                if (!(held = Held(pocket))) break;
+                if (pocket.health <= 0f) continue;                      // 마지막 콱 — 빼지 않고 박힌 채 비틀기로
+                minePhase = "out";
+                float lift = st[4] + st[0];
+                yield return ClipTo(motion.releaseT + motion.Span(motion.releaseT, motion.topT) * (lift > 0f ? st[4] / lift : 0f), st[4] * T, pocket);
+                if (!(held = Held(pocket))) break;
+                continue;
+            }
             for (float t = 0f; t < stuck && (held = Held(pocket)); t += Time.deltaTime)
             {
                 posePos = Tuning.MINE_HIT_POS + Random.insideUnitSphere * 0.004f;   // 박힌 채 버팀 — 손이 조금 떨린다
@@ -287,14 +344,25 @@ public class Pickaxe : MonoBehaviour
         if (held && pocket != null && pocket.health <= 0f && !pocket.Breaking)
         {
             // 박힌 채 자루를 아래·몸 쪽으로 당겨 비튼다 — 덩이가 기운다, 머리가 조금 앞으로
-            if (poseTilt < 0f) yield return PoseTo(Tuning.MINE_HIT_POS, Tuning.MINE_HIT_TILT, 0.15f * T, EaseIn, pocket);   // (진행이 다 찬 채로 다시 시작했을 때)
+            if (mm && firstLift) { var (sp, sr) = MotionPoseAt(motion.strikeT); yield return DirectTo(sp, sr, 0.15f * T, false); }   // (진행이 다 찬 채로 다시 시작했을 때) 박힌 자세로
+            else if (!mm && poseTilt < 0f) yield return PoseTo(Tuning.MINE_HIT_POS, Tuning.MINE_HIT_TILT, 0.15f * T, EaseIn, pocket);
             minePhase = "pry";
             float pry = (mineCrouch ? Tuning.MINE_PRY_CROUCH : Tuning.MINE_PRY_STAND) * T;
+            Vector3 pry0 = dPos;
+            Quaternion pryR0 = dRot;
             for (float t = 0f; t < pry && (held = Held(pocket)); t += Time.deltaTime)
             {
                 float u = Mathf.SmoothStep(0f, 1f, t / pry);
                 posePos = Vector3.Lerp(Tuning.MINE_HIT_POS, Tuning.MINE_PRY_POS, u);
                 poseTilt = Mathf.Lerp(Tuning.MINE_HIT_TILT, Tuning.MINE_PRY_TILT, u);
+                if (mm)                                             // 표의 박힌 자세에서 같은 만큼 당겨 비튼다
+                {
+                    dPos = pry0 + (Tuning.MINE_PRY_POS - Tuning.MINE_HIT_POS) * u;
+                    dRot = Quaternion.AngleAxis((Tuning.MINE_PRY_TILT - Tuning.MINE_HIT_TILT) * u, Vector3.right) * pryR0;
+                    dBob = Vector3.Lerp(dBob, Vector3.zero, u);
+                    player.mineBob = dBob;
+                    player.mineBobPitch = 0f;
+                }
                 pocket.Pry(u);
                 player.mineLean = Tuning.MINE_PRY_LEAN_DEG * u;
                 yield return null;
@@ -321,7 +389,9 @@ public class Pickaxe : MonoBehaviour
         if (!held && resetOnRelease && pocket != null && !pocket.Breaking) pocket.ResetProgress();
         player.mineLean = 0f;
         minePhase = "lower";
-        yield return PoseTo(Tuning.PICK_POS, Tuning.PICK_TILT_DEG, Tuning.MINE_LOWER_S, EaseOut, null, 0f);
+        if (direct) yield return DirectTo(Tuning.PICK_POS, Quaternion.Euler(Tuning.PICK_TILT_DEG, 0f, 0f), Tuning.MINE_LOWER_S, false);
+        else yield return PoseTo(Tuning.PICK_POS, Tuning.PICK_TILT_DEG, Tuning.MINE_LOWER_S, EaseOut, null, 0f);
+        direct = false;
         minePhase = "";
         basePos = Tuning.PICK_POS;
         transform.localPosition = Tuning.PICK_POS;
@@ -332,6 +402,7 @@ public class Pickaxe : MonoBehaviour
 
     IEnumerator ScrapeTo(Vector3 pos, float tilt, float time)
     {
+        if (direct) { yield return DirectTo(pos, Quaternion.Euler(tilt, Tuning.MINE_SWING_YAW, 0f), time, true); yield break; }
         Vector3 p0 = posePos;
         float t0 = poseTilt;
         for (float t = 0f; t < time; t += Time.deltaTime)
@@ -368,7 +439,81 @@ public class Pickaxe : MonoBehaviour
         player.Shake(Tuning.SHAKE_AMOUNT, Tuning.SHAKE_TIME);
         posePos = Tuning.MINE_HIT_POS + new Vector3(0.10f, 0.04f, -0.05f);   // 옆으로 튕긴다
         poseTilt = Tuning.MINE_HIT_TILT - 20f;
+        if (direct) { dPos += new Vector3(0.10f, 0.04f, -0.05f); dRot = Quaternion.AngleAxis(-20f, Vector3.right) * dRot; }
         Wear(Tuning.MINE_WEAR_SLIP);
+    }
+
+    // ---- MINE-2 표로 움직이기 ----
+    // 표의 시각 t 자세를 dPos · dRot 에 (쪼그려 크기 · 날 끝 맞춤 회전 · 곡괭이 모델 뿌리 → 뷰모델 노드), 눈 움직임은 bobMul 만 머리에
+    void MotionAt(float t)
+    {
+        var m = motion;
+        clipNow = m.Wrap(t);
+        m.Eval(clipNow, out var p, out var q, out var eye, out var pitch);
+        if (motionScale < 1f)
+        {
+            m.Eval(m.strikeT, out var ps, out var qs, out _, out _);
+            p = Vector3.LerpUnclamped(ps, p, motionScale);
+            q = Quaternion.SlerpUnclamped(qs, q, motionScale);
+            eye *= motionScale;
+            pitch *= motionScale;
+        }
+        p = align * p; q = align * q; eye = align * eye;
+        dRot = q * Quaternion.Inverse(mesh.localRotation);
+        dPos = p - dRot * mesh.localPosition;
+        dBob = eye * bobMul;
+        player.mineBob = dBob;
+        player.mineBobPitch = pitch * bobMul;
+    }
+
+    // 표의 시각 t 자세만 알아낸다 (지금 자세는 그대로)
+    (Vector3, Quaternion) MotionPoseAt(float t)
+    {
+        Vector3 p = dPos, b = dBob;
+        Quaternion r = dRot;
+        float c = clipNow, bp = player.mineBobPitch;
+        MotionAt(t);
+        var res = (dPos, dRot);
+        dPos = p; dRot = r; dBob = b; clipNow = c;
+        player.mineBob = b; player.mineBobPitch = bp;
+        return res;
+    }
+
+    // 표를 지금 시각에서 앞으로 to 까지 time 동안 (되풀이라 끝을 넘으면 처음으로). blend 동안은 지금 자세에서 이어 붙인다. stopOn 이 있으면 손을 떼는 순간 멈춘다
+    IEnumerator ClipTo(float to, float time, OrePocket stopOn, float blend = 0f)
+    {
+        float from = clipNow, span = motion.Span(from, to);
+        Vector3 p0 = dPos;
+        Quaternion r0 = dRot;
+        for (float t = 0f; t < time; t += Time.deltaTime)
+        {
+            if (stopOn != null && !Held(stopOn)) yield break;
+            MotionAt(from + span * t / time);
+            if (t < blend) { float w = Mathf.SmoothStep(0f, 1f, t / blend); dPos = Vector3.Lerp(p0, dPos, w); dRot = Quaternion.Slerp(r0, dRot, w); }
+            yield return null;
+        }
+        MotionAt(from + span);
+    }
+
+    // 표 밖의 자세로 옮긴다(긁기 · 내리기). 머리 흔들림은 0 으로. abortOnRelease = 긁기처럼 떼면 바로 멈춤
+    IEnumerator DirectTo(Vector3 pos, Quaternion rot, float time, bool abortOnRelease)
+    {
+        Vector3 p0 = dPos, b0 = dBob;
+        Quaternion r0 = dRot;
+        for (float t = 0f; t < time; t += Time.deltaTime)
+        {
+            var mouse = Mouse.current;
+            if (abortOnRelease && (!hasPick || player.frozen || mouse == null || !mouse.leftButton.isPressed)) yield break;
+            float u = Mathf.SmoothStep(0f, 1f, t / time);
+            dPos = Vector3.Lerp(p0, pos, u);
+            dRot = Quaternion.Slerp(r0, rot, u);
+            dBob = Vector3.Lerp(b0, Vector3.zero, u);
+            player.mineBob = dBob;
+            player.mineBobPitch = 0f;
+            yield return null;
+        }
+        dPos = pos; dRot = rot; dBob = Vector3.zero;
+        player.mineBob = Vector3.zero;
     }
 
     // ---- 괴물 (옛 빠른 휘두르기) ----

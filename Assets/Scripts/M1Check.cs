@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -129,6 +129,10 @@ public class M1Check : MonoBehaviour
             MiningFx.I.hitClips = new AudioClip[0];
         if (sabotage == "ringhit")              // SND-P 전: 평소 콱이 Kenney "팅"
             MiningFx.I.hitClips = MiningFx.I.slipClips;
+        if (sabotage == "nomotion")             // MINE-2 전: 캐기 동작 표 없이 코드 자세 (다른 컴퓨터에서 빌드한 것과 같다)
+            pickaxe.useMotion = false;
+        if (sabotage == "rawtempo")             // 동작 표를 늘려 맞추지 않고 Kevin 원래 박자 (0.967 s)
+            pickaxe.warpTempo = false;
         if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
             MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
@@ -2158,7 +2162,27 @@ public class M1Check : MonoBehaviour
         bool early = false;
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
         float press = Time.time, t = 0f;
-        while (first != null && t < 9f) { t += Time.deltaTime; loudest = Mathf.Max(loudest, ListenerRms(audio)); early |= first != null && first.Breaking && pickaxe.strikeTimes.Count < Tuning.MINE_STRIKES_STAND; yield return null; }
+        // MINE-2: 곡괭이 날 끝을 잰다 — 콱(박힌 채 버팀 둘째 프레임)마다 화면 자리, 꼭대기(뒤로 가장 크게 든 자세)에서 눈 기준 깊이
+        var strikeVp = new List<Vector2>();
+        Vector2 wantVp = default;
+        float topZ = 9f;
+        int stuckFrames = 0;
+        Vector3 TipWorld() => pickaxe.mesh.TransformPoint(Tuning.PICK_BLADE_TIP);
+        while (first != null && t < 9f)
+        {
+            t += Time.deltaTime; loudest = Mathf.Max(loudest, ListenerRms(audio)); early |= first != null && first.Breaking && pickaxe.strikeTimes.Count < Tuning.MINE_STRIKES_STAND;
+            string ph = pickaxe.minePhase;
+            stuckFrames = ph == "stuck" ? stuckFrames + 1 : 0;
+            if (stuckFrames == 2 && vm != null)
+            {
+                var mt = pickaxe.mesh;   // MINE-1 콱 자세에서의 날 끝 (카메라 기준) — 동작 표도 이 화면 자리를 쳐야 한다
+                Vector3 hitTip = Tuning.MINE_HIT_POS + Quaternion.Euler(Tuning.MINE_HIT_TILT, Tuning.MINE_SWING_YAW, 0f) * (mt.localPosition + mt.localRotation * Vector3.Scale(mt.localScale, Tuning.PICK_BLADE_TIP));
+                wantVp = vm.WorldToViewportPoint(pickaxe.cam.TransformPoint(hitTip));
+                strikeVp.Add(vm.WorldToViewportPoint(TipWorld()));
+            }
+            if (ph == "top" && vm != null) topZ = Mathf.Min(topZ, vm.transform.InverseTransformPoint(TipWorld()).z);
+            yield return null;
+        }
         float popT = Time.time - press;
         bool stand = !pickaxe.mineCrouch;
         var hitAt = new List<float>(pickaxe.strikeTimes);
@@ -2175,6 +2199,11 @@ public class M1Check : MonoBehaviour
             $"strikes {hitAt.Count} (want {Tuning.MINE_STRIKES_STAND}), gaps {gaps}s (want {cycle:F2} ±0.1), popped {first == null} at {popT:F2} s (want {wantPop:F2} ±0.3), early {early}, stand {stand}");
         Check("mine_soft_noise_6m", strikes == Tuning.MINE_STRIKES_STAND && lastKind == "pick" && Mathf.Approximately(lastR, Tuning.MINE_NOISE_SOFT), $"noises {strikes}, last {lastKind} {lastR} m (want pick {Tuning.MINE_NOISE_SOFT} m)");
         Check("pick_hit_audible", loudest > 0.005f, $"listener rms max {loudest:F4}");
+        float vpErr = strikeVp.Count == 0 ? 9f : strikeVp.Max(v => (v - wantVp).magnitude);
+        var mo = pickaxe.motion;
+        Check("mine_motion_from_clip", pickaxe.MotionOn && mo.Samples > 50 && strikeVp.Count == Tuning.MINE_STRIKES_STAND && vpErr < 0.03f && topZ < 0f,
+            $"motion {(mo != null ? $"{mo.clipName} {mo.Samples} samples" : "none")} on {pickaxe.MotionOn} · blade tip at strikes {string.Join(" ", strikeVp.Select(v => $"({v.x:F3},{v.y:F3})"))} want ({wantVp.x:F3},{wantVp.y:F3}) err {vpErr:F3} (< 0.03) · " +
+            $"at top the tip is {topZ:F2} m in front of the eye (want < 0 = lifted behind the head, 09-27 test)");
 
         // 광석: 1.4 초(자석 전)까지 구르고 멈춰 있다, 그 뒤 빨려와 줍힌다
         var ore = FindAnyObjectByType<Ore>();
