@@ -112,7 +112,8 @@ public static class Tuning
     public const int INTRO_VOLUME_STEP = 10;       // 소리 크기 한 칸 (0~100), 좌우 키
     // ---- UI-2d 인트로 간판 (제안서 docs/제안서_UI2d_인트로_간판.md, 승인 09-29). 갱도 속 흰 함석 간판 + 먼 램프. 전부 제안값 — 판정 키로 찾는다 ----
     public const float INTRO_FOV = 45.0f;          // 도, 인트로 카메라 세로 화각 (게임 CAMERA_FOV 80 보다 좁게 — 간판이 크게, 갱도 끝이 깊게)
-    public const float INTRO_CAM_Z = -2.5f;        // m, 카메라 자리 (첫 조각 가운데 z 0 에서 조금 뒤)
+    public const float INTRO_YAW_OFFSET = 6f;      // 도, 카메라 방향 = 부스 시작 방향 + 90°(사용자 09-29 "B 광장 동쪽") + 이 값 — 0 이면 벽의 흰 종이판이 영문 부제 뒤에 겹쳤다
+    public const float INTRO_FAR_LAMP_YAW = 2f;    // 도, 먼 램프를 놓는 방향 = 카메라 방향 + 이 값 (앞의 어두운 갱도 가운데 — 카메라 정면은 10 m 에서 벽에 닿았다)
     public const float INTRO_SIGN_W = 1.2f;        // m, 간판 가로 (그림 intro_sign.png 2000×800 과 같은 5:2)
     public const float INTRO_SIGN_H = 0.48f;
     public const float INTRO_SIGN_SCREEN_W = 0.47f;   // 간판이 화면 가로에서 차지하는 몫 (시안 2) — 이걸로 카메라와의 거리를 정한다
@@ -122,14 +123,14 @@ public static class Tuning
     public const float INTRO_SIGN_BRIGHT = 0.22f;     // 간판 바탕색 배율 — 머리 램프는 게임 값(LAMP_ENERGY) 그대로라 1.7 m 앞 흰 판이 하얗게 날아갔다(09-29 첫 캡처 Lit 1.0: 판 평균 밝기 0.99). Simple Lit 로 바꾼 뒤 판 밝기(0~255) 0.1 → 68, 0.45 → 252. 판을 어둡게 칠한 셈 — 판정 키 [ ]
     public const float INTRO_LAMP_NOD_DEG = 0.3f;     // 도, 숨쉬듯 끄덕임
     public const float INTRO_LAMP_NOD_S = 4.0f;
-    public const float INTRO_FAR_LAMP_M = 25.0f;      // m, 먼 램프 거리 (시안 배경 캡처 40_lure_25m 과 같게)
+    public const float INTRO_FAR_LAMP_M = 25.0f;      // m, 먼 램프 거리 (시안 배경 캡처 40_lure_25m 과 같게) — 그 전에 바위에 닿으면 닿은 곳 1 m 앞
     public const float INTRO_FAR_LAMP_ENERGY = 3.0f;  // 먼 램프 점 조명 세기 (1.5 는 첫 캡처에서 먼지 알갱이와 구별이 안 됐다)
     public const float INTRO_FAR_LAMP_SIZE = 0.07f;   // m, 램프 유리 지름 — 캡램프 머리 지름 약 6~7 cm (조사 13_광부_차림)
     public const float INTRO_FAR_LAMP_FLICKER = 0.15f;   // 밝기 떨림 ±15 % (사용자 09-29: 가만히, 조금만 떨림)
     public const float INTRO_FAR_LAMP_GLOW = 25.0f;   // 램프 유리 발광 배율 (LAMP_COLOR 에 곱한다, Bloom 문턱 1 을 넘게 — 25 m 안개로 약 절반이 된다)
     public const float INTRO_DUST_SHARE = 0.4f;       // 인트로 먼지 = 부스 ArtDust 양의 몫
     public const float INTRO_PROMPT_PULSE_S = 2.0f;   // s, "아무 키나 누르세요" 가 밝아졌다 어두워지는 주기
-    public const float INTRO_SIGN_LIT_MIN = 3.45f;    // 검사 intro_sign_lit: 간판 평균 밝기 ÷ 간판 밖 평균 밝기 최소 = 잰 값 6.90 (09-29, INTRO_SIGN_BRIGHT 0.22)의 절반
+    public const float INTRO_SIGN_LIT_MIN = 3.05f;    // 검사 intro_sign_lit: 간판 평균 밝기 ÷ 간판 밖 평균 밝기 최소 = 부스 광장에서 잰 값 6.13 (09-29, INTRO_SIGN_BRIGHT 0.22)의 절반
     // ---- MAP1 부스 한 층 맵 (제안서 docs/제안서_MAP1_부스_갱도_모양.md, 승인 09-24). 맵 그물 = blender/map/make_booth.py
     public const string BOOTH_SCENE = "Booth";                  // 인트로 "시작"이 가는 씬 (42 m 복도 M1_Tunnel 은 검사용으로만)
     public static readonly bool[] BOOTH_BLOCKS = { true, true };   // MAP2 부스판 막힘 묶음(BLK_1_* = 서쪽: ① 채탄장·서쪽 바깥 고리 8곳 · BLK_2_* = 동쪽: ③ 노보리·동쪽 바깥 고리 5곳). 둘 다 켜면 가운데만(제안서 MAP2 부스판). 판정 때 F5·F6

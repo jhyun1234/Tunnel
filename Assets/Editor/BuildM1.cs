@@ -768,7 +768,8 @@ public static class BuildM1
     }
 
     // UI-2 인트로 씬 (지침 1-1 · 4-1, 제안서 UI-2) — 겉모습은 UI-2d(제안서 docs/제안서_UI2d_인트로_간판.md, 09-29):
-    // 갱도(복도 조각)를 실시간 3D 로, 천장에 줄로 매단 흰 함석 간판(그림 intro_sign.png ← tools/make_intro_sign.py)을 머리 램프가 비추고, 25 m 끝에 먼 램프 하나.
+    // 실제 게임 맵(부스 맵)의 케이지 광장에서 동쪽을 본 자리(사용자 09-29 "B 광장 동쪽")를 실시간 3D 로, 줄로 매단 흰 함석 간판(그림 intro_sign.png ← tools/make_intro_sign.py)을
+    // 머리 램프가 비추고, 앞 갱도에 먼 램프 하나. (처음엔 검사용 42 m 복도로 만들었다 — 사용자 "실제 우리 게임 화면이 아니다")
     // 화면 글자(Canvas 1920×1080 기준): 늘 보임 = 영문 부제 · 팀명 / 로고 패널 = 로고 칸 2 · "아무 키나" / 메뉴 패널 = 3줄 + 빨간 밑줄 (메뉴에선 로고 숨김 — 사용자 09-29).
     // 값·글자는 Tuning.INTRO_*. 기본 해상도도 여기서 1920×1080 으로 (지침 하드웨어 사양서 16:9)
     public static void MakeIntro()
@@ -778,13 +779,12 @@ public static class BuildM1
         var univ = LoadSprite(LogoUnivPath);
         var center = LoadSprite(LogoCenterPath);
         var signTex = AssetDatabase.LoadAssetAtPath<Texture2D>(SignPath);
-        var piece = AssetDatabase.LoadAssetAtPath<GameObject>(PiecePath);
         var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(ProfilePath);
         var artProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(ArtProfilePath);
         var dustMat = AssetDatabase.LoadAssetAtPath<Material>(DustMatPath);
-        if (font == null || latin == null || univ == null || center == null || signTex == null || piece == null || profile == null || artProfile == null || dustMat == null)
+        if (font == null || latin == null || univ == null || center == null || signTex == null || profile == null || artProfile == null || dustMat == null)
         {
-            Debug.LogError($"인트로 재료를 못 읽었다: font {font != null} latin {latin != null} univ {univ != null} center {center != null} sign {signTex != null} piece {piece != null} " +
+            Debug.LogError($"인트로 재료를 못 읽었다: font {font != null} latin {latin != null} univ {univ != null} center {center != null} sign {signTex != null} " +
                 $"profile {profile != null} art {artProfile != null} dust {dustMat != null} (간판 그림은 python tools/make_intro_sign.py, 볼륨·먼지는 MakeScene·MakeBooth 가 만든다)");
             EditorApplication.Exit(9);
             return;
@@ -792,21 +792,13 @@ public static class BuildM1
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         SetAir();
 
-        // 갱도: 복도 씬과 같은 조각을 줄지어. 걷지 않으니 충돌 모양(COL_*)은 그리지도 붙이지도 않는다
-        var set = new GameObject("TunnelSet").transform;
-        for (int i = 0; i < PieceCount; i++)
-        {
-            var go = Instance(piece, set);
-            go.transform.position = new Vector3(0f, 0f, i * Tuning.GRID_CELL);
-            foreach (var mf in go.GetComponentsInChildren<MeshFilter>().Where(m => m.name.StartsWith("COL_")))
-                UnityEngine.Object.DestroyImmediate(mf.GetComponent<MeshRenderer>());
-            // 공기관(과 받침쇠)·전구는 뺀다 (09-29 캡처): 관은 화면 왼쪽을 가로질러 부제를 가리켰고, 램프를 받은 전구는 먼 램프와 같은 빛 점으로 보였다
-            foreach (var t in go.GetComponentsInChildren<Transform>().Where(t => new[] { "PRP_straight_pipe", "PRP_straight_bracket", "PRP_straight_bulb" }.Any(t.name.StartsWith)).ToArray())
-                UnityEngine.Object.DestroyImmediate(t.gameObject);
-        }
-
+        // 부스 맵 겉모습. 카메라 = 플레이어 시작 자리 눈높이, 시작 방향에서 오른쪽 90°(검사 캡처 27_art_plaza_e 와 같은 자리) + INTRO_YAW_OFFSET
+        var map = PlaceBoothLook();
+        Vector3 sp = Find(map, "SPAWN_Player").position, lookAt = Find(map, "LOOK_Player").position;
+        float yaw = Quaternion.LookRotation(Vector3.ProjectOnPlane(lookAt - sp, Vector3.up)).eulerAngles.y + 90f + Tuning.INTRO_YAW_OFFSET;
         var camGo = new GameObject("Camera") { tag = "MainCamera" };
-        camGo.transform.position = new Vector3(0f, Tuning.EYE_HEIGHT, Tuning.INTRO_CAM_Z);
+        camGo.transform.SetPositionAndRotation(sp + Vector3.up * (0.1f + Tuning.EYE_HEIGHT), Quaternion.Euler(0f, yaw, 0f));
+        Vector3 camPos = camGo.transform.position, fwd = camGo.transform.forward;
         var cam = camGo.AddComponent<Camera>();
         cam.fieldOfView = Tuning.INTRO_FOV;
         cam.nearClipPlane = 0.05f;
@@ -826,7 +818,7 @@ public static class BuildM1
         // 간판: 화면 가로의 INTRO_SIGN_SCREEN_W 가 되는 거리에, 가운데가 눈높이 위 (거리 × INTRO_SIGN_UP). 윗변 가운데(SignPivot)에서 흔들린다
         float dist = Tuning.INTRO_SIGN_W / (Tuning.INTRO_SIGN_SCREEN_W * 2f * Mathf.Tan(Tuning.INTRO_FOV * 0.5f * Mathf.Deg2Rad) * 16f / 9f);
         var pivot = new GameObject("SignPivot").transform;
-        pivot.position = new Vector3(0f, Tuning.EYE_HEIGHT + dist * Tuning.INTRO_SIGN_UP + Tuning.INTRO_SIGN_H * 0.5f, Tuning.INTRO_CAM_Z + dist);
+        pivot.SetPositionAndRotation(camPos + fwd * dist + Vector3.up * (dist * Tuning.INTRO_SIGN_UP + Tuning.INTRO_SIGN_H * 0.5f), camGo.transform.rotation);
         var plate = GameObject.CreatePrimitive(PrimitiveType.Quad);           // 앞면이 -Z(카메라 쪽)
         plate.name = "Sign";
         UnityEngine.Object.DestroyImmediate(plate.GetComponent<Collider>());
@@ -853,9 +845,13 @@ public static class BuildM1
             w.GetComponent<MeshRenderer>().sharedMaterial = wireMat;
         }
 
-        // 먼 램프: INTRO_FAR_LAMP_M 끝, 눈높이보다 조금 아래. 빛나는 유리(Unlit, Bloom 문턱 위) + 약한 점 조명 + 안개 빛무리
+        // 먼 램프: 앞으로 INTRO_FAR_LAMP_M (그 전에 바위에 닿으면 1 m 앞), 눈높이보다 조금 아래. 빛나는 유리(Unlit, Bloom 문턱 위) + 약한 점 조명 + 안개 빛무리
+        Physics.SyncTransforms();
+        Vector3 farDir = Quaternion.Euler(0f, Tuning.INTRO_FAR_LAMP_YAW, 0f) * fwd;
+        float farM = Physics.Raycast(camPos, farDir, out RaycastHit farHit, Tuning.INTRO_FAR_LAMP_M) ? farHit.distance - 1f : Tuning.INTRO_FAR_LAMP_M;
         var far = new GameObject("FarLamp");
-        far.transform.position = new Vector3(0.1f, Tuning.EYE_HEIGHT - 0.1f, Tuning.INTRO_CAM_Z + Tuning.INTRO_FAR_LAMP_M);
+        far.transform.position = camPos + farDir * farM + Vector3.down * 0.1f;
+        Debug.Log($"INTRO camera {camPos} yaw {yaw:F0} · sign {dist:F2} m · far lamp {farM:F1} m ({(farHit.collider != null ? farHit.collider.name : "no hit")})");
         var farLight = far.AddComponent<Light>();
         farLight.type = LightType.Point;
         farLight.range = 3f;
@@ -1062,6 +1058,73 @@ public static class BuildM1
         BaseShaderGUI.SetupMaterialBlendMode(mat);
         AssetDatabase.CreateAsset(mat, DustMatPath);
         return mat;
+    }
+
+    // UI-2d 인트로 배경 = 부스 맵의 겉모습만 (새 모습: MineRock 바위 · 광장 물건 · 둥근 통나무 동발 · 켜진 전등 + 튀는 빛). 괴물·고칠 곳·길찾기 없음.
+    // 게임 쪽 자산(길찾기 바닥 · 전구 재질 · MineRock 재질)은 읽기만 한다 — 새로 만들면 GUID 가 바뀌어 부스 씬 참조가 끊긴다. 값은 PlaceBoothMap · PlaceBoothLights · PlaceArt 와 같다.
+    // 충돌 모양(COL_)은 보이지 않게 두고 충돌만 남긴다 — 먼 램프 자리를 광선으로 잰다
+    static Transform PlaceBoothLook()
+    {
+        var map = Instance(AssetDatabase.LoadAssetAtPath<GameObject>(BoothMapPath), null).transform;
+        map.name = "BoothMap";
+        var plaza = Instance(AssetDatabase.LoadAssetAtPath<GameObject>(PlazaPropsPath), map).transform;
+        plaza.name = "PlazaProps";
+        Instance(AssetDatabase.LoadAssetAtPath<GameObject>(OrePocketsPath), map).name = "OreFaces";
+        var rock = AssetDatabase.LoadAssetAtPath<Material>(MineRockMatPath);
+        Material on = AssetDatabase.LoadAssetAtPath<Material>(BulbOnMatPath), off = AssetDatabase.LoadAssetAtPath<Material>(BulbOffMatPath);
+        if (rock == null || on == null || off == null) { Debug.LogError("인트로: MineRock · 전구 재질이 없다 (MakeBooth 가 만든다)"); EditorApplication.Exit(9); }
+        foreach (var r in map.GetComponentsInChildren<MeshRenderer>(true).ToArray())
+        {
+            string n = r.name;
+            if (n.StartsWith("COL_"))
+            {
+                r.gameObject.AddComponent<MeshCollider>().sharedMesh = r.GetComponent<MeshFilter>().sharedMesh;
+                UnityEngine.Object.DestroyImmediate(r);
+            }
+            else if (n.StartsWith("COLP_") || n.StartsWith("PRP_Timber_"))   // 광장 물건 부딪힘 상자 · 옛 네모 갱목(새 모습엔 둥근 통나무)
+                UnityEngine.Object.DestroyImmediate(r);
+            else if (n.StartsWith("SHL_Booth_") || n.StartsWith("PRP_Crevice_"))
+                r.sharedMaterials = Enumerable.Repeat(rock, r.sharedMaterials.Length).ToArray();
+        }
+        foreach (var b in map.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BLK_")).ToArray())
+            b.gameObject.SetActive(Tuning.BOOTH_BLOCKS[DevHud.BlockGroup(b.gameObject) - 1]);
+        // 전등: 광장 둘은 철망 등(광장 물건)이 대신이라 공 전구를 달지 않는다 (PlaceArt 의 oldOnly 와 같은 판단)
+        var cages = plaza.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("Lamp_Light_")).Select(t => t.GetComponentInChildren<Renderer>()).Where(r => r != null).Select(r => r.bounds.center).ToArray();
+        var root = new GameObject("BoothLights").transform;
+        foreach (var slot in map.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("SLOT_Light_") || t.name.StartsWith("SLOT_DeadLight_")).OrderBy(t => t.name))
+        {
+            bool lit = slot.name.StartsWith("SLOT_Light_");
+            var go = new GameObject(lit ? "Lamp" : "DeadLamp");
+            go.transform.SetParent(root);
+            go.transform.position = slot.position;
+            if (!cages.Any(c => Vector3.Distance(c, slot.position) < 0.5f))
+            {
+                var bulb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                UnityEngine.Object.DestroyImmediate(bulb.GetComponent<Collider>());
+                bulb.transform.SetParent(go.transform, false);
+                bulb.transform.localScale = Vector3.one * 0.12f;
+                var br = bulb.GetComponent<MeshRenderer>();
+                br.sharedMaterial = lit ? on : off;
+                br.shadowCastingMode = ShadowCastingMode.Off;
+            }
+            if (!lit) continue;
+            var l = go.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = Tuning.BOOTH_LIGHT_COLOR;
+            l.intensity = Tuning.BOOTH_LIGHT_ENERGY;
+            l.range = Tuning.BOOTH_LIGHT_RANGE;
+            l.shadows = LightShadows.Soft;
+            var bgo = new GameObject("Bounce");
+            bgo.transform.SetParent(go.transform, false);
+            bgo.transform.localPosition = Vector3.down * Tuning.ART_BOUNCE_DROP;
+            var bl = bgo.AddComponent<Light>();
+            bl.type = LightType.Point;
+            bl.color = Tuning.BOOTH_LIGHT_COLOR * Tuning.ART_BOUNCE_TINT;
+            bl.range = Tuning.ART_BOUNCE_RANGE;
+            bl.intensity = Tuning.BOOTH_LIGHT_ENERGY * Tuning.ART_BOUNCE;
+            bl.shadows = LightShadows.None;
+        }
+        return map;
     }
 
     // 공기 (LOOK_REFERENCE 4-3, 4-4). 태양·하늘·반사 없음 — 빛은 헤드램프 하나. 갱도 씬과 인트로 씬이 같이 쓴다

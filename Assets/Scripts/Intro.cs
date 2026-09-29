@@ -33,6 +33,7 @@ public class Intro : MonoBehaviour
     bool menu;
     string only = "";
     float swayDeg = Tuning.INTRO_SIGN_SWAY_DEG, signBright = Tuning.INTRO_SIGN_BRIGHT;
+    Quaternion signRest;                                       // 흔들림 없는 간판 방향 (카메라를 마주 본다)
 
     int Volume => Mathf.RoundToInt(AudioListener.volume * 100f);
 
@@ -41,6 +42,9 @@ public class Intro : MonoBehaviour
         AudioListener.volume = PlayerPrefs.GetFloat(VolumeKey, 1f);
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+        signRest = sign.localRotation;
+        Shader.SetGlobalFloat("_ArtWet", Tuning.ART_WET);      // 부스 바위 재질(MineRock)의 젖음 · 밝기 — 게임에선 ArtLook 이 넣는다 (0 이면 바위가 검다)
+        Shader.SetGlobalFloat("_ArtBright", Tuning.ART_BRIGHT);
         logoPanel.SetActive(true);
         menuPanel.SetActive(false);
         Refresh();
@@ -110,7 +114,7 @@ public class Intro : MonoBehaviour
     void Animate()
     {
         const float Tau = Mathf.PI * 2f;
-        sign.localRotation = Quaternion.Euler(swayDeg * 0.5f * Mathf.Sin(Tau * t / (Tuning.INTRO_SIGN_SWAY_S * 1.4f)), swayDeg * Mathf.Sin(Tau * t / Tuning.INTRO_SIGN_SWAY_S), 0f);
+        sign.localRotation = signRest * Quaternion.Euler(swayDeg * 0.5f * Mathf.Sin(Tau * t / (Tuning.INTRO_SIGN_SWAY_S * 1.4f)), swayDeg * Mathf.Sin(Tau * t / Tuning.INTRO_SIGN_SWAY_S), 0f);
         lamp.transform.localRotation = Quaternion.Euler(Tuning.INTRO_LAMP_NOD_DEG * Mathf.Sin(Tau * t / Tuning.INTRO_LAMP_NOD_S), 0f, 0f);
         farLamp.intensity = Tuning.INTRO_FAR_LAMP_ENERGY * (1f + Tuning.INTRO_FAR_LAMP_FLICKER * (Mathf.PerlinNoise(t * 1.7f, 0.3f) * 2f - 1f));
         var c = prompt.color;
