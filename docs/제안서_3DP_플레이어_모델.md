@@ -163,3 +163,8 @@ Meshy 약 30 크레딧 1번(남은 2,709) · Mixamo 무료 · Blender 모형 무
 - **가 + 나**: 고친 모양에 다시 입힌 그림을 씌우고, 장갑(적갈색) · 흰 면 칸은 원래 그림 색 × 새 그림의 때로 되살림(흰 면 = 밝고 색이 거의 없는 칸 — 처음엔 얼굴 살색이 섞여 옛 얼굴로 돌아갔다) · 목수건은 때 묻은 회색. 그림 `build/player/player_player1_fix_retex1_base.png`.
 - 한 장 `build/player/P3_판정3.png`(← `docs/그림/3DP_손질.py`). 물은 것: ① 어느 판으로 차례 3(Mixamo) — 추천 가 + 나 ② 얼굴 나이: 이대로 / 그림 다시 한 번 더(10 크레딧) ③ 뒤통수 얼룩 · 둥근 목수건은 뼈대 뒤 3 인칭에서.
 - `player_blockout.py` 가 장면에 `scene["player_info"]`(목 · 안전모 · 탄띠 자리)를 남기고, `towel_ring` 을 따로 뺐다(손질이 같이 씀) · `player_meshy_views.py` 를 `load` · `shoot_set` 함수로(손질이 같이 씀).
+
+### 차례 2 손질 — 얼굴 20 대로 그림 다시 (사용자 09-29 "가+나로 가고, 얼굴은 20대로 한 번 더 입혀라") → 판정 ④ 대기
+- `gen_meshy.py player1_retex2 --retexture <task>`(글 530 자 — "age 22, youthful smooth face with no wrinkles" · 적갈색 고무장갑 + 흰 면 손목을 글에 적음). **10 크레딧, 남은 2,659**(3D-P 에 쓴 Meshy 전체 = 30 + 10 + 10 = 50). 결과 `MineTunnel/mesh/meshy_player1_retex2.glb`.
+- 가 + 나: `player_meshy_fix.py -- player1 player1_retex2`(검사 5 ALL PASS, 장갑 · 손목 색 되살림 같음) → 한 장 `build/player/P4_판정4.png`(← `docs/그림/3DP_20대.py`).
+- 얼굴이 앳된 20 대로 바뀜. 작은 흠: 얼굴 탄가루가 1 차보다 옅음 · 가슴 주머니 갈색 빛 · 흰 면 손목에 빨간 얼룩 약간(모두 그림만 Blender 로 고칠 수 있음).
