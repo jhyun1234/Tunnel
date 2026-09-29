@@ -19,6 +19,8 @@
 | `M1Check` | 검사가 전부 혼자 기준이다 |
 | `NoiseBus` | **위치만 봐서 그대로 쓸 수 있다** |
 
+**09-30 (64차) — 옆 가지 `intro-sign` 을 main 에 합침(`a4e9bd8`, 부딪힘 없음) → 전체 build.sh ALL PASS 198(196 + `intro_sign_lit` 4.73 · `intro_logos_keep_aspect`, fps 안개 221).** "main 이 합칠 때 볼 곳" 확인: main 은 갈라진 뒤 `PlaceBoothMap` · `PlaceBoothLights` · `PlaceArt` · 부스 쪽 Tuning 을 안 고쳤다(플레이어 쪽만) → `PlaceBoothLook` 값 그대로 맞다 · 지운 `Image()` · 옛 `FontPath` 쓰는 곳 없음. 작업 폴더 `Tunnel/unity-intro` 지우기는 사용자 답 대기. 아래는 합치기 전 조사(63차):
+
 **09-30 (63차 끝, 사용자 "다른 트리에서 인트로 부분을 만든 것이 있다. main 으로 가져와서 합치는 걸 다음 세션에서") — 다음 세션 첫 일 = 옆 가지 `intro-sign` 합치기.** 조사만 해 둠(아무것도 안 합침):
 - 가지: `intro-sign`(작업 폴더 `Tunnel/unity-intro`, 커밋 안 한 것 없음) — UI-2d 인트로 "안전제일 간판", 판정값 받음(간판 밝기 0.15 · 흔들림 10°). 갈라진 곳 `4f29a01`(09-29 17:01) 뒤 가지 커밋 5 · main 커밋 19(모두 3D-P · 3D-P2).
 - **미리 합쳐 봄(`git merge-tree --write-tree main intro-sign`, 작업 폴더 안 건드림): 부딪힘 없음.** 둘 다 고친 파일 = `BuildM1.cs` · `Intro.cs` · `Tuning.cs` · `HANDOFF.md` — 글은 다른 곳이라 저절로 합쳐진다.
@@ -287,7 +289,7 @@
 **▶ 다음 세션 시작 (09-20 끝, m3 5차 = 팔 1.7배 사용자 통과):** 폴더 `C:/Users/anjyo/Tunnel/unity-m2` (가지 `m2-body`) 를 연다 — `Tunnel/unity`(main)는 다른 세션이 MR1·맵을 하는 곳이라 건드리지 않는다. 시작 프롬프트(복사):
 `docs/HANDOFF.md 0절을 읽고 이어서 해라. 새 몸 m3 는 5차까지 사용자 판정을 통과했다(팔 1.7배·손목·골반·어깨·갈비 사이·장기 색). 다음 일 ①: 발톱마다 손가락 뼈를 맞춰 손가락이 굽게 하고(지금은 Miner_Hands 가 손 뼈에 통짜), blender/anim/walk_knuckle.py 의 "손 살이 바닥을 안 뚫음" 검사가 Miner_Hands 그물을 재게 고쳐라(지금은 아무것도 안 재고 PASS — 고친 뒤 일부러 FAIL 시켜 확인). 제안서부터 쓰고 승인받아라. 빌드는 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_m3.glb 를 준 채 MakeScene(-quit 꼭) → BuildWindows → Tunnel.exe -check -only monster. 그 뒤 순서: ② 목 늘일 때 속 근육 관 드러내기 ③ 갱목·못·끈·눈 발광 ④ GLB 120 MB 줄이기 ⑤ 전체 tools/build.sh + main 합치기.`
 
-## 0. 옆 가지 `intro-sign` (작업 폴더 `Tunnel/unity-intro`) — UI-2d 인트로 "안전제일 간판", 판정값 받음 (2026-09-29)
+## 0. 옆 가지 `intro-sign` (작업 폴더 `Tunnel/unity-intro`) — UI-2d 인트로 "안전제일 간판", 판정값 받음 (2026-09-29) — **main 에 합침 09-30(`a4e9bd8`)**
 
 - 사용자 09-29 "인트로가 너무 조잡하다, 인트로와 폰트를 게임 컨셉에 맞게" → 조사(공포 게임 제목 화면 13개 · 1980년대 한국 탄광 표지 15장 · 글꼴 후보, 전부 `build/refs/intro/` 로컬) → 시안 3장 → **사용자 2번 "안전제일 간판"** → 제안서 `docs/제안서_UI2d_인트로_간판.md` **승인(09-29)**: 귀령광업소 줄 넣음 · 먼 불빛은 조금만 떨림 · **메뉴에선 로고 숨김**.
 - **배경은 실제 게임 맵(부스 맵 케이지 광장, 동쪽 + 6°)** — 처음엔 검사용 42 m 복도로 만들어 사용자 지적("실제 우리 게임 화면이 아니다") → 부스 맵 8곳 중 사용자 "B 광장 동쪽". `BuildM1.PlaceBoothLook`(겉모습만, 게임 자산은 읽기만).
