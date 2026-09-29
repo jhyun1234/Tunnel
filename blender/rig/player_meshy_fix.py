@@ -5,14 +5,17 @@
 몸의 점은 옮기지 않는다 — 판정 ⑦(09-29) 에서 점을 옮긴 손질(머리 밀어 넣기 · 목깃 밀어 넣기 · 소매 가늘게)이 뒤통수 · 목 · 어깨를 찢었다.
 사용자 09-29 "1+3 으로 가고 팔 굵기는 그대로":
   ⓪ 안전모를 Meshy 머리 가운데로(판정 ⑤) — 이 자리에선 머리카락이 안전모 겉 밖으로 안 나온다(머리 밀어 넣기는 뺌)
-  ① 목 깁스: 코드 목수건(밑그림 높이 그대로)에 완전히 가려진 몸 면은 지우고, 밖으로 보이는 목깃 덩어리는 작업복 깃 색으로(②)
-     (목수건을 덩어리만큼 키우면 목 깁스처럼 보여 사용자 09-29 "가")
-  ② 그림(다시 입힌 그림을 줄 때만): 장갑 · 손목 색 되살림 · 목 둘레 빨강 · 흰 얼룩만 칠함(얼룩 아닌 칸은 그대로) · 목깃 덩어리는 작업복 깃 색 ·
-     목덜미(두 귀 사이) 머리 뭉치 윗면은 머리카락 색
+  ① 목 깁스: 코드 목수건(밑그림 굵기 그대로)에 완전히 가려진 몸 면은 지우고, 밖으로 보이는 목깃 덩어리는 작업복 깃 색으로(②)
+     (목수건을 덩어리만큼 키우면 목 깁스처럼 보여 사용자 09-29 "가"). 판정 ⑧ 남은 흠(목 뒤 덩어리 · 혹 · 지느러미 · 앞 돌기)은
+     목수건을 뒤 4.5 · 앞 1.5 cm 올리고 천처럼 가장 바깥 겉면에 얹어 덮는다
+  ② 그림(다시 입힌 그림을 줄 때만): 장갑 · 손목 색 되살림 · 손목 빨간 얼룩 · 목 둘레 빨강 · 흰 얼룩만 칠함(얼룩 아닌 칸은 그대로) ·
+     목깃 덩어리는 작업복 깃 색 · 목덜미(두 귀 사이) 머리 뭉치 윗면은 머리카락 색(가장자리는 번지게)
+  ⑧ 저장 앞: 그림 이음매에서 갈라진 점을 합치고 법선을 다시 매끈하게(Meshy 법선은 얼굴 · 목에서 각져 보였다)
 자리 값(목 · 안전모)은 밑그림 장면의 scene["player_info"] — 소품이 맞는 같은 틀.
-검사(FAIL 이면 종료 1): 머리카락이 안전모 겉 안 · 찢어짐 없음(뒤집힌 면 · 새로 뚫은 면 쌍 0) · 챙 앞뒤 균형 · 얼룩 · 목깃이 옷 색
-사보타주: SABOTAGE=helmetfwd(안전모를 옛 자리에) → 챙 균형 · 머리카락 FAIL · push(옛 ② 목깃을 목 속으로 밀기) → 찢어짐 FAIL ·
-          norepaint(그림을 안 칠함, 그림 판에서만) → 얼룩 · 목깃 색 FAIL
+검사(FAIL 이면 종료 1): 머리카락이 안전모 겉 안 · 찢어짐 없음(뒤집힌 면 · 새로 뚫은 면 쌍 0) · 목깃이 목수건에 가려짐 · 챙 앞뒤 균형 · 얼룩 ·
+    손목 빨강 · 목깃이 옷 색 · 법선이 매끈함
+사보타주: SABOTAGE=lowtowel(목수건 밑그림 높이 · 얹기 없음) → 목깃 가림 FAIL · flatnormals(법선 그대로) → 법선 FAIL · helmetfwd(안전모를 옛 자리에) → 챙 균형 · 머리카락 FAIL · push(옛 ② 목깃을 목 속으로 밀기) → 찢어짐 FAIL ·
+          norepaint(그림을 안 칠함, 그림 판에서만) → 얼룩 · 목깃 색 · 손목 빨강 FAIL
 출력: build/player/player_<이름>_fix.blend · MineTunnel/mesh/meshy_<이름>_fix.glb(고친 몸, 원래 그림) · 그림 P2_*_fix*"""
 import bpy, bmesh, os, sys, math
 import numpy as np
@@ -27,6 +30,8 @@ import make_player_props as P
 
 args = sys.argv[sys.argv.index("--") + 1:]; name = args[0]; tex = args[1] if len(args) > 1 else None
 SAB = os.environ.get("SABOTAGE", "")
+TOWEL_BACK_UP = 0.045   # ※ 목수건 뒤를 밑그림보다 올림 — 목 뒤 목깃 덩어리 · 둥근 혹 · 지느러미를 덮는다(판정 ⑧ 남은 흠, 3 · 4.5 cm 찍어 봄)
+TOWEL_FRONT_UP = 0.015  # ※ 목수건 앞을 밑그림보다 올림 — 목 앞 목깃 돌기 줄(갈색 결)을 덮는다(1.5 · 2.5 cm 찍어 봄, 2.5 는 방독면에 닿음)
 
 meshes = V.load(name, gear=True)
 info = dict(bpy.context.scene["player_info"])
@@ -81,15 +86,20 @@ if SAB == "push":   # 옛 ②(판정 ⑦ 에서 찢어짐): 색으로 고른 목
     tgt = neck_r - 0.008
     s_ = np.where(lump & (rn > tgt), tgt / np.maximum(rn, 1e-6), 1.0)
     co[:, 0] = nk_c[0] + (co[:, 0] - nk_c[0]) * s_; co[:, 1] = nk_c[1] + (co[:, 1] - nk_c[1]) * s_
+dz = z - ring_z(co, nb, nb - 0.055)
+lo, hi = np.percentile(dz[lump], [5, 95])
+collar_v = (dz > lo - 0.01) & (dz < hi + 0.008) & (rn > neck_r + 0.006) & (rn < 0.13)   # Meshy 목깃 덩어리(색 말고 모양으로 고름)
+
 for v, c in zip(me.vertices, co): v.co = c
 me.update()
 
 # ① 목수건(밑그림과 같은 높이 4.4 cm). 목깃 덩어리는 가운데 줄에서 위아래로 더 퍼져 있지만(5~95 %) 다 덮게 키우면 목 깁스처럼 보인다
-#    (09-29 7.2 cm 로 해 봄 → 사용자 "가": 목수건 그대로, 밖으로 보이는 덩어리는 ②⑥ 에서 작업복 깃 색)
-dz = z - ring_z(co, nb, nb - 0.055)
-lo, hi = np.percentile(dz[lump], [5, 95])
+#    (09-29 7.2 cm 로 해 봄 → 사용자 "가": 목수건 그대로, 밖으로 보이는 덩어리는 ②⑥ 에서 작업복 깃 색).
+#    판정 ⑧ 남은 흠(목 뒤 덩어리 · 혹 · 지느러미 · 앞 돌기)은 목수건을 뒤 4.5 · 앞 1.5 cm 올리고 천처럼 가장 바깥 겉면에 얹어 덮는다 — 목에 두른 수건은 뒤가 높고 앞이 처진다.
+#    (점을 이웃 평균 쪽으로 펴 보기도 했다 — 혹은 줄지만 1 번만 펴도 뚫은 면 쌍 15 · 10 번이면 목수건 가장자리에 흰 조각이 보여 뺐다)
 bvh = BVHTree.FromPolygons([tuple(c) for c in co], [tuple(p.vertices) for p in me.polygons])
-tw = B.towel_ring(bvh, float(nk_c[0]), float(nk_c[1]), nb, nb - 0.055)
+zb_, zf_ = nb + (0.0 if SAB == "lowtowel" else TOWEL_BACK_UP), nb - 0.055 + (0.0 if SAB == "lowtowel" else TOWEL_FRONT_UP)
+tw = B.towel_ring(bvh, float(nk_c[0]), float(nk_c[1]), zb_, zf_, rest=SAB != "lowtowel")   # 천처럼 얹기 — 왼쪽 뒤 둥근 혹이 목수건을 뚫고 나왔다
 tw.name = "Towel_Fix"
 print(f"INFO 목깃 덩어리 {lump.sum()} 점 — 목수건 가운데 줄에서 {lo*100:+.1f} ~ {hi*100:+.1f} cm (목수건은 ±2.2 cm)")
 old_cord = bpy.data.objects.get("Lamp_Cord")                                        # 안전모를 옮겼으니 줄을 다시 잇는다
@@ -102,13 +112,15 @@ dg = bpy.context.evaluated_depsgraph_get(); tw_e = tw.evaluated_get(dg); tme = t
 tbvh = BVHTree.FromPolygons([tuple(tw_e.matrix_world @ v.co) for v in tme.vertices], [tuple(p.vertices) for p in tme.polygons]); tw_e.to_mesh_clear()
 
 
-def covered(i):
+def covered(i, down=True):   # down=False: 수평 · 위 30° 만(서 있는 사람 눈높이에서 보이는가)
     h = Vector((co[i, 0] - nk_c[0], co[i, 1] - nk_c[1], 0)).normalized(); p = Vector(co[i])
-    return all(tbvh.ray_cast(p + d * 0.001, d, 0.2)[0] is not None
-               for d in (h, (h + Vector((0, 0, 0.577))).normalized(), (h - Vector((0, 0, 0.577))).normalized()))
+    ds = (h, (h + Vector((0, 0, 0.577))).normalized()) + (((h - Vector((0, 0, 0.577))).normalized(),) if down else ())
+    return all(tbvh.ray_cast(p + d * 0.001, d, 0.2)[0] is not None for d in ds)
 
 
-near_tw = (rn < 0.16) & (np.abs(dz) < 0.042)
+near_tw = (rn < 0.16) & (np.abs(z - ring_z(co, zb_, zf_)) < 0.042)
+up_collar = collar_v & (dz > 0.03)                                                  # 밑그림 목수건 위로 드러났던 목깃(목 뒤 덩어리 · 혹 · 지느러미 · 앞 돌기)
+seen = np.zeros(n, bool); seen[up_collar] = [not covered(i, down=False) for i in np.where(up_collar)[0]]
 cov = np.zeros(n, bool); cov[near_tw] = [covered(i) for i in np.where(near_tw)[0]]
 hide_f = np.array([cov[list(p_.vertices)].all() for p_ in me.polygons])            # 지울 면(① — 저장 앞에서 지운다)
 
@@ -137,12 +149,15 @@ def crossings(c):
 new_x = len(crossings(co) - crossings(co0)) if np.abs(co - co0).max() > 0 else 0
 B.check(fails, "fix_no_tear", flipped == 0 and new_x == 0,
         f"Meshy 원래 모양보다 뒤집힌 면 {flipped} · 새로 서로 뚫은 면 쌍 {new_x} (둘 다 0 — 판정 ⑦ 판은 뒤집힌 면 112) · 옮긴 점 {(np.linalg.norm(co - co0, axis=1) > 1e-6).sum()}")
+print("INFO 보이는 목깃 자리(각도, 높이 cm):", sorted({(int(np.degrees(np.arctan2(x[i] - nk_c[0], -(y[i] - nk_c[1]))) // 15 * 15), round(float(dz[i]) * 100)) for i in np.where(seen)[0]}))
+B.check(fails, "fix_collar_hidden", seen[up_collar].mean() < 0.05,
+        f"밑그림 목수건 위로 드러났던 목깃 {up_collar.sum()} 점 중 수평 · 위 30° 에서 보이는 것 {seen[up_collar].mean()*100:.1f} % (< 5 % — 목 뒤 덩어리 · 둥근 혹 · 지느러미 · 앞 돌기)")
 fo = (head_front - (hcy - P.HELMET_L / 2)); bo = ((hcy + P.HELMET_L / 2) - head_back)
 B.check(fails, "fix_helmet_balanced", abs(fo - bo) < 0.015,
         f"챙이 이마 앞으로 {fo*100:.1f} cm · 뒤통수 뒤로 {bo*100:.1f} cm (차이 < 1.5 — 옮기기 전 앞 {(head_front - (hcy0 - P.HELMET_L/2))*100:.1f} · 뒤 {((hcy0 + P.HELMET_L/2) - head_back)*100:.1f})")
 
 # ── 저장 · 그림 ── (사보타주 때는 결과 파일을 덮어쓰지 않는다)
-if SAB and SAB != "norepaint":
+if SAB and SAB not in ("norepaint", "flatnormals"):
     print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
 tag = f"{name}_fix"
 
@@ -172,6 +187,10 @@ if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 �
         keep = glove | cotton
         grime = np.clip(rp[..., :3].mean(axis=-1) / 0.30, 0, 1)[..., None]
         out = rp.copy(); out[..., :3] = np.where(keep[..., None], op_[..., :3] * (0.55 + 0.45 * grime), rp[..., :3])
+
+        def box(a, r):   # (2r+1)² 칸 평균(가장자리는 늘려 씀)
+            c = np.cumsum(np.cumsum(np.pad(a.astype(np.float32), ((r + 1, r), (r + 1, r)), mode="edge"), 0), 1)
+            return (c[2 * r + 1:, 2 * r + 1:] - c[:-2 * r - 1, 2 * r + 1:] - c[2 * r + 1:, :-2 * r - 1] + c[:-2 * r - 1, :-2 * r - 1]) / (2 * r + 1) ** 2
         # ⑤ 목 옆 얼룩(사용자 09-29 "목 옆 얼룩 고쳐라"): Meshy 목깃 자리의 빨강 · 흰색 — ① 귀 아래 ~ 목수건 위 목 ② 목 속으로 넣은 목깃 조각(목 살 사이로 비친다)
         #    은 목 살색으로, ③ 뒤통수 아래(두 귀 사이, 안전모 밑) 목깃 윗부분의 얼룩은 머리카락 색으로. 밝고 어두운 결(때)은 남기고 색만 바꾼다.
         #    구역 안에서도 얼룩 칸(+ 둘레 2 칸)만 칠한다 — 구역 전체를 칠했더니 턱 옆 · 볼 · 귀 뒤에 조각난 얼룩이 생겼다(판정 ⑦ 뒤 09-29)
@@ -205,8 +224,24 @@ if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 �
                     m_ = m_ | ((np.roll(m_, 1, 0) | np.roll(m_, -1, 0) | np.roll(m_, 1, 1) | np.roll(m_, -1, 1)) & pad)
             return m_
         pad = ~raster(np.ones(len(me.polygons), bool), grow=False)                   # 어느 조각에도 안 쓰이는 빈칸
-        collar_v = (dz > lo - 0.01) & (dz < hi + 0.008) & (rn > neck_r + 0.006) & (rn < 0.13)   # ⑥ Meshy 목깃 덩어리(색 말고 모양으로 고름) → 작업복 깃 색
-        collar_f = np.array([collar_v[list(p_.vertices)].all() for p_ in me.polygons])
+        # ⑦ 흰 면 손목의 빨간 얼룩(판정 ⑧ 남은 흠): 흰 면 가까이(24 칸)의 새빨간 칸 + 장갑 밖의 붉은 칸(가는 빨간 줄) —
+        #    둘레 8 칸에 장갑이 더 많으면 장갑 색, 흰 면이 더 많으면 흰 면 색(밝고 어두운 결은 남김). 장갑의 적갈색 칸은 그대로
+        #    (처음엔 원래 장갑 칸 밖이면 모두 흰 면 색 → 장갑 위에 흰 번짐이 생겼다)
+        red = (out[..., 0] > 0.4) & (out[..., 0] > 2.5 * out[..., 1]) & (out[..., 0] > 2.5 * out[..., 2])
+        reddish = (out[..., 0] > 0.2) & (out[..., 0] > 1.8 * out[..., 1]) & (out[..., 0] > 1.8 * out[..., 2]) & ~glove
+        arm_px = raster(np.abs(fc[:, 0]) > 0.35, grow=False)                       # 팔 · 손 자리 면만(그림 조각 배치에서 귀가 손목 옆에 붙어 있어 귀까지 칠했다)
+        near_cot = (box(cotton, 24) > 0) & arm_px
+        cuff_red = (red | reddish) & near_cot
+        to_glove = box(glove, 8) > box(cotton, 8)
+        cot_c = np.median(out[cotton][:, :3], axis=0); glv_c = np.median(out[glove & ~red][:, :3], axis=0)
+        red0 = int(cuff_red.sum())
+        if SAB != "norepaint":
+            for m_, c_ in ((cuff_red & ~to_glove, cot_c), (cuff_red & to_glove, glv_c)):
+                lum_ = out[m_][:, :3].mean(axis=1)
+                out[m_, :3] = c_[None, :] * np.clip(lum_ / max(float(np.median(lum_)) if lum_.size else 1, 1e-3), 0.8, 1.1)[:, None]
+        red1 = int((((out[..., 0] > 0.4) & (out[..., 0] > 2.5 * out[..., 1]) & (out[..., 0] > 2.5 * out[..., 2])) & near_cot & ~to_glove).sum()
+                   + (((out[..., 0] > 0.2) & (out[..., 0] > 1.8 * out[..., 1]) & (out[..., 0] > 1.8 * out[..., 2])) & near_cot & ~to_glove & ~glove).sum())
+        collar_f = np.array([collar_v[list(p_.vertices)].any() for p_ in me.polygons])   # ⑥ Meshy 목깃 덩어리 → 작업복 깃 색(점 하나라도 목깃이면 — 모두일 때만 칠하니 가장자리에 베이지 조각이 남았다)
         cmask = raster(collar_f, grow=False)
         nmask = raster(neck_f) & ~cmask; hmask = raster(hair_f) & ~nmask & ~cmask; lmask = raster(low_f, grow=False) & ~nmask & ~hmask & ~cmask
         allm = nmask | hmask | lmask
@@ -229,7 +264,12 @@ if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 �
         jbase = np.median(l3[ll < 0.2], axis=0) if (ll < 0.2).sum() > 100 else np.array([0.08, 0.08, 0.08])
         if SAB != "norepaint":
             repaint(nmask, is_stain, base, float(np.median(lum_[skinlike])) if skinlike.sum() > 100 else 0.35)
-            repaint(hmask, lambda c3: np.ones(len(c3), bool), hbase, float(np.median(hl[hl < 0.15])) if (hl < 0.15).sum() > 100 else 0.05)
+            # 목덜미 머리카락 색 — 가장자리를 16 칸에 걸쳐 번지게(판정 ⑧: 네모 모서리가 보였다). 목 · 머리 조각 안에서만
+            href = float(np.median(hl[hl < 0.15])) if (hl < 0.15).sum() > 100 else 0.05
+            alpha = np.clip(box(hmask, 16) * 2, 0, 1) * raster(near, grow=False)
+            am = alpha > 0; c3_ = out[am][:, :3]; l3_ = c3_.mean(axis=1)
+            hp = hbase[None, :] * np.clip(l3_ / max(href, 1e-3), 0.75, 1.15)[:, None] * 0.92
+            out[am, :3] = c3_ * (1 - alpha[am][:, None]) + hp * alpha[am][:, None]
             lst = np.zeros_like(lmask); lst[lmask] = is_stain(out[lmask][:, :3])
             out[lst, :3] = jbase[None, :]
             c3_ = out[cmask][:, :3]; lc = c3_.mean(axis=1)                              # ⑥ 목깃은 통째로 옷 색(밝고 어두운 결은 남긴다)
@@ -239,6 +279,8 @@ if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 �
                 f"목 · 뒤통수 아래 · 옷깃 그림 칸 {allm.sum()} 개 — 빨강 · 흰 얼룩 {st0*100:.1f} → {st1*100:.1f} % (< 1 %) · 칠한 살색 {tuple(round(float(v), 2) for v in base)} · 옷 색 {tuple(round(float(v), 2) for v in jbase)}")
         cc = out[cmask][:, :3]
         off = float(((cc.mean(axis=1) > 0.3) | (cc[:, 0] > 1.3 * cc[:, 2] + 0.03)).mean())
+        B.check(fails, "fix_cuff_red", red1 < max(red0 * 0.02, 50),
+                f"흰 면 손목 둘레(장갑 쪽 빼고) 빨간 칸 {red0} → {red1} 개 (< 2 %)")
         B.check(fails, "fix_collar_color", off < 0.02,
                 f"목깃 덩어리 그림 칸 {cmask.sum()} 개 중 옷 색이 아닌 것(밝거나 살색 · 빨강) {off*100:.1f} % (< 2 %)")
         if SAB == "norepaint":
@@ -252,6 +294,42 @@ if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 �
     for o in bpy.data.objects:
         if o.name.startswith("Towel_Fix"): o.data.materials.clear(); o.data.materials.append(tm)
 edit_bm(lambda bm: bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS"))   # 지운 면에만 쓰이던 점
+
+
+# ⑧ 면 방향 값(법선): Meshy 가 준 법선은 얼굴 · 목에서 면마다 따로 놀아 각져 보였다(판정 ⑧ 남은 흠 — 10 % 가 30° 넘게 어긋남).
+#    그림 이음매에서 갈라진 점을 합치고(그림 좌표는 면 모서리마다 따로라 그대로) 가져온 법선을 버린 뒤 모두 매끈하게.
+#    (40° 넘게 꺾인 모서리만 각지게 해 보니 Meshy 겉면은 구겨져 있어 모서리 4,337 개가 걸리고 여전히 각져 보였다)
+def renormal(bm):
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    for f in bm.faces: f.smooth = True
+    for ed in bm.edges: ed.smooth = True
+
+
+def odd_share():   # 목 · 얼굴 모서리 법선 중, 같은 자리 이웃 면들의 평균(모서리 각도 무게) 방향에서 20° 넘게 어긋난 몫 — 각져 보일수록 크다
+    co_ = np.array([v.co[:] for v in me.vertices]); _, g_ = np.unique(np.round(co_ / 1e-5).astype(np.int64), axis=0, return_inverse=True); g_ = g_.ravel()
+    t3 = np.array([p_.vertices[:] for p_ in me.polygons]); assert t3.ndim == 2 and t3.shape[1] == 3   # Meshy 면은 모두 삼각형
+    fn_ = np.array([p_.normal[:] for p_ in me.polygons]); acc = np.zeros((g_.max() + 1, 3))
+    for k in range(3):
+        a_, b_, c_ = co_[t3[:, k]], co_[t3[:, (k + 1) % 3]], co_[t3[:, (k + 2) % 3]]
+        u_, w_ = b_ - a_, c_ - a_
+        ang_ = np.arccos(np.clip((u_ * w_).sum(1) / np.maximum(np.linalg.norm(u_, axis=1) * np.linalg.norm(w_, axis=1), 1e-12), -1, 1))
+        np.add.at(acc, g_[t3[:, k]], fn_ * ang_[:, None])
+    sm = acc / np.maximum(np.linalg.norm(acc, axis=1, keepdims=True), 1e-12)
+    lv = np.array([l_.vertex_index for l_ in me.loops]); ln = np.array([l_.normal[:] for l_ in me.loops])
+    sel = (co_[lv, 2] > nb - 0.05) & (co_[lv, 2] < rim)
+    return float(((ln * sm[g_[lv]]).sum(axis=1) < math.cos(math.radians(20)))[sel].mean())
+
+
+flat0 = odd_share()
+if SAB != "flatnormals":
+    edit_bm(renormal)
+    if me.has_custom_normals:
+        with bpy.context.temp_override(object=body, active_object=body, selected_editable_objects=[body]):
+            bpy.ops.mesh.customdata_custom_splitnormals_clear()
+flat1 = odd_share()
+B.check(fails, "fix_smooth_normals", flat1 < 0.03, f"목 · 얼굴 모서리 법선 중 이웃 면 평균에서 20° 넘게 어긋난 것(각져 보임) {flat0*100:.1f} → {flat1*100:.1f} % (< 3 %) · 점 {len(me.vertices)}")
+if SAB:   # 사보타주는 결과 파일을 덮어쓰지 않는다
+    print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
 if not tex:
     for o in bpy.data.objects: o.select_set(o == body)
     bpy.context.view_layer.objects.active = body

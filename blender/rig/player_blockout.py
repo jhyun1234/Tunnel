@@ -294,13 +294,25 @@ def towel(bvh, co, reg, neck_back_z):
     return towel_ring(bvh, cx, cy, neck_back_z, neck_back_z - 0.055), cx, cy
 
 
-def towel_ring(bvh, cx, cy, zb, zf):
-    pts = []
-    for i in range(48):
-        t = 2 * math.pi * i / 48; zz = zf + (zb - zf) * (1 - math.cos(t)) / 2
+def towel_ring(bvh, cx, cy, zb, zf, rest=False):
+    """rest = 천처럼 얹기: 둘레 96 곳에서 목수건 높이 폭(± 2 cm) 안 가장 바깥 겉면에 얹는다 — 혹이 목수건을 뚫고 나오지 않게(Meshy 몸 손질)."""
+    N_ = 96 if rest else 48
+    ring = []                                                                        # (가운데 높이, 바깥 → 목 방향, 반지름)
+    for i in range(N_):
+        t = 2 * math.pi * i / N_; zz = zf + (zb - zf) * (1 - math.cos(t)) / 2
         d = Vector((-math.sin(t), math.cos(t), 0))                                   # 바깥 → 목 쪽
-        hit, nrm, _, _ = bvh.ray_cast(Vector((cx, cy, zz)) - d * 0.4, d)
-        if hit is not None: pts.append(hit - d * 0.013)
+        best = None
+        for off in ((-0.02, -0.01, 0.0, 0.01, 0.02) if rest else (0.0,)):
+            hit, nrm, _, _ = bvh.ray_cast(Vector((cx, cy, zz + off)) - d * 0.4, d)
+            if hit is not None and (best is None or (hit - Vector((cx, cy, hit.z))).length > best):
+                best = (hit - Vector((cx, cy, hit.z))).length
+        if best is not None: ring.append((zz, d, best))
+    if rest:   # 반지름을 이웃 ±1 곳의 가장 큰 값 → ±2 평균으로 고른다(혹 위를 덮은 채 마디 없이. ±3 으로 하니 옆에서 목과 떠 보였다)
+        r_ = [r for _, _, r in ring]; m_ = len(r_)
+        mx = [max(r_[(j + k) % m_] for k in range(-1, 2)) for j in range(m_)]
+        r_ = [sum(mx[(j + k) % m_] for k in range(-2, 3)) / 5 for j in range(m_)]
+        ring = [(zz, d, r) for (zz, d, _), r in zip(ring, r_)]
+    pts = [Vector((cx, cy, zz)) - d * (r + 0.013) for zz, d, r in ring]
     prof = bpy.data.curves.new("TowelProfile", "CURVE"); ps = prof.splines.new("POLY"); ps.points.add(23)   # 납작한 단면 4.4 × 2.4 cm
     for i, pt in enumerate(ps.points):
         a_ = 2 * math.pi * i / 24; pt.co = (0.012 * math.cos(a_), 0.022 * math.sin(a_), 0, 1)
