@@ -74,9 +74,11 @@ def shell(name, z_bot, z_top, a_of, gap_edge, gap_mid, material, thick=0.004, NU
             r2 = min(1.0, u * u + (2 * v - 1) ** 2)
             gap = 0.0 if SAB == "nogap" else gap_edge + (gap_mid - gap_edge) * (1 - r2)
             q = hit + d * gap
-            if SAB != "nogap":                                                        # 얼굴 겉에서 3 mm 안이면 겉면 밖으로(가장자리 · 비스듬한 곳)
-                n_ = bvh.find_nearest(q)
-                if n_[0] is not None and (q - n_[0]).dot(n_[1]) < 0.003: q = n_[0] + n_[1] * 0.003
+            if SAB != "nogap":                                                        # 얼굴 겉에서 3 mm 안이면 겉면 밖으로(가장자리 · 비스듬한 곳) — 접힌 곳은 몇 번
+                for _ in range(3):
+                    n_ = bvh.find_nearest(q)
+                    if n_[0] is None or (q - n_[0]).dot(n_[1]) >= 0.003: break
+                    q = n_[0] + n_[1] * 0.0035
             row.append(q)
         grid.append(row)
     bm = bmesh.new(); vs = [[bm.verts.new(p) for p in r] for r in grid]
@@ -102,7 +104,7 @@ def strap(name, z_front, z_back, a0, width, material):
     for k in range(41):
         t = a0 + (2 * math.pi - 2 * a0) * k / 40; zz = z_front + (z_back - z_front) * (1 - math.cos(t)) / (1 - math.cos(math.pi)) if True else 0
         d = Vector((-math.sin(t), math.cos(t), 0))
-        c0 = Vector((hcx, hcy, zz))
+        c0 = Vector((hcx, C.y, zz))                                                 # 얼굴 기준(코끝 9.5 cm 뒤) — 안전모 자리를 따라가면 턱 밑에서 끈이 삐져나온다
         hit = bvh.ray_cast(c0 - d * 0.3, d)[0]
         pts.append((hit if hit is not None else c0 - d * 0.09) - d * 0.004)
     prof = bpy.data.curves.new(name + "_p", "CURVE"); ps = prof.splines.new("POLY"); ps.points.add(3)
@@ -172,9 +174,9 @@ shell_o = parts[0]; ev = shell_o.evaluated_get(dg); sm = ev.to_mesh()
 inner = [shell_o.matrix_world @ v.co for v in sm.vertices]; ev.to_mesh_clear()
 dist = [((p - bvh.find_nearest(p)[0]).length, p) for p in inner]
 dmin = min(d for d, _ in dist)
-# 파묻힘: 얼굴 겉에서 2 mm 안에 있거나, 몸 안쪽(겉면 법선 반대편)에 있는 점
-inside = sum(1 for p in inner if (lambda h: h[0] is not None and (p - h[0]).dot(h[1]) < 0.0015)(bvh.find_nearest(p)))
-B.check(fails, "mask_not_in_face", inside == 0, f"마스크 점 {len(inner)} 개 중 얼굴 겉 1.5 mm 안쪽(파묻힘) {inside} 개 · 가장 가까운 거리 {dmin*1000:.1f} mm")
+# 파묻힘: 얼굴 겉면 뒤(법선 반대편)에 있거나 실제 거리 1 mm 미만인 점. 법선 방향 거리만 재면 비스듬한 곳에서 1 cm 떨어진 점도 걸린다(09-29)
+inside = sum(1 for p in inner if (lambda h: h[0] is not None and ((p - h[0]).dot(h[1]) < 0 or (p - h[0]).length < 0.001))(bvh.find_nearest(p)))
+B.check(fails, "mask_not_in_face", inside == 0, f"마스크 점 {len(inner)} 개 중 얼굴 속이거나 1 mm 안(파묻힘) {inside} 개 · 가장 가까운 거리 {dmin*1000:.1f} mm")
 mvh = BVHTree.FromObject(shell_o, dg)
 extra = [o for o in parts[1:] if o.type == "MESH"]
 def covered(pt):

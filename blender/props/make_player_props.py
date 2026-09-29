@@ -68,6 +68,14 @@ def dome_normal(u, v):
     return Vector((p.x / (SHELL_W / 2) ** 2, p.y / (SHELL_L / 2) ** 2, p.z / DOME_H ** 2)).normalized()
 
 
+def helmet_anchors():
+    """안전모 틀(원점 = 껍데기 밑 가운데)에서 램프 줄이 나오는 곳 · 뒤 줄 걸이 자리. build_helmet 과 몸 손질(줄 다시 잇기)이 같이 쓴다."""
+    vb = math.asin(0.055 / DOME_H); bp, bn = dome_point(0, vb), dome_normal(0, vb)
+    lamp_c = bp + bn * 0.004 + Vector((0, -LAMP_DEPTH / 2, 0.004))
+    cp, cn = dome_point(math.pi, 0.10), dome_normal(math.pi, 0.10)
+    return dict(lamp_back=lamp_c + Vector((0, LAMP_DEPTH / 2 - 0.004, 0.018)), clip=cp + cn * 0.012)
+
+
 def build_helmet(number=NUMBER):
     """안전모 + 램프. 원점 = 껍데기 밑 가운데(챙이 붙는 높이). 돌려받는 것: 물체 사전."""
     out = {}
@@ -121,13 +129,12 @@ def build_helmet(number=NUMBER):
     out["lamp"] = cyl("Lamp_Body", LAMP_D / 2 * 0.92, LAMP_DEPTH - 0.012, 0.006, mat("PlayerLampBody", "lampbody", 0.5))
     out["bezel"] = cyl("Lamp_Bezel", LAMP_D / 2, 0.014, -LAMP_DEPTH / 2 + 0.007, mat("PlayerBezel", "bezel", 0.45))
     out["lens"] = cyl("Lamp_Lens", LAMP_D / 2 * 0.74, 0.004, -LAMP_DEPTH / 2 - 0.0005, mat("PlayerLens", "lens", 0.1, 0, 6.0))
-    out["lamp_back"] = lamp_c + Vector((0, LAMP_DEPTH / 2 - 0.004, 0.018))       # 줄이 나오는 곳(뒤 위)
+    out.update(helmet_anchors())                                                  # 줄이 나오는 곳(뒤 위) · 뒤 줄 걸이
     # 뒤 줄 걸이
     cp, cn = dome_point(math.pi, 0.10), dome_normal(math.pi, 0.10)
     bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1); bmesh.ops.scale(bm, vec=(0.03, 0.006, 0.022), verts=bm.verts)
     bmesh.ops.transform(bm, matrix=Matrix.Translation(cp + cn * 0.003) @ cn.to_track_quat("-Y", "Z").to_matrix().to_4x4(), verts=bm.verts)
     obj_from_bm("Helmet_CordClip", bm, mat("PlayerMetal", "metal", 0.4, 0.8), root)
-    out["clip"] = cp + cn * 0.012
     # ✎ 번호: 뒤와 양옆 세 곳(사용자 09-29 승인), 흰 페인트
     out["numbers"] = []
     for tag, u, vn in (("Back", math.pi, 0.40), ("Left", math.pi / 2, 0.52), ("Right", -math.pi / 2, 0.52)):

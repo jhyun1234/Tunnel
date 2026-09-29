@@ -8,7 +8,7 @@
   ③ 굵은 팔: 검은 소매만(원래 그림 색으로 가림) 팔 축 쪽으로 × 0.86 (※ 어림)
 자리 값(목 · 안전모)은 밑그림 장면의 scene["player_info"] — 소품이 맞는 같은 틀.
 검사(FAIL 이면 종료 1): 머리가 안전모 안쪽에 들어감 · 목 둘레 덩어리가 목에서 2.5 cm 안 · 소매 굵기가 줄었나 · 점 수 그대로
-사보타주: SABOTAGE=nofix(아무것도 안 고침) → 세 검사 FAIL
+사보타주: SABOTAGE=nofix(아무것도 안 고침) → 세 검사 FAIL · helmetfwd(안전모를 옛 자리에 둠) → 챙 균형 FAIL
 출력: build/player/player_<이름>_fix.blend · MineTunnel/mesh/meshy_<이름>_fix.glb(고친 몸, 원래 그림) · 그림 P2_*_fix*"""
 import bpy, os, sys, math
 import numpy as np
@@ -47,7 +47,15 @@ white = lum > 0.55
 skin = (col[:, 0] > col[:, 2] + 0.06) & (lum > 0.25) & (col[:, 0] > 0.3) & (col[:, 1] > 0.18)   # 살색(빨간 고무장갑은 녹색이 낮아 빠진다)
 dark = lum < 0.12
 
-rim, hcx, hcy = info["rim_z"], info["helmet_cx"], info["helmet_cy"]
+rim, hcx, hcy0 = info["rim_z"], info["helmet_cx"], info["helmet_cy"]
+# ⓪ 안전모를 Meshy 머리 가운데로(사용자 09-29 "안전모가 머리에서 좀 앞으로 튀어나와 있다 — 뒤로"): 밑그림 머리에 맞춘 자리는
+#    Meshy 머리보다 3 cm 앞이었다. 챙 2~4.5 cm 아래 머리 단면(손질 전)의 앞 끝 · 뒤 끝 가운데로 옮기고 램프 줄을 다시 잇는다
+sl = co0[(co0[:, 2] > rim - 0.045) & (co0[:, 2] < rim - 0.015) & (np.abs(co0[:, 0] - hcx) < 0.02) & (np.hypot(co0[:, 0] - hcx, co0[:, 1] - hcy0) < 0.2)]
+head_front, head_back = float(sl[:, 1].min()), float(sl[:, 1].max())
+hcy = hcy0 if SAB == "helmetfwd" else (head_front + head_back) / 2
+helmet = bpy.data.objects["Helmet"]; helmet.matrix_world = Matrix.Translation((hcx, hcy, rim)) @ Matrix.Translation(-helmet.matrix_world.translation) @ helmet.matrix_world
+info["helmet_cy"] = hcy; bpy.context.scene["player_info"] = info
+print(f"INFO 안전모 가운데 y {hcy0:+.3f} → {hcy:+.3f} (머리 앞 {head_front:+.3f} · 뒤 {head_back:+.3f})")
 x, y, z = co[:, 0], co[:, 1], co[:, 2]
 head = (z > rim - 0.20) & (np.hypot(x - hcx, y - hcy) < 0.2)
 a_, b_, c_ = P.SHELL_W / 2 - GAP, P.SHELL_L / 2 - GAP, P.DOME_H - GAP
@@ -66,7 +74,7 @@ def blur_vec(v, mask, iters):
 
 nb = info["neck_back_z"]
 # 목 가운데 · 반지름: 목깃 위(턱 아래) 살색 점들의 고리로 잰다(밑그림 값은 목 앞쪽으로 치우쳐 있다)
-band = (z > nb + 0.02) & (z < nb + 0.06) & skin & (np.hypot(x - hcx, y - hcy) < 0.11)
+band = (z > nb + 0.02) & (z < nb + 0.06) & skin & (np.hypot(x - hcx, y - hcy0) < 0.11)   # 목 찾기는 안전모를 옮기기 전 기준(옮긴 기준이면 목깃을 너무 많이 잡아 목수건이 울퉁불퉁)
 nk_c = co[band, :2].mean(axis=0)
 neck_r = float(np.median(np.hypot(co[band, 0] - nk_c[0], co[band, 1] - nk_c[1])))
 print(f"INFO 목 가운데 ({nk_c[0]:+.3f}, {nk_c[1]:+.3f}) · 반지름 {neck_r*100:.1f} cm ({band.sum()} 점) · 밑그림 목 가운데 y {info['neck_cy']:+.3f}")
@@ -107,6 +115,8 @@ if SAB != "nofix":
     for _ in range(3):                                                                # 옮긴 곳 둘레까지 고르게
         acc = np.zeros(n); np.add.at(acc, e[:, 0], ring_[e[:, 1]]); np.add.at(acc, e[:, 1], ring_[e[:, 0]]); ring_ = ring_ | (acc > 0)
     co = blur_vec(co, ring_ & ~moved, 3)
+    q = helmet_q(co); out = head & (co[:, 2] > rim - 0.005) & (q > 1)                 # 펴기가 되민 머리를 한 번 더 안쪽 면에
+    co[out] = np.array([hcx, hcy, rim]) + (co[out] - np.array([hcx, hcy, rim])) / np.sqrt(q[out])[:, None]
 
 for v, c in zip(me.vertices, co): v.co = c
 me.update()
@@ -115,6 +125,10 @@ me.update()
 bvh = BVHTree.FromPolygons([tuple(c) for c in co], [tuple(p.vertices) for p in me.polygons])
 tw = B.towel_ring(bvh, float(nk_c[0]), float(nk_c[1]), nb, nb - 0.055)
 tw.name = "Towel_Fix"
+old_cord = bpy.data.objects.get("Lamp_Cord")                                        # 안전모를 옮겼으니 줄을 다시 잇는다
+if old_cord: bpy.data.objects.remove(old_cord)
+bpy.context.view_layer.update()
+B.lamp_cord(helmet.matrix_world, bvh, nb, info["belt_z"], info["cord_out"]).name = "Lamp_Cord"
 
 # ── 검사 ──
 fails = []
@@ -130,6 +144,9 @@ for sd, (sel, c, d) in arm.items():
         tt = (p - c) @ d; return float(np.median(np.linalg.norm((p - c) - tt[:, None] * d, axis=1)))
     g0, g1 = girth(co0[m]), girth(co[m])
     B.check(fails, f"fix_arm_{'R' if sd < 0 else 'L'}", g1 < g0 * 0.9, f"소매 반지름 가운데 {g0*100:.1f} → {g1*100:.1f} cm")
+fo = (head_front - (hcy - P.HELMET_L / 2)); bo = ((hcy + P.HELMET_L / 2) - head_back)
+B.check(fails, "fix_helmet_balanced", abs(fo - bo) < 0.015,
+        f"챙이 이마 앞으로 {fo*100:.1f} cm · 뒤통수 뒤로 {bo*100:.1f} cm (차이 < 1.5 — 옮기기 전 앞 {(head_front - (hcy0 - P.HELMET_L/2))*100:.1f} · 뒤 {((hcy0 + P.HELMET_L/2) - head_back)*100:.1f})")
 B.check(fails, "fix_same_vertices", len(me.vertices) == n and len(me.polygons) == 30762, f"점 {len(me.vertices)} · 면 {len(me.polygons)} (그대로여야 다시 입힌 그림이 맞는다)")
 
 # ── 저장 · 그림 ── (사보타주 때는 결과 파일을 덮어쓰지 않는다)

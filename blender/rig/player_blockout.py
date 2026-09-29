@@ -428,15 +428,21 @@ def gear(body_info, eyes):
     place(can["root"], p2 + o2 * 0.005, o2, belt_z + P.BELT_W / 2 - 0.01)
     bpy.context.view_layer.update()
     # 램프 줄: 램프 뒤 → 안전모 오른쪽 → 뒤 걸이 → 목 뒤 → 등 → 허리 뒤 배터리(사용자 09-29 승인, 1981 k21)
-    Wh = h["root"].matrix_world
-    pts = [Wh @ h["lamp_back"], Wh @ (P.dome_point(-math.pi * 0.55, 0.62) + P.dome_normal(-math.pi * 0.55, 0.62) * 0.012),
-           Wh @ h["clip"], Wh @ h["clip"] + Vector((0, 0.03, -0.07))]
-    for zz, xx in ((body_info["neck_back_z"] - 0.10, -0.02), (belt_z + 0.25, -0.04), (belt_z + 0.12, -0.07)):
+    cord_out = bat["root"].matrix_world @ bat["cord_out"] + Vector((0, 0, 0.01))
+    cord = lamp_cord(h["root"].matrix_world, bvh, body_info["neck_back_z"], belt_z, cord_out)
+    return dict(helmet=h, rim_z=rim_z, head_top=head_top, cx=cx, cy=cy, belt=belt, bat=bat, can=can, cord=cord, cord_out=cord_out)
+
+
+def lamp_cord(Wh, bvh, neck_back_z, belt_z, cord_out):
+    """램프 줄: 램프 뒤 → 안전모 오른쪽 → 뒤 걸이 → 목 뒤 → 등 → 허리 뒤 배터리. Wh = 안전모 틀의 세계 행렬. 몸 손질이 안전모를 옮기면 다시 부른다."""
+    a = P.helmet_anchors()
+    pts = [Wh @ a["lamp_back"], Wh @ (P.dome_point(-math.pi * 0.55, 0.62) + P.dome_normal(-math.pi * 0.55, 0.62) * 0.012),
+           Wh @ a["clip"], Wh @ a["clip"] + Vector((0, 0.03, -0.07))]
+    for zz, xx in ((neck_back_z - 0.10, -0.02), (belt_z + 0.25, -0.04), (belt_z + 0.12, -0.07)):
         hit = bvh.ray_cast(Vector((xx, 1.0, zz)), Vector((0, -1, 0)))[0]
         if hit: pts.append(hit + Vector((0, 0.014, 0)))
-    pts.append(bat["root"].matrix_world @ bat["cord_out"] + Vector((0, 0, 0.01)))
-    cord = P.cord([tuple(q) for q in pts])
-    return dict(helmet=h, rim_z=rim_z, head_top=head_top, cx=cx, cy=cy, belt=belt, bat=bat, can=can, cord=cord)
+    pts.append(Vector(cord_out))
+    return P.cord([tuple(q) for q in pts])
 
 
 # ───────────────────────── 4. 그림 ─────────────────────────
@@ -505,7 +511,8 @@ def main():
     info["bvh"] = BVHTree.FromPolygons([tuple(c) for c in info["co"]], [tuple(p.vertices) for p in body.data.polygons])
     g = gear(info, eyes)
     bpy.context.scene["player_info"] = dict(neck_back_z=info["neck_back_z"], neck_cx=info["neck_cx"], neck_cy=info["neck_cy"],   # Meshy 몸 손질이 읽는다
-                                            rim_z=g["rim_z"], helmet_cx=g["cx"], helmet_cy=g["cy"], belt_z=info["belt_z"])
+                                            rim_z=g["rim_z"], helmet_cx=g["cx"], helmet_cy=g["cy"], belt_z=info["belt_z"],
+                                            cord_out=list(g["cord_out"]))
     P.bake_all(list(bpy.data.objects))
     bpy.context.view_layer.update()
 
