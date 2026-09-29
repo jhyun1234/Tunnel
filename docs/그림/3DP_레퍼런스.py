@@ -14,26 +14,8 @@ W, H = 2400, 3400
 S.new(W, H)
 HL = (255, 154, 60)
 
-def photo(x, y, w, h, path, cap, sz=16):
-    """사진을 w×h 칸에 맞춰 넣고 아래에 설명(여러 줄, 첫 줄 밝게)."""
-    S.d.rectangle([x * SS, y * SS, (x + w) * SS, (y + h) * SS], fill=(28, 26, 25))
-    full = os.path.join(ROOT, path)
-    if os.path.exists(full):
-        im = Image.open(full).convert("RGB"); k = min(w * SS / im.width, h * SS / im.height)
-        im = im.resize((int(im.width * k), int(im.height * k)), Image.LANCZOS)
-        S.img.paste(im, (int((x + (w * SS - im.width) / SS / 2) * SS), int((y + (h * SS - im.height) / SS / 2) * SS)))
-    else:
-        text(x + w / 2, y + h / 2, "(사진 없음)\n" + path, 15, C["sub"], anchor="mm")
-    yy = y + h + 6
-    for ln in cap.split("\n"):
-        for piece in wrap(ln, sz, w):
-            text(x + 2, yy, piece, sz, C["text"] if yy == y + h + 6 else C["sub"]); yy += sz * 1.3
-
-def section(y, title, sub=None):
-    S.d.rectangle([20 * SS, y * SS, (W - 20) * SS, (y + 3) * SS], fill=(90, 84, 78))
-    text(24, y + 10, title, 30, b=True)
-    if sub: text(24 + S.d.textlength(title, font=S.F(30, True)) / SS + 18, y + 20, sub, 19, C["sub"])
-    return y + 58
+def photo(x, y, w, h, path, cap, sz=16): S.photo(x, y, w, h, os.path.join(ROOT, path), cap, sz)
+def section(y, title, sub=None): return S.section(y, W, title, sub)
 
 def row(y, items, h, sz=16, gap=20):
     w = (W - 48 - gap * (len(items) - 1)) / len(items)

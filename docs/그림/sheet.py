@@ -188,3 +188,27 @@ def legend(x0, y0, items=LEGEND, per_row=5, colw=270, sz=21):
         elif k == "booth": LP.line([(cx, cy), (cx + 30, cy)], 3, (245, 245, 245), dash=True, dl=6, gap=4)
         elif k == "block": block(LP, cx + 15, cy)
         text(x0 + cx + 42, y0 + cy, t, sz, anchor="lm")
+
+
+def photo(x, y, w, h, full, cap, sz=16):
+    """그림 파일(full 경로)을 w×h 칸에 맞춰 넣고 아래에 설명(여러 줄, 첫 줄 밝게). 3DP_레퍼런스 · 3DP_모양이 같이 쓴다."""
+    d.rectangle([x * SS, y * SS, (x + w) * SS, (y + h) * SS], fill=(28, 26, 25))
+    if os.path.exists(full):
+        im = Image.open(full).convert("RGB"); k = min(w * SS / im.width, h * SS / im.height)
+        im = im.resize((int(im.width * k), int(im.height * k)), Image.LANCZOS)
+        img.paste(im, (int((x + (w * SS - im.width) / SS / 2) * SS), int((y + (h * SS - im.height) / SS / 2) * SS)))
+    else:
+        text(x + w / 2, y + h / 2, "(그림 없음)\n" + os.path.basename(full), 15, C["sub"], anchor="mm")
+    yy = y + h + 6
+    for ln in cap.split("\n"):
+        for piece in wrap(ln, sz, w):
+            text(x + 2, yy, piece, sz, C["text"] if yy == y + h + 6 else C["sub"]); yy += sz * 1.3
+
+
+def section(y, W, title, sub=None):
+    """가로 줄 + 제목. 돌려주는 값 = 다음 내용이 시작할 y."""
+    d.rectangle([20 * SS, y * SS, (W - 20) * SS, (y + 3) * SS], fill=(90, 84, 78))
+    text(24, y + 10, title, 30, b=True)
+    if sub: text(24 + d.textlength(title, font=F(30, True)) / SS + 18, y + 20, sub, 19, C["sub"])
+    return y + 58
+
