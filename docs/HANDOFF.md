@@ -19,6 +19,10 @@
 | `M1Check` | 검사가 전부 혼자 기준이다 |
 | `NoiseBus` | **위치만 봐서 그대로 쓸 수 있다** |
 
+**09-30 (63차 이어서) — 3D-P2 판정 ⑤ 통과(사용자 "통과. 주머니도 때 묻혀라. 판정 ⑥으로 가라") → 주머니 때 → 실행 파일 판정 ⑥ 대기.**
+- 주머니는 베이지라 살로 잘못 갈려 있었다 → 따로 한 부위로 때 · 천 결(자세한 것은 제안서 "판정 ⑤ 뒤"). 화면 밝기 옛 224 → 새 135. `-only player` ALL PASS 9 — 단 `player_body_not_clay` ×1.15 로 문턱에 붙음.
+- **판정 ⑥ 방법**: `build/Tunnel/Tunnel.exe` → 인트로 "시작" → 부스 맵(전등 아래 · 머리등 둘 다) · **Shift+7** 세운 몸 · 0 괴물 끄기 · F1 줄 `player look` — **Shift+1 2** 천 결 · **Shift+3 4** 옷 윤기 · **Shift+5** 탄가루 옅게/보통/짙게 · **Shift+6** 옛/새. 받은 숫자 → `Tuning.PLAYER_CLOTH_DETAIL` · `PLAYER_SMOOTH_MUL` · `PLAYER_DIRT_LEVEL` → `PlayerLookSetup.Run`(재질에 굽기) → 전체 build.sh 한 번 → 커밋. 판정 중엔 봇 안 돌림.
+
 **09-30 (63차 이어서) — 3D-P2 승인(물을 것 셋 모두 추천대로) → 차례 1 굽기 · 넣기 끝 → 판정 ⑤(사진) 대기.** 한 장 `build/player/P15_판정5.png`(1.5 · 3 m, 앞 · 옆 · 뒤, 옛 ↔ 새).
 - 새 재질 = 부위별 윤기 · 가림 · 천 결(옷만) · 탄가루 보통 · 소품 13 종 질감. 검사 `-only player` ALL PASS 9(`player_body_not_clay` 구조값 ×1.18 · `player_look_maps`) · 사보타주 `claybody` · `nodetail` FAIL 확인 · `hud` · `pick` 그대로. 판정 키 Shift+1 2 천 결 · 3 4 옷 윤기 · 5 탄가루 · 6 옛/새.
 - **제안서와 다른 점**(자세한 것은 제안서 "구현"): 장화는 높이로 가름 · 천 결은 잔주름(3 cm 아래)까지 · **윤 검사 뺌 — 머리등 아래서 윤은 옛 2.4 % · 새 2.5 % 로 찰흙의 원인이 아니었다** · 탄가루 셋 판과 옛/새 는 몸만 · 부스 전등 모습은 판정 ⑥(실행 파일).
@@ -42,7 +46,7 @@
 - 검사: `-only player` ALL PASS 7(손 ↔ 손잡이 0.0 cm · 팔 탐 0.10 % · 발바닥 −1.3 cm · 줄 끝 0.00 cm · 얼룩 1.14) · 사보타주 `noik` · `fpbody` · `noswitch` · `standalone` FAIL 확인 · `nokevin` ALL PASS(의도) · 옛 줄 FBX 로 `player_body_props_attached` FAIL(3.69 cm) 확인 · `mining` 12 · `mine` 8 그대로.
 - 커밋에서 뺀 것(다른 세션 것 그대로): `DevHud` 의 `-film` 3 줄 · `CLAUDE.md`(09-29 검사 규칙) · `blender/anim/preview_upright.py`(`UP_BLEND`) · `docs/지스타2026/00_운영지침_분석과_일정.md`(스팀 검색 한 줄). HANDOFF 의 지스타 제출 세션 줄은 이 커밋에 같이 들어감.
 
-다음 세션 시작 프롬프트(복사, main): `C:/Users/anjyo/Tunnel/unity/docs/HANDOFF.md 를 읽고 이어서 해라. 먼저 상태만 보고해라(git 상태 · git worktree list · Unity 에디터 열림 여부). 3D-P 판정 ④ 는 1 · 2 · 5 통과 · 3 한 손 캐기 반영 끝. 4 "찰흙처럼 보인다" 는 3D-P2(docs/제안서_3DP2_플레이어_재질_현실감.md) 차례 1 끝 — 판정 ⑤(build/player/P15_판정5.png) 결과를 내가 말하겠다. 제안서 "구현" 을 읽고 기다려라. 크레딧은 쓰지 마라. 푸시하지 마라.`
+다음 세션 시작 프롬프트(복사, main): `C:/Users/anjyo/Tunnel/unity/docs/HANDOFF.md 를 읽고 이어서 해라. 먼저 상태만 보고해라(git 상태 · git worktree list · Unity 에디터 열림 여부). 3D-P 판정 ④ 는 1 · 2 · 5 통과 · 3 한 손 캐기 반영 끝. 4 "찰흙처럼 보인다" 는 3D-P2(docs/제안서_3DP2_플레이어_재질_현실감.md) 판정 ⑤ 통과 · 주머니 때 끝 — 실행 파일 판정 ⑥ 에서 고른 값(천 결 · 옷 윤기 · 탄가루)을 내가 말하겠다. 제안서 "판정 ⑤ 뒤" 를 읽고 기다려라. 크레딧은 쓰지 마라. 푸시하지 마라.`
 
 **09-29 (지스타 10/2 제출 세션, 작업 폴더 `Opus5_채굴게임`, 코드 변경 없음 · 커밋 안 함)**: 센터 메일(1차 기획 통과 뒤) — **10/2(금)까지 `changup@deu.ac.kr`** 로 ① 게임명 국·영문 + 게임 등급(전체/12/15/청불 중 하나) ② 인트로 캡처 1부. **사용자 결정(09-29)**: 게임명 = 막장 / End of the Dead-End(09-22 확정 그대로, 스팀 검색 09-29 겹침 없음) · **부스판 등급 = 15세이용가**(지침 1-5 "전체 이용가 수준"과 달라서 제출 메일에 "부스 전시에 문제 있나" 한 줄로 묻는다). 인트로 캡처 = `build/Tunnel/check/intro_logo.png`(09-28 빌드, 팀명 오토마이너 들어감) — **로고 둘은 아직 회색 자리표시, 센터 원본 안 받음 → 사용자가 요청 메일.** 오면 `Assets/UI/logo_university.png` · `logo_center.png` 교체 → `MakeIntro` → 빌드 → 캡처 다시 → 보냄. 출시판 등급은 아직 안 정함(사용자 물음 "청불로 가도 되나" — 답: 개념은 15세, 청불을 가르는 건 시체를 어떻게 보이느냐).
 - 같은 날 사용자 "인트로가 너무 조잡하다, 인트로와 폰트를 컨셉에 맞게" → 조사(공포 게임 제목 화면 13개 · 80년대 한국 탄광 표지 15장 `build/refs/intro/` · 글꼴 후보 `build/refs/intro/fonts/`) → 시안 3장(`build/refs/intro/mock/`) → **사용자 2번 "안전제일 간판" 고름** → 제안서 `docs/제안서_UI2d_인트로_간판.md` **승인(09-29)**(귀령광업소 넣음 · 먼 불빛 조금 떨림 · 메뉴에선 로고 숨김). 구현은 옆 가지 `intro-sign`(`Tunnel/unity-intro`) 에서 — 3D-P 와 안 부딪히게. **구현·전체 build.sh ALL PASS 188 · 가지에 커밋 `5407ae5` → 사용자 지적 "실제 게임 화면이 아니다(검사용 1자 복도)" → 배경을 부스 맵 광장 동쪽으로 `1e40d71` → **사용자 판정값 간판 밝기 0.150 · 흔들림 10°** 넣고 · "막장" 더 거칠게(을지로10년후체 + 붓 자국, 사용자 후보 E) · 전체 build.sh ALL PASS 188 · 마지막 `be52d9a`(09-29) → main 합치기 대기**(`Tunnel/unity-intro/build/Tunnel/Tunnel.exe`), 통과하면 main 이 합친다 — 볼 곳은 그 가지 HANDOFF 의 `## 0. 옆 가지 intro-sign` 절.

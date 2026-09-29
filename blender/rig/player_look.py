@@ -9,7 +9,7 @@
   cloth_detail_nor_gl.png · cloth_detail_albedo.png (512, 이음 없이 되풀이 — denim 에서 솔기 없는 곳, 큰 주름은 빼고 결만)
   props/<재질>_Diffuse.jpg · _ms.png · _nor_gl.jpg (1K, 되풀이 — 소품 UV 1 = 0.3 m)
   look.txt (UV 밀도 — Unity 설정이 천 결 되풀이 크기에 쓴다)
-자기 검사(FAIL 이면 종료 1). 사보타주 SABOTAGE=noao(가림을 1 로) → look_ao FAIL · flatrough(윤기 한 값) → look_parts FAIL · notile(되풀이 손질 없이) → look_cloth_tile FAIL"""
+자기 검사(FAIL 이면 종료 1). 사보타주 SABOTAGE=noao(가림을 1 로) → look_ao FAIL · flatrough(윤기 한 값) → look_parts FAIL · notile(되풀이 손질 없이) → look_cloth_tile FAIL · cleanpocket(주머니 따로 안 얹음) → look_pockets FAIL"""
 import os, sys, numpy as np
 from PIL import Image, ImageFilter
 sys.stdout.reconfigure(encoding="utf-8")
@@ -40,8 +40,12 @@ dark = cov & ~glove & (z < 0.35)                                       # 고무 
 white = ~glove & ~dark & (lum > 0.5)                                   # 흰 소매 · 면장갑 등
 skin = ~glove & ~dark & ~white & (base[..., 0] > base[..., 1] * 1.15) & (base[..., 0] > base[..., 2] * 1.3) & (lum > 0.3)   # 살(방독면 · 목수건 밑)
 hair = ~glove & ~dark & (lum < 0.05)                                   # 머리카락(안전모 밑)
+# 가슴 주머니 = 가슴 높이(1.12~1.52 m)의 밝은 베이지 · 흰 판 — 베이지(0.46, 0.40, 0.34)가 살 기준에 걸려 판정 ⑤ 까지 "살"로 갈려 있었다
+# (천 결 없음 · 때 적음 → 머리등 아래 하얗게 남음). 판정 ⑤ 사용자 09-30 "주머니도 때 묻혀라"
+pocket = cov & ~glove & ~dark & (z > 1.12) & (z < 1.52) & (lum > 0.3) & ((base[..., 0] > base[..., 2] * 1.15) | (lum > 0.5))   # 흰 테두리까지
+skin &= ~pocket; white &= ~pocket
 cloth = cov & ~glove & ~dark & ~white & ~skin & ~hair
-frac = {k: float((m & cov).sum() / cov.sum()) for k, m in (("cloth", cloth), ("white", white), ("glove", glove), ("boots", dark), ("skin", skin), ("hair", hair))}
+frac = {k: float((m & cov).sum() / cov.sum()) for k, m in (("cloth", cloth), ("white", white), ("glove", glove), ("boots", dark), ("skin", skin), ("hair", hair), ("pocket", pocket))}
 print("INFO 부위 몫", {k: f"{v * 100:.1f} %" for k, v in frac.items()})
 
 # ── 탄가루 · 때: 오목한 곳 + 아래쪽(무릎 밑 · 장화) + 큰 얼룩 + 잔 알갱이 ──
@@ -51,6 +55,9 @@ blot = np.clip((nl - 0.45) / 0.3, 0, 1)
 smudge = np.clip((nf - 0.55) / 0.2, 0, 1)                             # 손때 · 문지른 자국 (몇 cm)
 d = np.clip(0.55 * crev + 0.45 * low + 0.45 * blot + 0.25 * smudge + 0.15 * (nf - 0.5), 0, 1)
 d *= np.where(white, 1.2, np.where(dark, 0.6, 1.0))
+# 가슴 주머니: 평평해서 오목 · 아래쪽 몫이 없으니 따로 얹고, 색 자체도 0.55 배로(누렇게 절은 천)
+POCKET_TONE = 0.55
+if SAB != "cleanpocket": d = np.where(pocket, np.clip(0.7 + 0.25 * blot + 0.2 * smudge + 0.2 * crev, 0, 1), d)
 DUST = np.array([0.050, 0.048, 0.045], np.float32)                    # 석탄 가루 (짙은 회색, 살짝 따뜻)
 LEVELS = (0.45, 0.8, 1.2)                                              # 옅게 · 보통 · 짙게 (사용자 09-30 처음 = 보통)
 
@@ -64,11 +71,15 @@ def save_rgba(path, rgb, a):
     Image.fromarray(np.dstack([np.clip(rgb, 0, 1), np.clip(a, 0, 1)[..., None]]).__mul__(255).round().astype(np.uint8), "RGBA").save(path)
 save_rgba(os.path.join(TX, "player_ms.png"), np.zeros(ao.shape + (3,), np.float32), 1 - rough)
 Image.fromarray((np.clip(ao, 0, 1) * 255).round().astype(np.uint8), "L").save(os.path.join(TX, "player_ao.png"))
-mask = np.asarray(Image.fromarray(((cloth | white) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2)), np.float32) / 255
+mask = np.asarray(Image.fromarray(((cloth | white | pocket) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2)), np.float32) / 255
 save_rgba(os.path.join(TX, "player_detail_mask.png"), np.repeat(mask[..., None], 3, 2), mask)
 
 # 때 판 셋 (4K): 2K 때 세기를 4K 로 늘려 원래 색에 — lerp(색, 색 × 0.35 + 가루, k)
 B4 = np.asarray(base4, np.float32) / 255
+if SAB != "cleanpocket":                                               # 주머니 바탕을 먼저 누렇게 절은 천 색으로
+    pk4 = np.asarray(Image.fromarray((pocket * 255).astype(np.uint8)).resize(base4.size, Image.BILINEAR), np.float32)[..., None] / 255
+    B4 = B4 * (1 - pk4 * (1 - POCKET_TONE))
+    base = np.where(pocket[..., None], base * POCKET_TONE, base)      # 2K 검사용도 같게
 means = []
 for i, amt in enumerate(LEVELS, 1):
     k = np.clip(d * amt, 0, 0.9)
@@ -77,6 +88,9 @@ for i, amt in enumerate(LEVELS, 1):
     Image.fromarray((np.clip(out, 0, 1) * 255).round().astype(np.uint8)).save(os.path.join(TX, f"player_base_dirt{i}.jpg"), quality=92)
     means.append(float((out[..., :3].mean(axis=2))[np.asarray(Image.fromarray(cov.astype(np.uint8) * 255).resize(base4.size), bool)].mean()))
 print("INFO 때 판 평균 밝기", [f"{m:.3f}" for m in means])
+k2 = np.clip(d * LEVELS[1], 0, 0.9)[..., None]
+pk_clean = float(lum[pocket].mean()) if pocket.any() else 0.0        # lum = 원래 색 (주머니 톤 낮추기 전)
+pk_dirty = float(((base * (1 - k2) + (base * 0.35 + DUST) * k2) @ np.array([0.2126, 0.7152, 0.0722], np.float32))[pocket].mean()) if pocket.any() else 0.0
 
 # ── 천 결 (denim_fabric, CC0): 솔기 없는 512 조각(= 0.5 m) → 3 cm 보다 큰 주름은 빼고 결 · 잔주름만 → 이음 없이 되풀이.
 #    1 cm 아래 결만 남긴 첫 판은 2 m 에서 화면을 0.6 % 만 바꿨다(09-30 검사) — 2 m 에서 한 픽셀이 약 3 mm 라 결은 안 보이고 잔주름이 보인다 ──
@@ -147,6 +161,7 @@ check("look_ao", np.percentile(ao[cov], 5) < 0.55 and ao[cov].mean() > 0.6,
 check("look_dirt_levels", means[0] > means[1] > means[2] and means[0] - means[2] > 0.02, f"때 판 밝기 옅게 {means[0]:.3f} > 보통 {means[1]:.3f} > 짙게 {means[2]:.3f}")
 check("look_cloth_tile", edge < 1.3 and np.abs(nxy).mean() > 0.01, f"천 결 되풀이 이음 차 ÷ 안쪽 이웃 차 {edge:.2f} (< 1.3) · 결 세기 {np.abs(nxy).mean():.3f}")
 check("look_props", len(prop_ok) == len(PROPS), f"소품 재질 {len(prop_ok)} 종 질감")
+check("look_pockets", pocket.sum() > 5000 and pk_dirty <= pk_clean * 0.5, f"가슴 주머니 {int(pocket.sum())} 점 밝기 깨끗 {pk_clean:.2f} → 탄가루 보통 {pk_dirty:.2f} (≤ ×0.5)")
 print("INFO UV 밀도 1 UV =", m_per_uv, "m")
 print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails))
 sys.exit(1 if fails else 0)
