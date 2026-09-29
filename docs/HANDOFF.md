@@ -19,6 +19,14 @@
 | `M1Check` | 검사가 전부 혼자 기준이다 |
 | `NoiseBus` | **위치만 봐서 그대로 쓸 수 있다** |
 
+**09-30 (63차 끝, 사용자 "다른 트리에서 인트로 부분을 만든 것이 있다. main 으로 가져와서 합치는 걸 다음 세션에서") — 다음 세션 첫 일 = 옆 가지 `intro-sign` 합치기.** 조사만 해 둠(아무것도 안 합침):
+- 가지: `intro-sign`(작업 폴더 `Tunnel/unity-intro`, 커밋 안 한 것 없음) — UI-2d 인트로 "안전제일 간판", 판정값 받음(간판 밝기 0.15 · 흔들림 10°). 갈라진 곳 `4f29a01`(09-29 17:01) 뒤 가지 커밋 5 · main 커밋 19(모두 3D-P · 3D-P2).
+- **미리 합쳐 봄(`git merge-tree --write-tree main intro-sign`, 작업 폴더 안 건드림): 부딪힘 없음.** 둘 다 고친 파일 = `BuildM1.cs` · `Intro.cs` · `Tuning.cs` · `HANDOFF.md` — 글은 다른 곳이라 저절로 합쳐진다.
+- 뜻으로 부딪힐 곳 확인: 가지가 지운 `Image()` · 이름 바꾼 `FontPath` 는 main 에서 옛 `MakeIntro` 안에서만 쓴다(가지의 새 `MakeIntro` 가 통째로 바꿈) → 컴파일 문제 없을 것. 가지의 `PlaceBoothLook`(인트로 배경 = 부스 맵 겉모습)은 `PlaceBoothMap` · `PlaceBoothLights` · `PlaceArt` 와 값이 같아야 하는데 main 은 갈라진 뒤 이 셋을 안 고쳤다. main 의 `Intro.cs` 58 줄(`-only hudfit` → 부스 맵)과 가지의 `Intro.cs` 흔들림 · 판정 키는 다른 곳.
+- 순서(CLAUDE.md "합치기"): main 에서 `git merge intro-sign` → 합친 뒤 main HANDOFF 에 생기는 `## 0. 옆 가지 intro-sign` 절의 "main 이 합칠 때 볼 곳" 확인 → 전체 `bash tools/build.sh` 한 번(지금 196 + 가지 새 검사 `intro_sign_lit` · `intro_logos_keep_aspect`) → 커밋. 인트로 검사가 떨어지면 `MakeIntro` 를 다시 돌린다(가지 말: `Intro.unity` 는 `MakeIntro` 산출물). 작업 폴더 지우기(`git worktree remove ../unity-intro`)는 사용자에게 묻고 — 에디터 · 탐색기가 잡고 있으면 안 지워진다. 가지 폴더에만 있는 복사본(`Assets/Kevin Iglesias/` · `Generated/` · `Library/`)은 main 에 이미 있다.
+- 커밋 안 한 채 두는 main 파일(다른 세션 것, 합치기와 무관): `DevHud` 의 `-film` 3 줄 · `CLAUDE.md` · `blender/anim/preview_upright.py` · `docs/지스타2026/00_운영지침_분석과_일정.md`.
+- 합친 다음 일 = 크기 · 눈높이 맞추기(아래 표).
+
 **09-30 (63차 끝) — 3D-P2 판정 ⑥ 값(사용자): 천 결 2.24 · 옷 윤기 0.51 · 탄가루 짙게 → Tuning · PlayerSkin.mat → 전체 build.sh ALL PASS 196 (fps 안개 229) → 커밋. 3D-P2 끝.** 크레딧 0 · 푸시 안 함.
 - **다음 세션 = 크기 · 눈높이 맞추기(사용자 09-30 "플레이어 모델 크기와 괴물 모델의 크기, 플레이어의 시점에서의 눈 높이가 안 맞는 것은 다음 세션에서")** — 아직 무엇이 어떻게 안 맞는지 사용자 말을 안 들었다. 지금 값(09-30, 재 둔 것):
   | 무엇 | 값 | 어디 |
@@ -60,7 +68,7 @@
 - 검사: `-only player` ALL PASS 7(손 ↔ 손잡이 0.0 cm · 팔 탐 0.10 % · 발바닥 −1.3 cm · 줄 끝 0.00 cm · 얼룩 1.14) · 사보타주 `noik` · `fpbody` · `noswitch` · `standalone` FAIL 확인 · `nokevin` ALL PASS(의도) · 옛 줄 FBX 로 `player_body_props_attached` FAIL(3.69 cm) 확인 · `mining` 12 · `mine` 8 그대로.
 - 커밋에서 뺀 것(다른 세션 것 그대로): `DevHud` 의 `-film` 3 줄 · `CLAUDE.md`(09-29 검사 규칙) · `blender/anim/preview_upright.py`(`UP_BLEND`) · `docs/지스타2026/00_운영지침_분석과_일정.md`(스팀 검색 한 줄). HANDOFF 의 지스타 제출 세션 줄은 이 커밋에 같이 들어감.
 
-다음 세션 시작 프롬프트(복사, main): `C:/Users/anjyo/Tunnel/unity/docs/HANDOFF.md 를 읽고 이어서 해라. 먼저 상태만 보고해라(git 상태 · git worktree list · Unity 에디터 열림 여부). 3D-P · 3D-P2 는 끝났다. 오늘은 플레이어 모델 크기 · 괴물 모델 크기 · 1인칭 눈높이가 서로 안 맞는 것 — HANDOFF 맨 위 표(지금 값)를 실행 파일 기준으로 다시 재서 한 장(같은 자리 · 같은 거리에 내 눈 · 세운 몸 · 괴물)으로 보여 주고, 무엇이 안 맞는지 내 말을 기다려라. 듣기 전에는 값을 바꾸지 마라. 크레딧은 쓰지 마라. 푸시하지 마라.`
+다음 세션 시작 프롬프트(복사, main): `C:/Users/anjyo/Tunnel/unity/docs/HANDOFF.md 를 읽고 이어서 해라. 먼저 상태만 보고해라(git 상태 · git worktree list · Unity 에디터 열림 여부). 오늘 첫 일은 옆 가지 intro-sign(작업 폴더 Tunnel/unity-intro, UI-2d 인트로 "안전제일 간판", 판정값 받음)을 main 으로 합치기다 — HANDOFF 맨 위 "intro-sign 합치기" 줄대로 main 에서 git merge intro-sign → 합친 뒤 생기는 "## 0. 옆 가지 intro-sign" 절의 "main 이 합칠 때 볼 곳" 확인 → 전체 bash tools/build.sh 한 번 → 커밋. 합치기 전에 무엇을 할지 짧게 보고하고 시작해라. 작업 폴더 지우기(git worktree remove)는 내게 물어라. 합친 다음 일은 플레이어 모델 크기 · 괴물 모델 크기 · 1인칭 눈높이가 안 맞는 것 — HANDOFF 의 지금 값 표를 실행 파일 기준으로 다시 재서 한 장(같은 자리 · 같은 거리에 내 눈 · 세운 몸 · 괴물)으로 보여 주고, 무엇이 안 맞는지 내 말을 기다려라(듣기 전에 값을 바꾸지 마라). 크레딧은 쓰지 마라. 푸시하지 마라.`
 
 **09-29 (지스타 10/2 제출 세션, 작업 폴더 `Opus5_채굴게임`, 코드 변경 없음 · 커밋 안 함)**: 센터 메일(1차 기획 통과 뒤) — **10/2(금)까지 `changup@deu.ac.kr`** 로 ① 게임명 국·영문 + 게임 등급(전체/12/15/청불 중 하나) ② 인트로 캡처 1부. **사용자 결정(09-29)**: 게임명 = 막장 / End of the Dead-End(09-22 확정 그대로, 스팀 검색 09-29 겹침 없음) · **부스판 등급 = 15세이용가**(지침 1-5 "전체 이용가 수준"과 달라서 제출 메일에 "부스 전시에 문제 있나" 한 줄로 묻는다). 인트로 캡처 = `build/Tunnel/check/intro_logo.png`(09-28 빌드, 팀명 오토마이너 들어감) — **로고 둘은 아직 회색 자리표시, 센터 원본 안 받음 → 사용자가 요청 메일.** 오면 `Assets/UI/logo_university.png` · `logo_center.png` 교체 → `MakeIntro` → 빌드 → 캡처 다시 → 보냄. 출시판 등급은 아직 안 정함(사용자 물음 "청불로 가도 되나" — 답: 개념은 15세, 청불을 가르는 건 시체를 어떻게 보이느냐).
 - 같은 날 사용자 "인트로가 너무 조잡하다, 인트로와 폰트를 컨셉에 맞게" → 조사(공포 게임 제목 화면 13개 · 80년대 한국 탄광 표지 15장 `build/refs/intro/` · 글꼴 후보 `build/refs/intro/fonts/`) → 시안 3장(`build/refs/intro/mock/`) → **사용자 2번 "안전제일 간판" 고름** → 제안서 `docs/제안서_UI2d_인트로_간판.md` **승인(09-29)**(귀령광업소 넣음 · 먼 불빛 조금 떨림 · 메뉴에선 로고 숨김). 구현은 옆 가지 `intro-sign`(`Tunnel/unity-intro`) 에서 — 3D-P 와 안 부딪히게. **구현·전체 build.sh ALL PASS 188 · 가지에 커밋 `5407ae5` → 사용자 지적 "실제 게임 화면이 아니다(검사용 1자 복도)" → 배경을 부스 맵 광장 동쪽으로 `1e40d71` → **사용자 판정값 간판 밝기 0.150 · 흔들림 10°** 넣고 · "막장" 더 거칠게(을지로10년후체 + 붓 자국, 사용자 후보 E) · 전체 build.sh ALL PASS 188 · 마지막 `be52d9a`(09-29) → main 합치기 대기**(`Tunnel/unity-intro/build/Tunnel/Tunnel.exe`), 통과하면 main 이 합친다 — 볼 곳은 그 가지 HANDOFF 의 `## 0. 옆 가지 intro-sign` 절.
