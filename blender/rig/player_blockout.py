@@ -288,9 +288,13 @@ def boot_shell(name, co, reg, sd):
 
 
 def towel(bvh, co, reg, neck_back_z):
-    """목수건(흰 광목, 조사 13): 목 둘레를 돌며 몸 겉면을 찾아 그 위에 붙는 납작한 띠 — 뒤는 목 뒤 높이, 앞은 가슴 위로 내려온다(✎ 모양은 어림)."""
-    nk = co[reg == 22]; low = nk[nk[:, 2] < nk[:, 2].min() + 0.03]; cx, cy = low[:, 0].mean(), low[:, 1].mean()
-    zb, zf = neck_back_z + 0.0, neck_back_z - 0.055
+    """목수건(흰 광목, 조사 13): 목 둘레를 돌며 몸 겉면을 찾아 그 위에 붙는 납작한 띠 — 뒤는 목 뒤 높이, 앞은 가슴 위로 내려온다(✎ 모양은 어림).
+    돌려받는 것: (물체, 목 가운데 x, y). Meshy 몸 손질(player_meshy_fix.py)도 towel_ring 을 같이 쓴다."""
+    nk = co[reg == 22]; low = nk[nk[:, 2] < nk[:, 2].min() + 0.03]; cx, cy = float(low[:, 0].mean()), float(low[:, 1].mean())
+    return towel_ring(bvh, cx, cy, neck_back_z, neck_back_z - 0.055), cx, cy
+
+
+def towel_ring(bvh, cx, cy, zb, zf):
     pts = []
     for i in range(48):
         t = 2 * math.pi * i / 48; zz = zf + (zb - zf) * (1 - math.cos(t)) / 2
@@ -380,7 +384,7 @@ def dress(body, base, jn):
                               "boot", solid=0))
     # 가슴 주머니 2 · 덮개 · 왼쪽 가슴 흰 번호표(1981 k18 k19) · 단추(앞 가운데)
     bvh = BVHTree.FromPolygons([tuple(c) for c in co], [tuple(p.vertices) for p in me.polygons])
-    extra.append(towel(bvh, co, reg, neck_back_z))
+    tw, ncx, ncy = towel(bvh, co, reg, neck_back_z); extra.append(tw)
     chest_z = neck_back_z - 0.20
     for sx in (-1, 1):
         extra.append(patch("Pocket" + ("R" if sx < 0 else "L"), bvh, (sx * 0.095, -1, chest_z - 0.02), (0, 1, 0), (0.12, 0.14, 0.006), "pocket"))
@@ -388,7 +392,7 @@ def dress(body, base, jn):
     extra.append(patch("ChestTag", bvh, (0.095, -1, chest_z + 0.085), (0, 1, 0), (0.07, 0.032, 0.012), "tag"))
     for k in range(5):
         extra.append(patch("Button%d" % k, bvh, (0.0, -1, chest_z + 0.07 - k * 0.11), (0, 1, 0), (0.015, 0.015, 0.006), "button"))
-    return dict(neck_back_z=neck_back_z, hem_z=hem_z, belt_z=belt_z, reg=reg, co=co, bvh=bvh, extra=[e for e in extra if e])
+    return dict(neck_back_z=neck_back_z, hem_z=hem_z, belt_z=belt_z, reg=reg, co=co, bvh=bvh, extra=[e for e in extra if e], neck_cx=ncx, neck_cy=ncy)
 
 
 # ───────────────────────── 3. 소품 달기 ─────────────────────────
@@ -500,6 +504,8 @@ def main():
     info["co"] = info["co"] + np.array([0, 0, lift]); info["neck_back_z"] += lift; info["hem_z"] += lift; info["belt_z"] += lift
     info["bvh"] = BVHTree.FromPolygons([tuple(c) for c in info["co"]], [tuple(p.vertices) for p in body.data.polygons])
     g = gear(info, eyes)
+    bpy.context.scene["player_info"] = dict(neck_back_z=info["neck_back_z"], neck_cx=info["neck_cx"], neck_cy=info["neck_cy"],   # Meshy 몸 손질이 읽는다
+                                            rim_z=g["rim_z"], helmet_cx=g["cx"], helmet_cy=g["cy"], belt_z=info["belt_z"])
     P.bake_all(list(bpy.data.objects))
     bpy.context.view_layer.update()
 

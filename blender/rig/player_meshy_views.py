@@ -12,53 +12,61 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.pat
 sys.path.insert(0, HERE)
 import player_blockout as B
 
-args = sys.argv[sys.argv.index("--") + 1:]; name = args[0]; GEAR = "gear" in args
-SRC = os.path.join(os.path.dirname(ROOT), "MineTunnel", "mesh", f"meshy_{name}.glb")
 OUT = os.path.join(ROOT, "build", "player")
 HEIGHT = B.STATURE + B.SOLE            # 장화 신은 키(밑그림과 같게)
+GEAR_PREFIX = ("Helmet", "Lamp", "Battery", "Canteen", "Belt")
 
-if GEAR:
-    bpy.ops.wm.open_mainfile(filepath=os.path.join(OUT, "player_blockout.blend"))
-    GEAR_PREFIX = ("Helmet", "Lamp", "Battery", "Canteen", "Belt")
-    old = [o for o in bpy.data.objects if o.type == "MESH" and not o.name.startswith(GEAR_PREFIX)]
+
+def src_of(name): return os.path.join(os.path.dirname(ROOT), "MineTunnel", "mesh", f"meshy_{name}.glb")
+
+
+def load(name, gear=False):
+    """Meshy GLB 를 가져와 키 · 자리를 맞춘다. gear = 밑그림 장면을 열고 밑그림 몸과 같은 키 · 가운데에(소품이 맞게) — 밑그림 몸 · 옷은 숨긴다.
+    돌려받는 것: 가져온 그물 물체들."""
+    if gear:
+        bpy.ops.wm.open_mainfile(filepath=os.path.join(OUT, "player_blockout.blend"))
+        old = [o for o in bpy.data.objects if o.type == "MESH" and not o.name.startswith(GEAR_PREFIX)]
+        bpy.context.view_layer.update()
+        op = np.array([(o.matrix_world @ v.co)[:] for o in old for v in o.data.vertices]); olo, ohi = op.min(axis=0), op.max(axis=0)
+        for o in old: o.hide_render = True
+    else:
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=src_of(name))
+    meshes = [o for o in bpy.data.objects if o.type == "MESH" and o not in before]
     bpy.context.view_layer.update()
-    op = np.array([(o.matrix_world @ v.co)[:] for o in old for v in o.data.vertices]); olo, ohi = op.min(axis=0), op.max(axis=0)
-    for o in old: o.hide_render = True                              # 밑그림 몸 · 옷은 숨기고 소품만 남긴다
-else:
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-before = set(bpy.data.objects)
-bpy.ops.import_scene.gltf(filepath=SRC)
-meshes = [o for o in bpy.data.objects if o.type == "MESH" and o not in before]
-bpy.context.view_layer.update()
-pts = np.array([(o.matrix_world @ v.co)[:] for o in meshes for v in o.data.vertices])
-lo, hi = pts.min(axis=0), pts.max(axis=0)
-k = HEIGHT / (hi[2] - lo[2]); c = (lo + hi) / 2
-M = Matrix.Scale(k, 4) @ Matrix.Translation((-c[0], -c[1], -lo[2]))
-if GEAR:   # 밑그림 몸과 같은 키 · 같은 가운데에(소품이 밑그림 몸에 맞춰져 있다)
-    k = (ohi[2] - olo[2]) / (hi[2] - lo[2]); oc = (olo + ohi) / 2
-    M = Matrix.Translation((oc[0], oc[1], olo[2])) @ Matrix.Scale(k, 4) @ Matrix.Translation((-c[0], -c[1], -lo[2]))
-for o in [o for o in bpy.data.objects if o.parent is None and o not in before]: o.matrix_world = M @ o.matrix_world
-bpy.context.view_layer.update()
-pts = np.array([(o.matrix_world @ v.co)[:] for o in meshes for v in o.data.vertices])
-tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in meshes)
-imgs = [(i.name, i.size[0], i.size[1]) for i in bpy.data.images if i.size[0]]
-print(f"INFO 물체 {len(meshes)} · 삼각형 {tris} · 원래 키 {hi[2]-lo[2]:.3f} (× {k:.3f}) · 폭 {np.ptp(pts[:,0]):.2f} · 앞뒤 {np.ptp(pts[:,1]):.2f} m · 그림 {imgs}")
-# 앞 방향 확인: 밑그림은 앞 = −Y. Meshy 가 돌려 놓았으면 얼굴(가장 높은 곳 근처)이 어느 쪽으로 튀어나왔는지 본다
-top = pts[pts[:, 2] > HEIGHT - 0.25]
-print(f"INFO 머리 부근 y 가운데 {np.median(top[:,1]):+.3f} · 앞(−Y)쪽 끝 {top[:,1].min():+.3f} · 뒤쪽 끝 {top[:,1].max():+.3f}")
+    pts = np.array([(o.matrix_world @ v.co)[:] for o in meshes for v in o.data.vertices])
+    lo, hi = pts.min(axis=0), pts.max(axis=0); c = (lo + hi) / 2
+    if gear:
+        k = (ohi[2] - olo[2]) / (hi[2] - lo[2]); oc = (olo + ohi) / 2
+        M = Matrix.Translation((oc[0], oc[1], olo[2])) @ Matrix.Scale(k, 4) @ Matrix.Translation((-c[0], -c[1], -lo[2]))
+    else:
+        k = HEIGHT / (hi[2] - lo[2]); M = Matrix.Scale(k, 4) @ Matrix.Translation((-c[0], -c[1], -lo[2]))
+    for o in [o for o in bpy.data.objects if o.parent is None and o not in before]: o.matrix_world = M @ o.matrix_world
+    bpy.context.view_layer.update()
+    pts = np.array([(o.matrix_world @ v.co)[:] for o in meshes for v in o.data.vertices])
+    tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in meshes)
+    imgs = [(i.name, i.size[0], i.size[1]) for i in bpy.data.images if i.size[0]]
+    print(f"INFO 물체 {len(meshes)} · 삼각형 {tris} · 원래 키 {hi[2]-lo[2]:.3f} (× {k:.3f}) · 폭 {np.ptp(pts[:,0]):.2f} · 앞뒤 {np.ptp(pts[:,1]):.2f} m · 그림 {imgs}")
+    return meshes
 
-B.setup_render((0.30, 0.30, 0.31), 0.9)
-tag = f"{name}_소품" if GEAR else name
-for v, nm in (("front", "앞"), ("right", "옆"), ("back", "뒤"), ("quarter", "비스듬히")):
-    B.shoot(os.path.join(OUT, f"P2_{tag}_{nm}.png"), v, 0.93, 2.05)
-head_z = HEIGHT - 0.12
-B.shoot(os.path.join(OUT, f"P2_{tag}_얼굴.png"), "front", head_z, 0.42, (900, 900))
-if GEAR:
+
+def shoot_set(tag, meshes, close=True):
+    B.setup_render((0.30, 0.30, 0.31), 0.9)
+    for v, nm in (("front", "앞"), ("right", "옆"), ("back", "뒤"), ("quarter", "비스듬히")):
+        B.shoot(os.path.join(OUT, f"P2_{tag}_{nm}.png"), v, 0.93, 2.05)
+    head_z = HEIGHT - 0.12
+    B.shoot(os.path.join(OUT, f"P2_{tag}_얼굴.png"), "front", head_z, 0.42, (900, 900))
     B.shoot(os.path.join(OUT, f"P2_{tag}_얼굴_옆.png"), "quarter", head_z, 0.42, (900, 900))
-    print("done gear"); sys.exit(0)
-hand = pts[pts[:, 0] < pts[:, 0].min() + 0.12]                    # 오른손(−x 끝)
-hc = hand.mean(axis=0)
-B.shoot(os.path.join(OUT, f"P2_{name}_손.png"), "front", float(hc[2]), 0.34, (900, 900), xc=float(hc[0]))
-B.shoot(os.path.join(OUT, f"P2_{name}_장화.png"), "quarter", 0.22, 0.62, (900, 900))
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, f"player_{name}.blend"))
-print("done")
+    if close:
+        pts = np.array([(o.matrix_world @ v.co)[:] for o in meshes for v in o.data.vertices])
+        hc = pts[pts[:, 0] < pts[:, 0].min() + 0.12].mean(axis=0)            # 오른손(−x 끝)
+        B.shoot(os.path.join(OUT, f"P2_{tag}_손.png"), "front", float(hc[2]), 0.34, (900, 900), xc=float(hc[0]))
+        B.shoot(os.path.join(OUT, f"P2_{tag}_장화.png"), "quarter", 0.22, 0.62, (900, 900))
+
+
+if __name__ == "__main__":
+    args = sys.argv[sys.argv.index("--") + 1:]; name = args[0]; gear = "gear" in args
+    meshes = load(name, gear)
+    shoot_set(f"{name}_소품" if gear else name, meshes, close=not gear)
+    print("done")
