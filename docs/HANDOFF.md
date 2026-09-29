@@ -287,6 +287,17 @@
 **▶ 다음 세션 시작 (09-20 끝, m3 5차 = 팔 1.7배 사용자 통과):** 폴더 `C:/Users/anjyo/Tunnel/unity-m2` (가지 `m2-body`) 를 연다 — `Tunnel/unity`(main)는 다른 세션이 MR1·맵을 하는 곳이라 건드리지 않는다. 시작 프롬프트(복사):
 `docs/HANDOFF.md 0절을 읽고 이어서 해라. 새 몸 m3 는 5차까지 사용자 판정을 통과했다(팔 1.7배·손목·골반·어깨·갈비 사이·장기 색). 다음 일 ①: 발톱마다 손가락 뼈를 맞춰 손가락이 굽게 하고(지금은 Miner_Hands 가 손 뼈에 통짜), blender/anim/walk_knuckle.py 의 "손 살이 바닥을 안 뚫음" 검사가 Miner_Hands 그물을 재게 고쳐라(지금은 아무것도 안 재고 PASS — 고친 뒤 일부러 FAIL 시켜 확인). 제안서부터 쓰고 승인받아라. 빌드는 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_m3.glb 를 준 채 MakeScene(-quit 꼭) → BuildWindows → Tunnel.exe -check -only monster. 그 뒤 순서: ② 목 늘일 때 속 근육 관 드러내기 ③ 갱목·못·끈·눈 발광 ④ GLB 120 MB 줄이기 ⑤ 전체 tools/build.sh + main 합치기.`
 
+## 0. 옆 가지 `intro-sign` (작업 폴더 `Tunnel/unity-intro`) — UI-2d 인트로 "안전제일 간판", 판정값 받음 (2026-09-29)
+
+- 사용자 09-29 "인트로가 너무 조잡하다, 인트로와 폰트를 게임 컨셉에 맞게" → 조사(공포 게임 제목 화면 13개 · 1980년대 한국 탄광 표지 15장 · 글꼴 후보, 전부 `build/refs/intro/` 로컬) → 시안 3장 → **사용자 2번 "안전제일 간판"** → 제안서 `docs/제안서_UI2d_인트로_간판.md` **승인(09-29)**: 귀령광업소 줄 넣음 · 먼 불빛은 조금만 떨림 · **메뉴에선 로고 숨김**.
+- **배경은 실제 게임 맵(부스 맵 케이지 광장, 동쪽 + 6°)** — 처음엔 검사용 42 m 복도로 만들어 사용자 지적("실제 우리 게임 화면이 아니다") → 부스 맵 8곳 중 사용자 "B 광장 동쪽". `BuildM1.PlaceBoothLook`(겉모습만, 게임 자산은 읽기만).
+- 만든 것: 인트로 씬이 부스 맵 광장의 실제 3D + 줄로 매단 흰 함석 간판(그림 `Assets/UI/intro_sign.png` ← `python tools/make_intro_sign.py`, 배민 을지로체 "귀령광업소" · 빨간 "막장" = 을지로10년후체 + 붓 자국·칠 벗겨짐 `ROUGH` 0.6 — 사용자 09-29 "더 거칠게" → 후보 E) + 앞 어두운 갱도 25 m 안 먼 램프 + 먼지. 한글 = 배민 을지로체(OFL, 공식 페이지 09-29 확인 — "게임 UI" 허용), 영문 부제 = Special Elite(Apache 2.0). 로고는 오른쪽 아래 흰 칸 안에 원본 비율. 간판 흔들림 ±1.2° · 5 s, 램프 끄덕임, 먼 램프 ±15 %, "아무 키나 누르세요" 숨쉬기. 흐름·시간(2 s 최소 · 5 s 자동 · 잡히면 인트로)은 UI-2 그대로.
+- 판정 키(인트로 화면에서): **F1** 값 한 줄 · **[ ]** 간판 밝기 · **; '** 흔들림. **사용자 판정(09-29): 간판 밝기 0.150 · 흔들림 10°** → `INTRO_SIGN_BRIGHT` · `INTRO_SIGN_SWAY_DEG` 에 넣음. 이 키들은 "아무 키"로 세지 않는다.
+- 검사: `intro_sign_lit`(간판 ÷ 나머지 밝기 4.60, 문턱 2.30) · `intro_logos_keep_aspect` 새로. 사보타주 `nosignlight` → FAIL(0.00) · `logostretch` → FAIL(8.29 vs 2.67) 확인. 인트로만 빨리: `bash tools/intro_shot.sh`(약 70 s).
+- 캡처(제출 후보): `build/intro_logo_ok.png` · `build/intro_menu_ok.png`. **로고 두 개는 아직 회색 자리표시** — 센터 원본이 오면 `Assets/UI/logo_university.png` · `logo_center.png` 를 바꾸고 `bash tools/intro_shot.sh` → `build/Tunnel/check/intro_logo.png` 를 10/2(금)까지 `changup@deu.ac.kr` 로(사용자가 보냄).
+- **main 이 합칠 때 볼 곳**(옆 가지가 고친 "되도록 안 고치는 파일"): `BuildM1.cs` — `MakeIntro` 전체 새로 + `PlaceBoothLook()` 새로(부스 맵 겉모습 — PlaceBoothMap · PlaceBoothLights · PlaceArt 와 값이 같아야 한다: 그쪽을 바꾸면 여기도), `Make()` 의 공기 설정 9줄을 `SetAir()` 로 뺌(인트로와 같이 씀), 안 쓰게 된 `Image()` 도우미 지움, 글꼴 경로 상수 `FontPath` → `IntroFontPath` · `IntroLatinFontPath` · `SignPath`. `Tuning.cs` — `INTRO_*` 20줄 추가(UI-2 값 밑). `Intro.cs` — 흔들림·판정 키·검사 2. 씬 `Assets/Scenes/Intro.unity` 는 `MakeIntro` 산출물이라 부딪히면 합친 뒤 `MakeIntro` 를 다시 돌리면 된다.
+- 이 작업 폴더에만 복사해 둔 것(커밋 안 됨, main 에서 가져옴): `Assets/Kevin Iglesias/`(애셋 스토어 동작) · `Assets/Resources/Generated/MineMotion.asset`(빌드 산출) · `Library/`(main 에서 복사 — 첫 불러오기 61 s).
+
 ## 0. 옆 가지 `pick-hands` (작업 트리 `Tunnel/unity-pick`) — PICK-1 곡괭이 통과 · MINE-1 캐기 연출 구현(실행 파일 판정 대기) · main 에 합칠 준비 끝 (2026-09-27)
 
 ### main 이 합치는 법 (준비 09-27 — 사용자 "검사 끝난 뒤 main 으로 합쳐도 문제 없이 준비해라")
