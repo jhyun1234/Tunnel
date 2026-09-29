@@ -11,7 +11,8 @@ public static class MineMotionBake
 {
     const string KI = "Assets/Kevin Iglesias/Human Animations/";
     const string MODEL = KI + "Models/HumanM_Model.fbx";
-    const string CLIP = KI + "Animations/Male/Work/Mining/HumanM@MiningOneHand01_R - Wall.fbx";
+    public const string CLIP = KI + "Animations/Male/Work/Mining/HumanM@MiningOneHand01_R - Wall.fbx";
+    public const string IDLE = KI + "Animations/Male/Idles/HumanM@Idle01.fbx";   // 3D-P 플레이어 몸 서 있기 (BuildM1.MakePlayerAnimator)
     public const string AssetPath = "Assets/Resources/Generated/MineMotion.asset";   // .gitignore — 에셋 스토어 약관(원본 재배포 금지), 저장소가 공개
     static readonly Vector3 GRIP = new Vector3(0f, -0.08f, 0f);   // 곡괭이 모델에서 손이 쥐는 점 (자루 끝 −0.15 에서 7 cm, 09-27 시험 값)
     const float RATE = 60f;

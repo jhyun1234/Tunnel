@@ -117,6 +117,97 @@ public static class PlayerRigTest
         return log;
     }
 
+    // 3D-P 차례 4 준비: 뼈 자리 · 팔 길이 · 쉬는 곡괭이 손잡이까지 거리 (머리 뼈 = 눈일 때)
+    public static void MeasureBatch()
+    {
+        var sb = new System.Text.StringBuilder();
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var man = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(PLAYER), scene);
+        var anim = man.GetComponent<Animator>();
+        var root = man.transform;
+        Transform B(HumanBodyBones b) => anim.GetBoneTransform(b);
+        void Dump(string tag)
+        {
+            var head = B(HumanBodyBones.Head);
+            sb.Append($"\n[{tag}] head {root.InverseTransformPoint(head.position):F3}");
+            foreach (var b in new[] { HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand, HumanBodyBones.RightIndexProximal, HumanBodyBones.RightThumbProximal, HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftHand, HumanBodyBones.LeftIndexProximal, HumanBodyBones.LeftThumbProximal, HumanBodyBones.LeftToes, HumanBodyBones.RightFoot })
+                sb.Append($"\n  {b} root {root.InverseTransformPoint(B(b).position):F3} fromHead {head.InverseTransformPoint(B(b).position):F3}");
+            float upper = Vector3.Distance(B(HumanBodyBones.RightUpperArm).position, B(HumanBodyBones.RightLowerArm).position);
+            float fore = Vector3.Distance(B(HumanBodyBones.RightLowerArm).position, B(HumanBodyBones.RightHand).position);
+            float palm = Vector3.Distance(B(HumanBodyBones.RightHand).position, B(HumanBodyBones.RightIndexProximal).position);
+            sb.Append($"\n  arm upper {upper:F3} fore {fore:F3} hand→index1 {palm:F3}");
+            var h = B(HumanBodyBones.RightHand);
+            sb.Append($"\n  R hand local: index1 {h.InverseTransformPoint(B(HumanBodyBones.RightIndexProximal).position):F3} thumb1 {h.InverseTransformPoint(B(HumanBodyBones.RightThumbProximal).position):F3}");
+            var l = B(HumanBodyBones.LeftHand);
+            sb.Append($"\n  L hand local: index1 {l.InverseTransformPoint(B(HumanBodyBones.LeftIndexProximal).position):F3} thumb1 {l.InverseTransformPoint(B(HumanBodyBones.LeftThumbProximal).position):F3}");
+            // 쉬는 곡괭이 뒤 손잡이 (카메라 기준) — Pickaxe.Awake 와 같은 계산
+            var node = Quaternion.Euler(Tuning.PICK_TILT_DEG, 0f, 0f);
+            var mesh = Quaternion.AngleAxis(Tuning.PICK_ROLL_DEG, Vector3.right) * Quaternion.AngleAxis(Tuning.PICK_YAW_DEG, Vector3.up);
+            Vector3 grip = Tuning.PICK_POS + node * (mesh * (Tuning.GRIP_REAR * Tuning.PICK_SCALE));
+            Vector3 sh = head.InverseTransformPoint(B(HumanBodyBones.RightUpperArm).position);   // 머리 뼈 틀 ≈ 몸 틀(쉬는 자세)
+            Vector3 shR = Quaternion.Inverse(root.rotation) * (B(HumanBodyBones.RightUpperArm).position - head.position);
+            sb.Append($"\n  rest grip cam-local {grip:F3} · shoulder from head (root axes) {shR:F3} · shoulder→grip {Vector3.Distance(shR, grip):F3} vs reach {upper + fore + palm * 0.6f:F3}");
+        }
+        Dump("bind");
+        AnimationMode.StartAnimationMode();
+        try
+        {
+            foreach (var (tag, path, t) in new[] { ("idle0", IDLE, 0f), ("mine_strike", MINE, AssetDatabase.LoadAssetAtPath<MineMotion>(MineMotionBake.AssetPath)?.strikeT ?? 0.3f) })
+            {
+                var c = LoadClip(path);
+                if (c == null) { sb.Append($"\n{tag}: no clip"); continue; }
+                AnimationMode.BeginSampling(); AnimationMode.SampleAnimationClip(man, c, t); AnimationMode.EndSampling();
+                Dump(tag);
+            }
+        }
+        finally { AnimationMode.StopAnimationMode(); }
+        Debug.Log("[PlayerRigTest] measure" + sb);
+        EditorApplication.Exit(0);
+    }
+
+    // 캐는 동안: 몸 뿌리를 동작 표 틀(내려친 순간 눈 = 원점)에 두면 손이 표의 손잡이에 닿는가 — 동작 전체에서 어깨 → 손잡이 거리
+    public static void MeasureMineBatch()
+    {
+        var sb = new System.Text.StringBuilder();
+        var mm = AssetDatabase.LoadAssetAtPath<MineMotion>(MineMotionBake.AssetPath);
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var man = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(PLAYER), scene);
+        var anim = man.GetComponent<Animator>();
+        Transform B(HumanBodyBones b) => anim.GetBoneTransform(b);
+        var head = B(HumanBodyBones.Head);
+        var headToBody = Quaternion.Inverse(head.rotation) * man.transform.rotation;
+        var clip = LoadClip(MINE);
+        var meshRot = Quaternion.AngleAxis(Tuning.PICK_ROLL_DEG, Vector3.right) * Quaternion.AngleAxis(Tuning.PICK_YAW_DEG, Vector3.up);
+        mm.Eval(mm.strikeT, out var ps, out var qs, out _, out _);
+        Vector3 tipK = ps + qs * Tuning.PICK_BLADE_TIP;
+        Vector3 tipM = Tuning.MINE_HIT_POS + Quaternion.Euler(Tuning.MINE_HIT_TILT, Tuning.MINE_SWING_YAW, 0f) * (meshRot * Tuning.PICK_BLADE_TIP);
+        var align = Quaternion.FromToRotation(tipK, tipM);
+        AnimationMode.StartAnimationMode();
+        try
+        {
+            void Pose(float t) { AnimationMode.BeginSampling(); AnimationMode.SampleAnimationClip(man, clip, t); AnimationMode.EndSampling(); }
+            Pose(mm.strikeT);
+            Vector3 eye0 = head.position + head.rotation * headToBody * (Vector3.up * 0.08f + Vector3.forward * 0.10f);
+            sb.Append($"\neye0 (root) {eye0:F3} · align {align.eulerAngles:F1}");
+            float reach = 0.25f + 0.275f + 0.04f, worstR = 0f, worstL = 0f; string wr = "", wl = "";
+            for (int i = 0; i < mm.Samples; i++)
+            {
+                float t = i / mm.rate; Pose(Mathf.Min(t, clip.length));
+                mm.Eval(t, out var p, out var q, out _, out _);
+                Vector3 gR = align * (p + q * Tuning.GRIP_REAR), gL = align * (p + q * Tuning.GRIP_FRONT);
+                Vector3 sR = align * (B(HumanBodyBones.RightUpperArm).position - eye0), sL = align * (B(HumanBodyBones.LeftUpperArm).position - eye0);
+                float dR = Vector3.Distance(gR, sR), dL = Vector3.Distance(gL, sL);
+                if (dR > worstR) { worstR = dR; wr = $"t {t:F2} grip {gR:F2} shoulder {sR:F2}"; }
+                if (dL > worstL) { worstL = dL; wl = $"t {t:F2} grip {gL:F2} shoulder {sL:F2}"; }
+                if (i % 6 == 0) sb.Append($"\n t {t:F2} R {dR:F2} L {dL:F2} gripR(cam) {gR:F2}");
+            }
+            sb.Append($"\nworst R {worstR:F3} ({wr}) · worst L {worstL:F3} ({wl}) · reach {reach:F3}");
+        }
+        finally { AnimationMode.StopAnimationMode(); }
+        Debug.Log("[PlayerRigTest] mine" + sb);
+        EditorApplication.Exit(0);
+    }
+
     public static void InspectBatch()
     {
         var sb = new System.Text.StringBuilder();

@@ -58,6 +58,10 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public float bobMul = Tuning.MINE_MOTION_BOB;
     public bool MotionOn => useMotion && motion != null && motion.Samples > 1;
     public bool Direct => direct;                        // 검사가 읽는다: 지금 표로 움직이는 중
+    // 3D-P: 동작 표 틀(원점 = 내려친 순간 눈, 표 좌표)을 카메라 기준으로 — 1인칭 팔 몸이 이 틀에 서면 Kevin 몸과 같은 자리에서 곡괭이를 쥔다 (ApplyPose 와 같은 계산)
+    public float ClipNow => clipNow;
+    public Quaternion MotionFrameRot => Quaternion.Inverse(cam.rotation) * mineCamRot * align;
+    public Vector3 MotionFramePoint(Vector3 x) => Quaternion.Inverse(cam.rotation) * mineCamRot * (align * x - dBob);
     // 검사가 읽는다
     [System.NonSerialized] public int bundles, slips, regrips;
     [System.NonSerialized] public string minePhase = "";   // lift top warn down stuck out slip pry fall scrape lower

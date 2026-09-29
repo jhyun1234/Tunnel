@@ -58,8 +58,9 @@ public class ArtLook : MonoBehaviour
         if (kb.endKey.wasPressedThisFrame) Wet += 0.25f;
         if (kb.pageDownKey.wasPressedThisFrame) Bounce = Mathf.Max(0f, Bounce - 0.05f);
         if (kb.pageUpKey.wasPressedThisFrame) Bounce += 0.05f;
-        if (kb.leftArrowKey.wasPressedThisFrame || kb.numpad4Key.wasPressedThisFrame) Bright /= 1.1f;    // ← → : 숫자패드 없는 키보드(사용자 09-27 텐키리스)
-        if (kb.rightArrowKey.wasPressedThisFrame || kb.numpad6Key.wasPressedThisFrame) Bright *= 1.1f;
+        bool shift = kb.shiftKey.isPressed;                                                                  // Shift+← → 는 1인칭 팔 어깨 자리 (3D-P)
+        if (kb.leftArrowKey.wasPressedThisFrame && !shift || kb.numpad4Key.wasPressedThisFrame) Bright /= 1.1f;    // ← → : 숫자패드 없는 키보드(사용자 09-27 텐키리스)
+        if (kb.rightArrowKey.wasPressedThisFrame && !shift || kb.numpad6Key.wasPressedThisFrame) Bright *= 1.1f;
     }
 
     void LateUpdate()                               // 전등이 켜지고 꺼지는 것(고치기 · 검사)을 따라간다

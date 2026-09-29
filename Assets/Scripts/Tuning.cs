@@ -228,6 +228,27 @@ public static class Tuning
     public static readonly Vector3 GRIP_REAR = new Vector3(0f, -0.10f, 0f);    // 자루 끝에서 5 cm (모든 영상: 뒷손은 늘 자루 끝)
     public static readonly Vector3 GRIP_FRONT = new Vector3(0f, 0.15f, 0f);    // 자루 끝에서 30 cm (파키스탄·인도 앞손 20~35 cm)
 
+    // 3D-P 플레이어 몸 (제안서 docs/제안서_3DP_플레이어_모델.md, 승인 09-29) — PlayerBody. 몸 = Assets/Tunnel/Player/player.fbx (키 1.73 m, 팔 25 + 27.5 cm)
+    public const string PLAYER_ANIM_RESOURCE = "Generated/PlayerAnim";   // 동작 묶음 — 빌드 때 BuildM1.MakePlayerAnimator 가 Kevin 서 있기 · 캐기로 (git 에서 뺌). Kevin 이 없으면 빈 상태
+    // 쉴 때 1인칭 몸의 머리 뼈 자리(카메라 기준). 0 이면 머리 뼈 = 눈인데 쉬는 곡괭이 손잡이가 어깨에서 69 cm — 팔(56 cm)이 못 닿는다(09-29 잼).
+    // 그래서 앞 15 · 아래 10 cm (어깨 → 손잡이 52 cm). 몸은 안 그린다 — 소매가 화면에 얼마나 보이나만 바뀐다. z = 판정 키 Shift+← →
+    public static readonly Vector3 PLAYER_FP_OFFSET = new Vector3(0f, -0.10f, 0.15f);
+    // 캐는 동안(동작 표) 몸 뿌리는 표 틀(원점 = 내려친 순간 눈)의 −이 자리에 — Kevin 캐기 동작을 이 몸에 입혀 잰 내려친 순간 눈(몸 뿌리 기준, PlayerRigTest.MeasureMineBatch).
+    // 그러면 몸이 Kevin 과 같은 자리에서 표의 곡괭이를 쥔다(오른손 어깨 → 손잡이 가장 멀 때 52.7 cm)
+    public static readonly Vector3 PLAYER_MINE_EYE = new Vector3(0.009f, 1.513f, 0.313f);
+    public const float PLAYER_ARM_REACH_M = 0.52f;       // 1인칭: 어깨 → 쥐는 점이 이보다 멀면 (안 그리는) 몸을 손잡이 쪽으로 민다. Kevin 캐기는 한 손이라 왼손 앞 손잡이가 어깨에서 64~82 cm
+    public const float PLAYER_HAND_BLEND_S = 0.15f;      // 한 손 ↔ 두 손 · 빈손으로 바뀌는 시간
+    public const float PLAYER_FP_ARM_TINT = 0.7f;        // 1인칭 팔만 색을 이만큼 — 흰 면장갑 등 · 소매 끝이 곡괭이 등(30 cm 앞)에 하얗게 탔다(5.2 %, 문턱 3 %, 09-29)
+    public static readonly Vector3 PLAYER_REST_R = new Vector3(0.28f, -0.75f, 0.15f);    // 곡괭이가 없을 때 오른손 (카메라 기준, 화면 밖)
+    public static readonly Vector3 PLAYER_REST_L = new Vector3(-0.28f, -0.75f, 0.15f);   // 걸을 때 · 빈손일 때 왼손 (화면 밖, 09-27 기본값)
+    public static readonly Vector3 PLAYER_ELBOW = new Vector3(0.25f, -0.35f, -0.10f);   // 팔꿈치가 향하는 쪽 (어깨 기준 · 오른팔, 왼팔은 x 반대) — 바깥 · 아래 · 조금 뒤
+    public const float PLAYER_PALM_ALONG_M = 0.04f;      // 쥐는 점 = 손목 뼈에서 손가락 쪽으로 · 손바닥 쪽으로 (자루 지름 3.5 cm 를 감아쥔 주먹 가운데)
+    public const float PLAYER_PALM_IN_M = 0.03f;
+    public const float PLAYER_FIST_DEG = 60f;            // 쥘 때 검지 세 마디 — 손가락 뼈가 엄지 · 검지뿐이라 네 손가락이 따라 굽는다(사용자 "가", P11 시험 값)
+    public const float PLAYER_THUMB_DEG = 30f;
+    public const float PLAYER_STAND_M = 2.5f;            // Shift+7: 내 앞에 세우는 거리
+    public const float PLAYER_TURN_S = 6f;               // Shift+8 세 번째 동작: 한 바퀴 도는 시간
+
     public const float HIT_RECOIL = 0.12f;         // m, 맞은 포켓이 밀리는 거리
     public const float HIT_RECOIL_TIME = 0.10f;
     public const float CHUNK_SPIN = 4.0f;          // rad/s

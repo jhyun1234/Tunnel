@@ -14,8 +14,9 @@ using UnityEngine.SceneManagement;
 // 배포물 검사. exe 를 -check 로 띄우면 돌고, 로그에 "CHECK PASS|FAIL 이름 값" 을 쓰고 종료 코드로 알린다.
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
-// -only m1|mining|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
 {
@@ -44,6 +45,7 @@ public class M1Check : MonoBehaviour
     public Transform pieces;
     public Pickaxe pickaxe;
     public Stalker stalker;
+    public PlayerBody body;                       // 3D-P 내 몸 (1인칭 팔)
 
     const float MinFps = 60f;
     // Godot 골든 캡처 play_09_lamp.png(직선 갱도, 램프 켬) 화면 평균 밝기. 같은 계산(sRGB 휘도 평균)으로 잰 참고값
@@ -137,6 +139,11 @@ public class M1Check : MonoBehaviour
             pickaxe.useMotion = false;
         if (sabotage == "rawtempo")             // 동작 표를 늘려 맞추지 않고 Kevin 원래 박자 (0.967 s)
             pickaxe.warpTempo = false;
+        PlayerBody.noIk = sabotage == "noik";               // 3D-P: 손을 손잡이에 안 붙임
+        PlayerBody.fpBody = sabotage == "fpbody";           // 1인칭에 몸 전체를 그림
+        PlayerBody.noSwitch = sabotage == "noswitch";       // 스위치를 바꿔도 내 몸 그대로
+        PlayerBody.standalone = sabotage == "standalone";   // 세운 몸을 스위치 없이 따로 만든 몸으로
+        PlayerBody.noKevin = sabotage == "nokevin";         // Kevin 동작 없이 (다른 컴퓨터) — 손은 그래도 곡괭이를 쥐어야 한다
         if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
             MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
@@ -300,6 +307,8 @@ public class M1Check : MonoBehaviour
             yield return Mining(cc);
         if (only == "" || only == "mine")
             yield return MineStage(cc);
+        if (only == "" || only == "player")
+            yield return PlayerStage(cc);
         if (only == "" || only == "map")
             yield return MapStage(cc);
         if (only == "props" || (only == "" && Tuning.PIECE_SUFFIX != ""))   // A1 소품이 켜져 있을 때만 (09-23 판정 불통과로 옛 조각으로 되돌림 — -only props 는 언제든 직접)
@@ -2576,6 +2585,245 @@ public class M1Check : MonoBehaviour
         pickaxe.durability = Tuning.PICK_DURABILITY_MAX;
         InputSystem.RemoveDevice(mouse);
         InputSystem.RemoveDevice(kb);
+    }
+
+    // ================= 3D-P 플레이어 몸 (제안서 docs/제안서_3DP_플레이어_모델.md, 승인 09-29). -only player
+    // ① 모델: 사람형 · 양손 손가락 뼈 · 물체마다 재질 하나 ② 1인칭: 팔만 그림 + 캐는 동안 장갑 · 소매가 화면에 (팔을 끈 화면과 픽셀로) ③ 1인칭 팔이 안 탐
+    // ④ 손이 손잡이에: 걷기 · 서서 캐기 · 쪼그려 캐기 동안 쥐는 점 ↔ GRIP_Rear · 캘 때 왼손 ↔ GRIP_Front, 프레임마다 잰 가장 먼 값 ≤ 3 cm (한 손 ↔ 두 손 바뀌는 0.15 s 는 뺌)
+    // ⑤ 스위치 Self → Other → Self (그리는 것 · 조명 층 · 붙는 곳 · 발바닥) + 세운 몸(Shift+7 과 같은 길)이 같은 모델 · 뼈대 · 동작 묶음의 Other
+    // ⑥ 세운 몸 소품이 뼈를 따라감(서 있기 → 서서 캐기 → 한 바퀴, ≤ 2 cm) ⑦ 세운 몸 머리등 그림자 얼룩 없음. 사람이 볼 캡처 50_player_fp_* · 51_player_body_* · 52_player_body_mine_*
+    // 사보타주: noik → ④ · fpbody → ② · noswitch · standalone → ⑤ · nokevin → ④ 는 통과해야 한다
+    IEnumerator PlayerStage(CharacterController cc)
+    {
+        var b = body;
+        var mouse = InputSystem.AddDevice<Mouse>("BodyMouse");
+        var kb = InputSystem.AddDevice<Keyboard>("BodyKeyboard");
+        stalker.enabled = false;
+        lamp.lampOn = true;
+        player.frozen = false;
+        if (!pickaxe.hasPick) pickaxe.Return();
+        pickaxe.durability = Tuning.PICK_DURABILITY_MAX;
+        pickaxe.slipChance = 0f;
+        b.SetMode(PlayerBody.Mode.Self);                          // 사보타주 값(fpbody)을 다시 적용
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var vm = mainCam.GetUniversalAdditionalCameraData().cameraStack[0];
+        var anim = b.Anim;
+        var rends = b.GetComponentsInChildren<Renderer>(true);
+        var arms = rends.First(r => r.name == "PlayerArms");
+        var bodyMesh = rends.OfType<SkinnedMeshRenderer>().First(r => r.name == "PlayerBody").sharedMesh;
+        yield return new WaitForSeconds(0.3f);
+
+        // ① 모델
+        var fingers = new[] { HumanBodyBones.LeftThumbProximal, HumanBodyBones.LeftIndexProximal, HumanBodyBones.LeftIndexDistal, HumanBodyBones.RightThumbProximal, HumanBodyBones.RightIndexProximal, HumanBodyBones.RightIndexDistal };
+        int fingerN = fingers.Count(x => anim.GetBoneTransform(x) != null), multi = rends.Count(r => r.sharedMaterials.Length != 1);
+        var ctrl = anim.runtimeAnimatorController;
+        Check("player_model_humanoid", anim.avatar != null && anim.avatar.isHuman && fingerN == fingers.Length && multi == 0 && rends.Length >= 20 && ctrl != null,
+            $"avatar {(anim.avatar != null ? anim.avatar.name : "none")} human {anim.avatar != null && anim.avatar.isHuman} · finger bones {fingerN}/{fingers.Length} · renderers {rends.Length} (more than one material {multi}) · " +
+            $"controller {(ctrl != null ? $"{ctrl.name} clips {string.Join(" ", ctrl.animationClips.Select(c => c.name))}" : "none")}");
+
+        // ④ 손이 손잡이에 — 0 걷기 · 1 서서 캐기 · 2 쪼그려 캐기
+        var maxR = new float[3]; var maxL = new float[3]; var nR = new int[3]; var nL = new int[3];
+        void Sample(int k)
+        {
+            if (b.RightOn) { maxR[k] = Mathf.Max(maxR[k], Vector3.Distance(b.RightGripPoint, pickaxe.gripRear.position)); nR[k]++; }
+            if (b.LeftOn) { maxL[k] = Mathf.Max(maxL[k], Vector3.Distance(b.LeftGripPoint, pickaxe.gripFront.position)); nL[k]++; }
+        }
+        Teleport(cc, new Vector3(0f, 0.1f, 4f), 0f);
+        player.Look(new Vector2(0f, player.Pitch / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg)));
+        yield return new WaitForSeconds(0.5f);
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.W));
+        bool shot = false;
+        for (float s = 0f; s < 2.5f; s += Time.deltaTime)
+        {
+            yield return new WaitForEndOfFrame();
+            Sample(0);
+            if (!shot && s > 1.2f) { shot = true; ScreenCapture.CaptureScreenshot(Path.Combine(outDir, "50_player_fp_walk.png")); }
+        }
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return new WaitForSeconds(0.3f);
+
+        var pockets = FindObjectsByType<OrePocket>(FindObjectsSortMode.None).Where(x => !x.Breaking && Mathf.Approximately(x.health, Tuning.POCKET_HEALTH))
+            .OrderBy(x => (x.transform.position - MidTunnel).sqrMagnitude).ToList();
+        OrePocket pk = pockets[0], hard = pockets[1];
+        hard.health = 1e6f;                                       // 쪼그려 — 안 빠지는 포켓
+        StandAt(cc, pk);
+        yield return null;
+        AimAt(pk.transform.position);
+        yield return null;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        bool shotTop = false;
+        Rect armRect = default;
+        float armFrac = 0f, armBurnt = 1f;
+        Vector3 vpR = default, vpL = default;                     // 찍은 순간 두 손 쥐는 점의 화면 자리 (0~1 = 화면 안)
+        for (float s = 0f; s < 9f && pk != null; s += Time.deltaTime)
+        {
+            yield return new WaitForEndOfFrame();
+            Sample(1);
+            if (!shotTop && pickaxe.minePhase == "top") { shotTop = true; ScreenCapture.CaptureScreenshot(Path.Combine(outDir, "50_player_fp_top.png")); }
+            if (armRect.width == 0f && pickaxe.minePhase == "stuck" && pickaxe.strikeTimes.Count >= 2 && b.LeftOn)
+            {
+                vpR = vm.WorldToViewportPoint(b.RightGripPoint);
+                vpL = vm.WorldToViewportPoint(b.LeftGripPoint);
+                yield return ArmsShot("50_player_fp_strike", arms, vm, (r, f, bu) => { armRect = r; armFrac = f; armBurnt = bu; });
+            }
+        }
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        for (float w = 0f; pickaxe.Mining && w < 3f; w += Time.deltaTime) yield return null;
+
+        StandAt(cc, hard);
+        yield return null;
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftCtrl));
+        yield return new WaitForSeconds(0.35f);
+        AimAt(hard.transform.position);
+        yield return null;
+        InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+        shot = false;
+        for (float s = 0f; s < 3.5f; s += Time.deltaTime)
+        {
+            yield return new WaitForEndOfFrame();
+            Sample(2);
+            if (!shot && pickaxe.minePhase == "stuck" && pickaxe.strikeTimes.Count >= 2) { shot = true; ScreenCapture.CaptureScreenshot(Path.Combine(outDir, "50_player_fp_crouch.png")); }
+        }
+        InputSystem.QueueStateEvent(mouse, new MouseState());
+        for (float w = 0f; pickaxe.Mining && w < 3f; w += Time.deltaTime) yield return null;
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return new WaitForSeconds(0.3f);
+        const float GripMax = 0.03f;
+        bool gripOk = nR.All(n => n >= 30) && nL[1] >= 30 && nL[2] >= 30 && maxR.All(d => d <= GripMax) && maxL.All(d => d <= GripMax);
+        Check("player_hands_on_grip", gripOk,
+            $"right ↔ GRIP_Rear max walk {maxR[0] * 100f:F1} · stand mine {maxR[1] * 100f:F1} · crouch mine {maxR[2] * 100f:F1} cm (frames {nR[0]} {nR[1]} {nR[2]}) · " +
+            $"left ↔ GRIP_Front max stand {maxL[1] * 100f:F1} · crouch {maxL[2] * 100f:F1} cm (frames {nL[1]} {nL[2]}) — want ≤ {GripMax * 100f:0} cm, ≥ 30 frames each · Kevin motion {(PlayerBody.noKevin || ctrl == null ? "off" : "on")}");
+
+        // ② ③ 1인칭 팔만 · 캐는 동안 화면에 · 안 탐 (서서 캐기 두 번째 콱, 두 손)
+        var onNames = rends.Where(r => r.enabled).Select(r => r.name).ToArray();
+        Check("player_fp_arms_only", onNames.Length == 1 && onNames[0] == "PlayerArms" && armRect.width > 0f && armFrac >= 0.05f,
+            $"drawn in first person: {string.Join(" ", onNames.Take(6))}{(onNames.Length > 6 ? $" …({onNames.Length})" : "")} (want PlayerArms only) · while mining the arms change {armFrac * 100f:F1} % of their {armRect.width:F0}x{armRect.height:F0} px box (want ≥ 5 %) · hands on screen at that strike: right ({vpR.x:F2},{vpR.y:F2}) left ({vpL.x:F2},{vpL.y:F2}) (0~1 = on screen)");
+        Check("player_fp_not_burnt", armRect.width > 0f && armBurnt <= Tuning.STALKER_BURN_MAX,
+            $"burnt arm pixels {armBurnt * 100f:F2} % (max {Tuning.STALKER_BURN_MAX * 100f:0} %) · capture 50_player_fp_strike");
+
+        // ⑤ 스위치: 같은 PlayerBody 를 Self → Other → Self
+        Vector3 P = new Vector3(0f, 0.1f, 8f);
+        Teleport(cc, P, 0f);
+        player.Look(new Vector2(0f, player.Pitch / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg)));
+        yield return null;
+        b.SetMode(PlayerBody.Mode.Other);
+        b.PlaceOn(P + Vector3.right * 1.2f, 0f);
+        yield return new WaitForSeconds(0.5f);
+        uint lampLayers = lamp.GetComponent<Light>().GetUniversalAdditionalLightData().renderingLayers;
+        bool oOn = rends.All(r => r.enabled), oLayer = rends.All(r => r.gameObject.layer == 0), oLit = rends.All(r => (r.renderingLayerMask & lampLayers) != 0), oFree = b.transform.parent == null;
+        float soleGap = b.SoleY() - PlayerBody.Ground(b.transform.position).y;
+        b.SetMode(PlayerBody.Mode.Self);
+        yield return new WaitForSeconds(0.3f);
+        var sOn = rends.Where(r => r.enabled).Select(r => r.name).ToArray();
+        bool sArms = sOn.Length == 1 && sOn[0] == "PlayerArms", sLayer = rends.All(r => r.gameObject.layer == Pickaxe.ViewModelLayer && r.renderingLayerMask == Pickaxe.ViewModelRenderingLayer), sCam = b.transform.parent == pickaxe.cam;
+        var stoodGo = PlayerBody.Stand(b, P + Vector3.forward * Tuning.PLAYER_STAND_M, 180f);
+        yield return new WaitForSeconds(0.5f);
+        var sb = stoodGo.GetComponent<PlayerBody>();
+        var sRends = stoodGo.GetComponentsInChildren<Renderer>(true);
+        var sSkin = sRends.OfType<SkinnedMeshRenderer>().FirstOrDefault(r => r.name == "PlayerBody");
+        bool same = sb != null && sb.mode == PlayerBody.Mode.Other && sb.transform.parent == null && sb.Anim.avatar == anim.avatar && sb.Anim.runtimeAnimatorController == ctrl && sSkin != null && sSkin.sharedMesh == bodyMesh;
+        Check("player_body_switch", oOn && oLayer && oLit && oFree && Mathf.Abs(soleGap) <= 0.03f && sArms && sLayer && sCam && same,
+            $"other: all drawn {oOn} · default layer {oLayer} · headlamp layer {oLit} · on its own {oFree} · sole {soleGap * 100f:F1} cm above ground (±3) | " +
+            $"self again: arms only {sArms} ({string.Join(" ", sOn.Take(4))}) · view-model layer {sLayer} · on camera {sCam} | stood body (Shift+7): PlayerBody {(sb != null ? sb.mode.ToString() : "none")} · same avatar · controller · mesh {same}");
+
+        // ⑥ 세운 몸: 앞 · 옆 · 뒤 캡처 → 서 있기 2 s → 서서 캐기 3.5 s → 한 바퀴 — 소품이 뼈를 따라가나
+        var sAnim = stoodGo.GetComponent<Animator>();
+        Transform Find(string n) => stoodGo.GetComponentsInChildren<Transform>(true).First(x => x.name == n);
+        Transform head = sAnim.GetBoneTransform(HumanBodyBones.Head), hips = sAnim.GetBoneTransform(HumanBodyBones.Hips);
+        Transform helmet = Find("Helmet_Shell"), battery = Find("Battery_Body"), clip = Find("Helmet_CordClip");
+        var cord = sRends.OfType<SkinnedMeshRenderer>().First(r => r.name == "Lamp_Cord");
+        var cm = new Mesh();
+        Vector3[] CordWorld() { cord.BakeMesh(cm, true); return cm.vertices.Select(v => cord.transform.position + cord.transform.rotation * v).ToArray(); }
+        foreach (var (name, yaw) in new[] { ("front", 180f), ("side", 90f), ("back", 0f) })
+        {
+            stoodGo.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            yield return Capture($"51_player_body_{name}", x => { });
+        }
+        stoodGo.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        yield return new WaitForSeconds(0.2f);
+        var cw = CordWorld();
+        // 소품 물체의 원점은 발밑(Blender 에서 점을 세계 자리로 옮겼다) — 끝 점은 물체 상자 가운데에서 가장 가까운 점
+        Vector3 clipAt = clip.GetComponent<Renderer>().bounds.center, batAt = battery.GetComponent<Renderer>().bounds.center;
+        int iTop = Enumerable.Range(0, cw.Length).OrderBy(i => (cw[i] - clipAt).sqrMagnitude).First(), iBot = Enumerable.Range(0, cw.Length).OrderBy(i => (cw[i] - batAt).sqrMagnitude).First();
+        Vector3 h0 = head.InverseTransformPoint(helmet.position), b0 = hips.InverseTransformPoint(battery.position), c0 = clip.InverseTransformPoint(cw[iTop]), c1 = battery.InverseTransformPoint(cw[iBot]);
+        Debug.Log($"CORD ends: top vertex {iTop} {(cw[iTop] - clipAt).magnitude * 100f:F1} cm from Helmet_CordClip · bottom vertex {iBot} {(cw[iBot] - batAt).magnitude * 100f:F1} cm from Battery_Body · {cw.Length} vertices");
+        float devH = 0f, devB = 0f, devC = 0f, leftMin = 9f;
+        int leftOn = 0, mineFrames = 0, shots = 0;
+        float mineAt = 2f, turnAt = 5.5f;
+        for (float s = 0f; s < turnAt + Tuning.PLAYER_TURN_S; s += Time.deltaTime)
+        {
+            if (sb != null && s >= mineAt && sb.action == "idle") sb.NextAction();
+            if (sb != null && s >= turnAt && sb.action == "mine") sb.NextAction();
+            yield return new WaitForEndOfFrame();
+            cw = CordWorld();
+            devH = Mathf.Max(devH, (head.InverseTransformPoint(helmet.position) - h0).magnitude);
+            devB = Mathf.Max(devB, (hips.InverseTransformPoint(battery.position) - b0).magnitude);
+            devC = Mathf.Max(devC, (clip.InverseTransformPoint(cw[iTop]) - c0).magnitude, (battery.InverseTransformPoint(cw[iBot]) - c1).magnitude);
+            if (sb != null && sb.action == "mine")
+            {
+                mineFrames++;
+                if (sb.LeftOn) leftOn++;
+                leftMin = Mathf.Min(leftMin, Vector3.Distance(sb.LeftGripPoint, sb.LeftGripTarget.position));
+                if (s > mineAt + 0.5f + shots * 0.25f && shots < 8) ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"52_player_body_mine_{shots++}.png"));
+            }
+        }
+        Check("player_body_props_attached", devH <= 0.02f && devB <= 0.02f && devC <= 0.02f && cw.Length > 0,
+            $"helmet on head bone moved {devH * 100f:F2} cm · battery on hips {devB * 100f:F2} cm · lamp cord ends (helmet back · battery) {devC * 100f:F2} cm (max 2) over idle · mine · turn | " +
+            $"stood body mining: left hand on the front grip {leftOn}/{mineFrames} frames, closest {leftMin * 100f:F1} cm (Kevin mining is one-handed)");
+
+        // ⑦ 세운 몸 그림자 얼룩: 2 m 정면, 머리등 그림자 켬 ÷ 끔 (괴물 monster_skin_no_acne 와 같은 방법)
+        if (sb != null) sb.PlaceOn(P + Vector3.forward * 2f, 180f); else stoodGo.transform.position = P + Vector3.forward * 2f;
+        yield return new WaitForSeconds(0.3f);
+        float acne = 0f;
+        yield return ShadowRatio("53_player_body_acne", sRends.Where(r => r.enabled && r.gameObject.activeInHierarchy).ToArray(), mainCam, x => acne = x);
+        Check("player_skin_no_acne", acne >= Tuning.STALKER_ACNE_MIN_RATIO, $"lum ratio shadows on/off {acne:F3} (min {Tuning.STALKER_ACNE_MIN_RATIO}) with bias depth {lamp.shadowDepthBias} normal {lamp.shadowNormalBias}");
+
+        Destroy(cm);
+        Destroy(stoodGo);
+        b.SetMode(PlayerBody.Mode.Self);
+        InputSystem.RemoveDevice(mouse);
+        InputSystem.RemoveDevice(kb);
+    }
+
+    // 1인칭 팔을 켠 화면 · 끈 화면을 멈춘 채 찍어 팔이 바꾼 픽셀 몫과 그중 하얗게 탄 몫 (팔 화면 사각형 안). 켠 화면은 name.png 로 남긴다
+    IEnumerator ArmsShot(string name, Renderer arms, Camera vm, Action<Rect, float, float> result)
+    {
+        float ts = Time.timeScale;
+        Time.timeScale = 0f;                                      // 곡괭이 · 동작이 멈춘다 — 두 장의 차이는 팔뿐
+        yield return null;
+        yield return new WaitForEndOfFrame();
+        var a = ScreenCapture.CaptureScreenshotAsTexture();
+        File.WriteAllBytes(Path.Combine(outDir, name + ".png"), a.EncodeToPNG());
+        bool was = arms.enabled;
+        arms.enabled = false;
+        yield return null;
+        yield return new WaitForEndOfFrame();
+        var bt = ScreenCapture.CaptureScreenshotAsTexture();
+        arms.enabled = was;
+        Time.timeScale = ts;
+        Rect r = ScreenRect(vm, new[] { arms });
+        Color32[] pa = a.GetPixels32(), pb = bt.GetPixels32();
+        int w = a.width, n = 0, changed = 0, burnt = 0;
+        for (int y = (int)r.yMin; y < (int)r.yMax && y < a.height; y += 2)
+            for (int x = (int)r.xMin; x < (int)r.xMax && x < w; x += 2)
+            {
+                n++;
+                float la = Lum(pa[y * w + x]);
+                if (Mathf.Abs(la - Lum(pb[y * w + x])) <= 0.03f) continue;
+                changed++;
+                if (la > BurntLum) burnt++;
+            }
+        Destroy(a);
+        Destroy(bt);
+        Debug.Log($"ARMS_SHOT {name} rect {r} changed {changed}/{n} burnt {burnt}");
+        result(r, (float)changed / Mathf.Max(n, 1), changed > 0 ? (float)burnt / changed : 1f);
+    }
+
+    void AimAt(Vector3 p)                                         // p 를 보게 위아래만 돌린다 (마우스와 같은 길 Player.Look)
+    {
+        Vector3 d = p - pickaxe.cam.position;
+        float want = -Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
+        player.Look(new Vector2(0f, (player.Pitch - want) / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg)));
     }
 
     // M5: 체력·스턴·철수. 플레이어를 괴물 앞 2.2 m(사거리 3 m 안)에 세우고 한 번 클릭 = 한 대. 괴물은 매번 z 20 에 북쪽을 보고 선다

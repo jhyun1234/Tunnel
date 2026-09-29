@@ -127,9 +127,20 @@ for o in props:
     D = np.stack([seg_dist(co, np.array((arm.matrix_world @ arm.data.bones[n].head_local)[:]), np.array((arm.matrix_world @ arm.data.bones[n].tail_local)[:])) for n in names], axis=1)
     order = np.argsort(D, axis=1)[:, :2]
     for n in names: o.vertex_groups.new(name=n)
+    # 줄 양 끝은 붙은 소품의 뼈에 못 박는다(5 cm 안 = 그 뼈 100 %, 15 cm 까지 섞음) — 가까운 뼈 둘로만 나누면 끝이 목 · 가슴 뼈를 따라가
+    # 머리를 숙이면 안전모 뒤 고리에서 6.7 cm 떨어졌다(Unity 검사 player_body_props_attached, 09-29)
+    pins = []
+    if o.name == "Lamp_Cord" and SAB != "nopin":
+        for anchor, bname in (("Helmet_CordClip", "Head"), ("Battery_", "Hips")):
+            pts = np.concatenate([np.array([(p.matrix_world @ v.co)[:] for v in p.data.vertices]) for p in props if p.name.startswith(anchor)])
+            d = np.array([np.min(np.linalg.norm(pts - c, axis=1)) for c in co])
+            pins.append((names.index(MX + bname), np.clip((0.15 - d) / 0.10, 0, 1)))
     for vi in range(len(co)):
         i0, i1 = order[vi]; w0, w1 = 1 / max(D[vi, i0], 1e-4), 1 / max(D[vi, i1], 1e-4); s = w0 + w1
-        o.vertex_groups[names[i0]].add([vi], w0 / s, "REPLACE"); o.vertex_groups[names[i1]].add([vi], w1 / s, "REPLACE")
+        w = np.zeros(len(names)); w[i0] += w0 / s; w[i1] += w1 / s
+        for bi, pin in pins: w = w * (1 - pin[vi]); w[bi] += pin[vi]
+        for bi in np.nonzero(w)[0]: o.vertex_groups[names[bi]].add([vi], float(w[bi]), "REPLACE")
+    if pins: print(f"INFO 램프 줄 끝 못 박음: 머리 100 % 점 {int((pins[0][1] >= 1).sum())} · 엉덩이 100 % 점 {int((pins[1][1] >= 1).sum())}")
     o.parent = arm; o.matrix_parent_inverse = arm.matrix_world.inverted()
     o.modifiers.new("Armature", "ARMATURE").object = arm
 bpy.context.view_layer.update()

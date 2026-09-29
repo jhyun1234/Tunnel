@@ -43,6 +43,8 @@ public static class BuildM1
     // 기본 = 새 몸 m3(Meshy 부위 조립, tools/bake_m3.sh — 사용자 판정 통과 09-22). 옛 TRELLIS 몸은 TUNNEL_MONSTER=Assets/Tunnel/Monster/miner_rigged.glb 로 (검사 문턱은 m3 값)
     static readonly string MonsterPath = Environment.GetEnvironmentVariable("TUNNEL_MONSTER") ?? "Assets/Tunnel/Monster/miner_m3.glb";   // 3D-①: stage12_unity_glb.py 산출 (Documents/MineTunnel)
     const string StalkerAnimPath = "Assets/Settings/M8_StalkerAnim.controller";
+    const string PlayerModelPath = "Assets/Tunnel/Player/player.fbx";                 // 3D-P: blender/rig/player_rig.py (사람형 · Mixamo 뼈대 · 소품은 뼈 자식)
+    const string PlayerAnimPath = "Assets/Resources/" + Tuning.PLAYER_ANIM_RESOURCE + ".controller";   // .gitignore — Kevin 동작 (에셋 스토어 약관, 저장소가 공개)
     const string CrackMatPath = "Assets/Settings/M5_Crack.mat";
     const string PickGlowMatPath = "Assets/Settings/M7_PickGlow.mat";
     const string HitSoundDir = "Assets/Audio/PickHit";   // 평소 콱 · 덩이 빠짐: 섞기 B pick_hit_* (SND-P, tools/snd_mix.py --game)
@@ -271,6 +273,15 @@ public static class BuildM1
         check.volume = volume;
         check.pieces = pieces;
         check.pickaxe = pickaxe;
+
+        // 3D-P 내 몸 (1인칭 — 팔만). 스위치 Self 로 카메라 밑에. 세운 몸(Shift+7)은 이것을 복사해 Other 로 (PlayerBody.Stand)
+        var bodyGo = Instance(AssetDatabase.LoadAssetAtPath<GameObject>(PlayerModelPath), camGo.transform);
+        bodyGo.name = "PlayerBody";
+        var playerBody = bodyGo.AddComponent<PlayerBody>();
+        playerBody.cam = camGo.transform;
+        playerBody.pickaxe = pickaxe;
+        hud.body = playerBody;
+        check.body = playerBody;
 
         // M3 괴물. 북쪽 끝에서 시작. 충돌은 캡슐(R 0.6 · H 2.8) 그대로, 겉모습은 3D-① 모델
         var stalkerGo = new GameObject("Stalker");
@@ -763,6 +774,7 @@ public static class BuildM1
     public static void BuildWindows()
     {
         if (MineMotionBake.Bake() == null) { Debug.LogError("BUILD MineMotionBake 실패"); EditorApplication.Exit(1); return; }   // MINE-2: 캐기 동작 표 (Kevin 묶음이 없으면 건너뜀)
+        MakePlayerAnimator();                                                                                                   // 3D-P: 플레이어 몸 동작 묶음 (Kevin 이 없으면 빈 상태)
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
             scenes = new[] { IntroScenePath, ScenePath, BoothScenePath },   // 0 = 인트로(UI-2), 1 = 42 m 복도(검사용), 2 = 부스 맵(MAP1, 인트로 "시작")
@@ -919,6 +931,35 @@ public static class BuildM1
         }
         Debug.Log($"STALKER_ANIM clips {clips.Length}: {string.Join(", ", clips.Select(c => $"{c.name} {c.length:F2}s"))}");
         return ctrl;
+    }
+
+    // 3D-P 플레이어 몸 동작 묶음 → Resources/Generated (git 에서 뺌, 빌드마다 다시). 상태 Idle · Mine 은 시각을 매개변수(IdleT · MineT, 0~1)로 받는다 —
+    // 1인칭은 곡괭이 동작 표와 같은 박자, 세운 몸은 제 시계로. Bare = 동작 없음(사보타주 nokevin). 첫 층에 IK 를 켠다(손을 손잡이에 — PlayerBody.OnAnimatorIK).
+    // Kevin 묶음이 없는 컴퓨터: 상태는 있고 동작이 비어 있다 — 손은 그래도 IK 로 곡괭이를 쥔다
+    static void MakePlayerAnimator()
+    {
+        AssetDatabase.DeleteAsset(PlayerAnimPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(PlayerAnimPath));
+        var ctrl = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(PlayerAnimPath);
+        ctrl.AddParameter("IdleT", AnimatorControllerParameterType.Float);
+        ctrl.AddParameter("MineT", AnimatorControllerParameterType.Float);
+        var layers = ctrl.layers;
+        layers[0].iKPass = true;
+        ctrl.layers = layers;
+        var sm = ctrl.layers[0].stateMachine;
+        string log = "";
+        foreach (var (name, path, param) in new[] { ("Idle", MineMotionBake.IDLE, "IdleT"), ("Mine", MineMotionBake.CLIP, "MineT") })
+        {
+            var st = sm.AddState(name);
+            st.motion = AssetDatabase.LoadAllAssetsAtPath(path).OfType<AnimationClip>().FirstOrDefault(c => !c.name.StartsWith("__preview"));
+            st.timeParameterActive = true;
+            st.timeParameter = param;
+            if (name == "Idle") sm.defaultState = st;
+            log += $" {name}={(st.motion != null ? st.motion.name : "none")}";
+        }
+        sm.AddState("Bare");
+        AssetDatabase.SaveAssets();
+        Debug.Log("PLAYER_ANIM" + log);
     }
 
     // 먼지 재질: URP 기본 파티클 재질(반투명)을 복사해 조명을 받는 Simple Lit 으로 — 램프 밖 먼지가 어둠에서 빛나지 않게

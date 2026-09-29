@@ -8,7 +8,8 @@ using UnityEngine.Rendering;
 // V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · 9 괴물을 내 앞에 세움 · N 선 괴물의 동작 차례로 · U 배회 걸음 A/B/C (3D-③) · I M 목 붉기 −/+ · Q R 목 밝기 ÷× 1.15 · Z X 세운 괴물 목 길이 −/+ · C B 목 빼는 시간 −/+ (3D-③b M1e) · F1 표시 끄기
 // 부스 맵: 숫자패드 − + 켜진 전등 밝기 ÷×1.25 · F5 F6 막힘 묶음 서쪽·동쪽 켜기/끄기 · F7 F8 바위 틈 비집는 시간 −/+ 0.25 s · F9 F10 틈 속 몸 돌리는 각 −/+ 10° (누르면 표시가 켜진다)
 // REP-1 고칠 곳: F2 가장 가까운 멀쩡한 고칠 곳을 망가뜨림 · F3 F4 고치는 시간 ÷×1.25 (모든 종류) · F11 F12 판 중 망가지는 간격 −/+ 30 s
-// ART-1 현실감: Insert 옛/새 · Home/End 젖음 · PageDown/PageUp 튀는 빛 · 숫자패드 4/6 바위 밝기 — 키는 ArtLook 이 받는다 (여기는 줄만)
+// ART-1 현실감: Insert 옛/새 · Home/End 젖음 · PageDown/PageUp 튀는 빛 · ← → 바위 밝기 — 키는 ArtLook 이 받는다 (여기는 줄만)
+// 3D-P 플레이어 몸: Shift+7 내 앞에 남의 몸 세우기/치우기 · Shift+8 세운 몸 동작 (서 있기 → 서서 캐기 → 한 바퀴) · Shift+← → 1인칭 팔 어깨 자리 뒤로/앞으로 2 cm
 public class DevHud : MonoBehaviour
 {
     public Headlamp lamp;
@@ -21,6 +22,8 @@ public class DevHud : MonoBehaviour
     public Stalker stalker;
     public Pickaxe pickaxe;
     public RepairDirector repairs;                         // REP-1 (부스 맵만)
+    public PlayerBody body;                                // 3D-P 내 몸 (1인칭 팔)
+    GameObject stood;                                      // Shift+7 로 세운 남의 몸
 
     VolumetricFogVolumeComponent fog;
     float fps, acc;
@@ -67,6 +70,7 @@ public class DevHud : MonoBehaviour
             PlaceAhead(2.5f);
         }
         MineKeys(kb);
+        BodyKeys(kb);
         OreKeys(kb);
         HitKeys(kb);
         if (kb.digit1Key.wasPressedThisFrame) lamp.darkAdaptAmbient /= 1.25f;   // 어둠 적응 환경광 — 사용자가 직접 값을 찾는다 (09-15)
@@ -113,8 +117,8 @@ public class DevHud : MonoBehaviour
         if (look != null)
         {
             bool changed = true;
-            if (kb.digit7Key.wasPressedThisFrame) look.normalScale /= 1.25f;
-            else if (kb.digit8Key.wasPressedThisFrame) look.normalScale *= 1.25f;
+            if (kb.digit7Key.wasPressedThisFrame && !kb.shiftKey.isPressed) look.normalScale /= 1.25f;      // Shift+7 8 은 플레이어 몸 (3D-P)
+            else if (kb.digit8Key.wasPressedThisFrame && !kb.shiftKey.isPressed) look.normalScale *= 1.25f;
             else if (kb.commaKey.wasPressedThisFrame && !kb.shiftKey.isPressed) look.roughMul *= 0.9f;      // Shift+, . 는 광석 반짝임 (ORE-1)
             else if (kb.periodKey.wasPressedThisFrame && !kb.shiftKey.isPressed) look.roughMul /= 0.9f;
             else if (kb.iKey.wasPressedThisFrame) look.neckRed = Mathf.Max(0f, look.neckRed - 0.1f);   // 3D-③b M1e: 목 붉기 (0 = 몸 살 색)
@@ -191,6 +195,29 @@ public class DevHud : MonoBehaviour
         if (kb.backquoteKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Max(0f, pickaxe.lookYaw - 10f); show = true; }
         if (kb.tabKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Min(180f, pickaxe.lookYaw + 10f); show = true; }
     }
+
+    // 3D-P 판정 손잡이: 받은 어깨 자리를 Tuning.PLAYER_FP_OFFSET.z 에. 세운 몸을 보는 동안 괴물은 0 키로 끈다
+    void BodyKeys(Keyboard kb)
+    {
+        if (body == null || !kb.shiftKey.isPressed) return;
+        if (kb.digit7Key.wasPressedThisFrame)
+        {
+            if (stood != null) Destroy(stood);
+            else
+            {
+                Vector3 f = player.transform.forward; f.y = 0f; f.Normalize();
+                stood = PlayerBody.Stand(body, player.transform.position + f * Tuning.PLAYER_STAND_M, player.transform.eulerAngles.y + 180f);
+            }
+            show = true;
+        }
+        if (kb.digit8Key.wasPressedThisFrame && stood != null && stood.GetComponent<PlayerBody>() is PlayerBody sb) { sb.NextAction(); show = true; }
+        if (kb.leftArrowKey.wasPressedThisFrame) { body.fpForward = Mathf.Round(body.fpForward * 100f - 2f) / 100f; show = true; }
+        if (kb.rightArrowKey.wasPressedThisFrame) { body.fpForward = Mathf.Round(body.fpForward * 100f + 2f) / 100f; show = true; }
+    }
+
+    string BodyLine() => body == null ? "" :
+        $"\nplayer arms: shoulder fwd {body.fpForward * 100f:0} cm (PLAYER_FP_OFFSET.z {Tuning.PLAYER_FP_OFFSET.z * 100f:0}) [Shift+← Shift+→]  grip R {(body.RightOn ? $"{Vector3.Distance(body.RightGripPoint, pickaxe.gripRear.position) * 100f:0.0} cm" : "-")} L {(body.LeftOn ? $"{Vector3.Distance(body.LeftGripPoint, pickaxe.gripFront.position) * 100f:0.0} cm" : "-")}" +
+        $"   stood body {(stood == null ? "off" : stood.GetComponent<PlayerBody>() is PlayerBody sb ? sb.action.ToUpper() : "?")} [Shift+7] next action [Shift+8]{(PlayerBody.noKevin || body.Anim.runtimeAnimatorController == null ? "  (no Kevin motion)" : "")}";
 
     // ORE-1 판정 손잡이: 광석(결 덩이 coal_lump · 캘 덩이 coal_fresh) 반짝임 = 거칠기 ÷ oreShine. 받은 숫자를 Tuning.ORE_SHINE 에
     [System.NonSerialized] public float oreShine = Tuning.ORE_SHINE;
@@ -284,7 +311,7 @@ public class DevHud : MonoBehaviour
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
             (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J])\nhead test {StalkerAnim.HeadTestName(an.headTest)} [G]  face {an.HeadYaw:0}° (max {an.headYawMax:0}° [T Y])  tilt {an.HeadTiltNow:0}° (listen {an.headTilt:0}° [O P])\nneck out {an.NeckOutNow * 100f * Tuning.STALKER_MODEL_SCALE:0} cm in game (model {an.NeckOutNow * 100f:0} of {an.neckWant * 100f:0} cm [Z X], max {Tuning.STALKER_NECK_OUT_MAX_M * 100f:0})  full out in {an.neckOutS:0.00} s [C B]{(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
             (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   neck red {lk.neckRed:0.0} [I M] bright x{lk.neckBright:0.00} [Q R]\n{LureLine(lk)}   [9] freeze monster in front of me · [0] on/off" : "");
-        GUI.Label(new Rect(10, 10, 1100, 330),
+        GUI.Label(new Rect(10, 10, 1100, 360),
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
