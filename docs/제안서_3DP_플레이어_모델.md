@@ -1,6 +1,6 @@
 # 제안서 3D-P — 플레이어 모델 (1인칭 팔 · 장갑 + 3인칭 몸)
 
-main, 2026-09-29. **승인 대기.**
+main, 2026-09-29. **승인(09-29, 물을 것 다섯 모두 추천대로)** — 키 1.70 m, 1인칭 눈높이 1.7 m 그대로 · 안전모 노랑 · 램프 줄 안전모 뒤 → 등 → 허리 뒤 · 안전모 번호 뒤와 양옆 세 곳 · Blender Studio Human Base Meshes(47 MB, CC0) 받아서 몸 바탕으로. **사용자가 더한 것**: `PlayerBody` 의 "내 몸 / 남의 몸" 스위치(3절) · 그 검사와 사보타주. 방향(09-29): 개발 기준 = 출시판 협동(1~4인), 다음 = NET-1 기초.
 
 **왜** — 지금 1인칭 화면에는 곡괭이만 떠 있고 손 · 팔이 없다(사용자 09-28 "1인칭 손 모양은? 플레이어 모델링이 필요하지 않나"). 협동 때는 다른 플레이어의 몸이 보여야 한다(09-27 "다른 플레이어의 모습도 이와 똑같이"). 사용자 순서(09-28): SND-P ✓ → MINE-2 ✓ → DUST-1 ✓ → **3D-P**.
 **사용자 답(09-29, 만드는 방법)**: ① 겉모습 = **섞기** — 몸 · 옷은 Meshy, 안전모 · 램프 · 배터리 · 띠는 Blender 코드 ② 뼈대 = **Mixamo**, 사용자가 보고 어색하면 **Meshy 자동 뼈대도 시도** ③ 1인칭 = **모델 하나에서 팔(장갑 · 소매)만 카메라에 붙여 보이기**.
@@ -48,15 +48,22 @@ main, 2026-09-29. **승인 대기.**
 - Unity 가 이 파일을 **사람형 뼈대(Humanoid)** 로 읽는다 → Kevin 동작(사람형)을 그대로 입힐 수 있다. 몸은 GLB 가 아니라 **FBX** 로 내보낸다 — 지금 쓰는 GLB 읽기 도구(glTFast)는 사람형 뼈대를 자동으로 잡아 주지 않고, FBX 는 Unity 가 잡아 준다. 안에 든 것은 우리 몸 + 뼈대뿐이고 Mixamo 동작은 없다(동작 규칙은 그대로). 소품은 움직이지 않는 물건이라 GLB.
 - **판정 ③(뼈대)**: 3인칭 몸에 Kevin 캐기 · 서 있기 동작을 입힌 짧은 영상(에디터에서 찍음, 09-27 시험과 같은 방법). **어색하다고 하시면 Meshy 자동 뼈대(설명서 예시 5 크레딧)로도 만들어 둘을 나란히 보여 드린다.** Meshy 뼈대에 손가락 뼈가 있는지는 그때 확인한다.
 
-### 3. 1인칭 — 팔만 카메라에 붙여 보인다
+### 3. `PlayerBody` 스위치 하나 — 내 몸 / 남의 몸 (사용자 09-29)
+- `PlayerBody` 하나가 **스위치 하나(`self` / `other`)** 로 두 모습을 바꾼다.
+  - **내 몸(`self`, 1인칭)**: 팔 물체만 그린다 · 카메라에 붙는다 · 손은 곡괭이 손잡이를 따라간다(아래 3-1).
+  - **남의 몸(`other`, 3인칭)**: 몸 전체 + 안전모 · 램프 · 줄 · 배터리 · 탄띠 · 수통을 그린다 · 땅에 선다 · 동작을 몸 전체에 튼다.
+- Shift+7 로 세우는 몸(4절)은 **이 스위치의 "남의 몸" 쪽으로 만든다** — NET-1 에서 다른 플레이어 몸에 그대로 쓰려고. 판정용 따로 만든 몸이 아니다.
+- 스위치를 바꾸면 그리는 물체 · 조명 층 · 붙는 곳만 바뀌고 모델 파일 · 뼈대 · 동작 묶음은 같다.
+
+### 3-1. 내 몸(1인칭) — 팔만 카메라에 붙여 보인다
 - 같은 모델을 하나 더 카메라에 붙이는데 **팔 물체만 그린다**(머리 · 몸 · 안전모는 안 그림). 머리 뼈 자리를 눈(카메라)에 맞춘다.
 - **곡괭이가 주인이다** — 지금 통과한 곡괭이 움직임(MINE-2 동작 표 · 걷기 흔들림 · 던지기 · 고치기)은 **하나도 안 바꾼다**. 손이 곡괭이 손잡이 두 점을 따라간다: 오른손 → `GRIP_Rear`(자루 끝 5 cm), 캘 때는 왼손 → `GRIP_Front`(자루 끝 30 cm). 손을 목표 점에 끌어다 붙이면 팔꿈치 · 어깨가 알아서 굽는 Unity 기본 기능(IK)을 쓴다 — 새 패키지 없음.
 - 캘 때는 Kevin 캐기 동작을 팔 모델에도 **곡괭이와 같은 박자로** 같이 틀어서 팔꿈치 · 어깨가 사람처럼 따라오게 한다. 걸을 때는 오른손만 자루를 쥐고 왼팔은 화면 밖으로 내린다(09-27 기본값). 곡괭이를 던져서 빈손이면 두 팔 다 화면 밖.
 - 팔은 곡괭이와 같은 조명 층에 둔다 — 머리등이 아니라 곡괭이 전용 약한 등(`pickLight`)이 비춘다(가까이 있는 팔이 하얗게 타는 것을 막는다, 곡괭이와 같은 이유).
 - **아래를 내려다봐도 내 몸은 안 보인다**(사용자 선택 ③ 가).
 
-### 4. 3인칭 몸 — 판정용으로 내 앞에 세운다
-- 협동(NET-1)은 아직 없어서 다른 플레이어가 없다. 그래서 **판정 키로 내 몸의 복사본을 내 앞 2.5 m 에 나를 마주 보게 세운다**(괴물 판정 때 쓴 "앞에 세우는 키"와 같은 뜻).
+### 4. 남의 몸(3인칭) — 판정용으로 내 앞에 세운다
+- 협동(NET-1)은 아직 없어서 다른 플레이어가 없다. 그래서 **판정 키로 `PlayerBody` 하나를 스위치 `other` 로 만들어 내 앞 2.5 m 에 나를 마주 보게 세운다**(괴물 판정 때 쓴 "앞에 세우는 키"와 같은 뜻).
 - 세운 몸은 안전모 · 램프(렌즈만 빛남, 빛은 안 냄 — 남의 머리등 빛은 NET-1) · 줄 · 배터리 · 탄띠 · 수통을 다 단다. 동작 = 서 있기(Kevin `Idle01`) → 서서 캐기(Kevin `MiningOneHand01_R - Wall`, 왼손은 IK 로 `GRIP_Front` — 두 손) → 천천히 한 바퀴 돌기(등 · 배터리 · 줄 · 번호 보기).
 - 걷기 · 뛰기 · 쪼그려 동작은 Kevin 무료 묶음에 없다 → NET-1 에서(Mixamo 로 받아 구워 넣기). 쪼그려 캐기는 1인칭(곡괭이 표 + 팔)에서만 이번에 본다.
 
@@ -75,7 +82,7 @@ main, 2026-09-29. **승인 대기.**
 1. **밑그림** — `blender/rig/player_blockout.py`(몸 바탕 + 옷 부피 + 색, T 자세) · `blender/props/make_player_props.py`(안전모 · 램프 · 배터리 · 탄띠 · 수통, 자기 검사) → 그림 `build/player/P1_모양_*.png` + 같은 비율 비교 → **판정 ① 모양**.
 2. **Meshy 한 번** — `gen_meshy.py`(괴물 때 스크립트)에 여러 장 입력 → `MineTunnel/mesh/meshy_player1.glb` → 앞 · 뒤 · 옆 그림 → **판정 ② Meshy 결과**.
 3. **뼈대** — (사용자 Mixamo 로그인) 자동 뼈대 → `blender/rig/player_rig.py`(팔 / 몸 가르기 · 소품 붙일 점 · 크기 맞춤 · 자기 검사: 손가락 뼈 있음, 물체마다 재질 하나) → `Assets/Tunnel/Player/player.fbx` · `player_props.glb` → Kevin 동작 입힌 3인칭 영상 → **판정 ③ 뼈대**(어색하면 Meshy 뼈대 비교).
-4. **게임** — `PlayerBody.cs`(새: 1인칭 팔 · IK · 세운 3인칭 몸 · 줄 · 번호) · `Player.cs`(PlayerBody 부르기) · `BuildM1`(씬에 넣기 · 동작 묶음 만들기) · `Tuning`(`PLAYER_*`) · `DevHud`(Shift+7 8 ← →) · 씬 다시 만들기(`MakeScene -force` · `MakeBooth -force`).
+4. **게임** — `PlayerBody.cs`(새: 스위치 `self` / `other` · 1인칭 팔 · IK · 남의 몸 · 줄 · 번호) · `Player.cs`(PlayerBody 부르기) · `BuildM1`(씬에 넣기 · 동작 묶음 만들기) · `Tuning`(`PLAYER_*`) · `DevHud`(Shift+7 8 ← →) · 씬 다시 만들기(`MakeScene -force` · `MakeBooth -force`).
 5. **검사** — 아래. `bash tools/quick.sh player mining`(사보타주 포함) → 전체 `bash tools/build.sh` → 커밋.
 6. **실행 파일 판정 ④** — 1인칭 캡처(걷기 · 콱 · 꼭대기 · 쪼그려)와 세운 몸 캡처(앞 · 옆 · 뒤)를 먼저 보여 드린다 → 확인 목록.
 
@@ -90,10 +97,11 @@ Meshy 약 30 크레딧 1번(남은 2,709) · Mixamo 무료 · Blender 모형 무
 | `player_fp_arms_only` (새) | 1인칭에서 팔 물체만 그려지고 머리 · 몸 · 안전모는 안 그려짐 · 캐는 동안 장갑 · 소매가 화면에 보이는 프레임이 있음(픽셀로 잼) |
 | `player_fp_not_burnt` (새) | 1인칭 팔이 하얗게 타지 않음(탄 픽셀 ≤ 3 %, 괴물 검사와 같은 문턱) |
 | `player_body_props_attached` (새) | 세운 몸: 안전모가 머리 뼈에 · 배터리가 허리 뒤에 · 줄 양 끝이 안전모 뒤와 배터리에 붙음 — 동작 중 가장 먼 값 ≤ 2 cm |
+| `player_body_switch` (새) | 같은 `PlayerBody` 를 `self` → `other` → `self` 로 바꿔 가며: `self` = 팔 물체만 켜짐 · 곡괭이 조명 층 · 카메라에 붙음 / `other` = 몸 · 팔 · 소품 모두 켜짐 · 보통 조명 층 · 땅에 섬(발바닥 높이 ±3 cm) · 머리등 빛에 비침. 두 쪽 모두 모델 · 뼈대 · 동작 묶음이 같은 것(같은 파일)인지 · 세운 몸(Shift+7)이 `other` 쪽인지 |
 | `player_skin_no_acne` (새) | 세운 몸에 머리등 그림자 얼룩 없음(켬 ÷ 끔 비율 — 괴물 `monster_skin_no_acne` 와 같은 방법, 알려진 함정) |
 | 그대로 | `mine_*` · `mining` 구간 전부(곡괭이 움직임이 안 바뀌었는지) · 측정표 fps |
 
-**사보타주**(각각 FAIL 확인): `noik`(손을 손잡이에 안 붙임 → `player_hands_on_grip` FAIL) · `fpbody`(1인칭에 몸 전체를 그림 → `player_fp_arms_only` FAIL) · `nokevin`(Kevin 동작 없이 → `player_hands_on_grip` 은 **통과해야** 한다 = 다른 컴퓨터에서도 손이 곡괭이를 쥔다).
+**사보타주**(각각 FAIL 확인): `noik`(손을 손잡이에 안 붙임 → `player_hands_on_grip` FAIL) · `fpbody`(1인칭에 몸 전체를 그림 → `player_fp_arms_only` FAIL) · `noswitch`(스위치를 바꿔도 `self` 모습 그대로 → `player_body_switch` FAIL) · `standalone`(세운 몸을 스위치 없이 따로 만든 몸으로 → `player_body_switch` FAIL) · `nokevin`(Kevin 동작 없이 → `player_hands_on_grip` 은 **통과해야** 한다 = 다른 컴퓨터에서도 손이 곡괭이를 쥔다).
 
 ## 확인 목록 (실행 파일 판정 ④)
 1. 걸을 때 · 캘 때 장갑과 소매가 1인칭 화면에서 어색하지 않나 — 손이 자루를 쥐고 있는 것처럼 보이나
@@ -109,12 +117,12 @@ Meshy 약 30 크레딧 1번(남은 2,709) · Mixamo 무료 · Blender 모형 무
 | `blender/props/make_player_props.py` (새) | 안전모 · 램프 · 배터리 · 탄띠 · 수통 |
 | `blender/rig/player_rig.py` (새) | Mixamo 결과 → 팔 / 몸 가르기 · 소품 점 · 내보내기 |
 | `Assets/Tunnel/Player/` (새, LFS) | `player.fbx` · `player_props.glb` · 그림 |
-| `Assets/Scripts/PlayerBody.cs` (새) | 1인칭 팔 · IK · 세운 몸 · 줄 · 번호 |
+| `Assets/Scripts/PlayerBody.cs` (새) | 스위치 `self` / `other` · 1인칭 팔 · IK · 남의 몸 · 줄 · 번호 |
 | `Assets/Scripts/Player.cs` | PlayerBody 부르기 |
 | `Assets/Editor/BuildM1.cs` | 씬에 넣기 · Kevin 동작 묶음 만들기(`Generated/`) |
 | `Assets/Scripts/Tuning.cs` · `DevHud.cs` | `PLAYER_*` · Shift+7 8 ← → (7 8 ← → 는 Shift 없을 때만 — `DevHud` · `ArtLook`) — **커밋 안 한 `-film` 3 줄은 이번에도 빼고 커밋** |
 | `Assets/Scripts/ArtLook.cs` | ← → 는 Shift 없을 때만 |
-| `Assets/Scripts/M1Check.cs` | `-only player` 구간 · 검사 6 · 사보타주 3 |
+| `Assets/Scripts/M1Check.cs` | `-only player` 구간 · 검사 7 · 사보타주 5 |
 | `docs/지스타2026/03_에셋_라이선스_목록_초안.md` | Meshy 몸 · Mixamo 뼈대 · Blender Human Base Meshes(CC0) 줄 |
 
 ## 없어지는 것 (승인 전 확인)
