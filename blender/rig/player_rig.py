@@ -10,7 +10,7 @@
   ⑤ 한 FBX 로 내보낸다(Assets/Tunnel/Player/player.fbx) · 몸 그림은 Assets/Tunnel/Player/Textures/player_base · player_nor_gl.png — 제안서는 소품을 GLB 로 따로 두려 했지만
      두 파일(FBX · GLB)의 좌표 방향을 맞춰야 해서 뼈 자식으로 한 파일에 넣었다(Unity 가 뼈 밑에 그대로 둔다)
 자기 검사(FAIL 이면 종료 1): 손가락 뼈(엄지 · 검지) · 팔 가르기 · 소품 자리 그대로 · 휘는 소품 무게 · 그림 파일 · 물체마다 재질 하나
-사보타주: SABOTAGE=noarms(팔 안 가름) → 팔 가르기 FAIL · unparent(소품을 뼈에 안 붙임) → 소품 FAIL · thinprops(단면 곡선 먼저 지움) → 면 FAIL · noflip(안쪽 면 그대로) → 면 방향 FAIL
+사보타주: SABOTAGE=noarms(팔 안 가름) → 팔 가르기 FAIL · unparent(소품을 뼈에 안 붙임) → 소품 FAIL · thinprops(단면 곡선 먼저 지움) → 면 FAIL · noflip(안쪽 면 그대로) → 면 방향 FAIL · nouv(소품 UV 안 줌, 3D-P2) → rig_props_uv FAIL
 출력: build/player/player_rig.blend · Assets/Tunnel/Player/player.fbx"""
 import bpy, bmesh, os, sys, math
 import numpy as np
@@ -145,6 +145,19 @@ for o in props:
     o.modifiers.new("Armature", "ARMATURE").object = arm
 bpy.context.view_layer.update()
 
+# ── ④b 소품 UV (3D-P2, 09-30): UV 없는 소품(안전모 · 탄띠 · 수통 · 배터리 · 램프 · 쇠붙이 · 방독면)에 상자 투영 — 면마다 법선이 가장 센 축을
+#    빼고 남은 두 축을 1 UV = PROP_UV_M m 로. 질감은 되풀이(repeat)라 이음이 있어도 결 크기가 어디서나 같다. 점은 그대로
+PROP_UV_M = 0.3
+for o in props:
+    if o.data.uv_layers or SAB == "nouv": continue
+    me = o.data
+    co = np.array([v.co[:] for v in me.vertices]); nrm = np.array([p.normal[:] for p in me.polygons])
+    tot = np.array([p.loop_total for p in me.polygons]); lv = np.array([l.vertex_index for l in me.loops])
+    ax = np.repeat(np.argmax(np.abs(nrm), axis=1), tot)                 # 고리마다 투영에서 뺄 축
+    keep = np.array([[1, 2], [0, 2], [0, 1]])[ax]
+    uv = np.take_along_axis(co[lv], keep, axis=1) / PROP_UV_M
+    me.uv_layers.new(name="UVMap").data.foreach_set("uv", uv.astype(np.float32).ravel())
+
 # ── 검사 ──
 fails = []
 fing = [f"{MX}{s}Hand{f}{k}" for s in ("Left", "Right") for f in ("Thumb", "Index") for k in (1, 2, 3)]
@@ -170,6 +183,8 @@ def signed_vol(o):
 inward = [o.name for o in props if o.name in curve_names and signed_vol(o) < 0]
 B.check(fails, "rig_normals_out", not inward, f"곡선에서 바꾼 소품 {sorted(curve_names)} 의 면이 바깥을 본다 — 안쪽인 것 {inward or '없음'}")
 B.check(fails, "rig_one_material", not multi, f"물체마다 재질 하나 — 둘 이상인 것 {multi or '없음'}")
+no_uv = [o.name for o in props if not o.data.uv_layers]
+B.check(fails, "rig_props_uv", not no_uv, f"소품 {len(props)} 개 모두 UV 가 있다(3D-P2 질감) — 없는 것 {no_uv or '없음'}")
 if SAB:
     print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
 

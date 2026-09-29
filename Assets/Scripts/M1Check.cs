@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -145,6 +145,8 @@ public class M1Check : MonoBehaviour
         PlayerBody.standalone = sabotage == "standalone";   // 세운 몸을 스위치 없이 따로 만든 몸으로
         PlayerBody.noKevin = sabotage == "nokevin";         // Kevin 동작 없이 (다른 컴퓨터) — 손은 그래도 곡괭이를 쥐어야 한다
         PlayerBody.twoHands = sabotage == "twohands";       // 판정 ④ 전: 캘 때 왼손도 자루로 (사용자 09-30 "한 손으로 캐는 걸로")
+        PlayerBody.forceClay = sabotage == "claybody";      // 3D-P2 전: 찰흙 재질
+        PlayerBody.noDetail = sabotage == "nodetail";       // 천 결(세부 노멀) 없음
         if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
             MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
@@ -2594,7 +2596,10 @@ public class M1Check : MonoBehaviour
     //   + 한 손 캐기(판정 ④ 사용자 09-30): 캐는 동안 왼손은 자루를 안 쥐고 화면에도 안 나온다
     // ⑤ 스위치 Self → Other → Self (그리는 것 · 조명 층 · 붙는 곳 · 발바닥) + 세운 몸(Shift+7 과 같은 길)이 같은 모델 · 뼈대 · 동작 묶음의 Other
     // ⑥ 세운 몸 소품이 뼈를 따라감(서 있기 → 서서 캐기 → 한 바퀴, ≤ 2 cm) ⑦ 세운 몸 머리등 그림자 얼룩 없음. 사람이 볼 캡처 50_player_fp_* · 51_player_body_* · 52_player_body_mine_*
-    // 사보타주: noik · twohands → ④ · fpbody → ② · noswitch · standalone → ⑤ · nokevin → ④ 는 통과해야 한다
+    // ⑧ 3D-P2 재질(제안서 docs/제안서_3DP2_플레이어_재질_현실감.md): 멈춘 채 같은 자리에서 새 재질 · 옛(찰흙) 재질 · 천 결 0 · 몸 숨김을 찍어 몸 픽셀만
+    //   구조값(이웃 밝기 차)이 옛보다 15 % 넘게 · 새 재질 그림 · 키워드 · 소품 질감 + 천 결이 화면을 바꾼다. 판정 ⑤ 캡처 55_player_look_*
+    //   (제안서의 "옷 윤이 옛보다 낮다" 검사는 뺐다 — 머리등 아래서 매끈함이 더하는 밝기가 옛 2.4 % · 새 2.5 % 로 둘 다 작아 윤은 찰흙의 원인이 아니었다, 09-30 잼)
+    // 사보타주: noik · twohands → ④ · fpbody → ② · noswitch · standalone → ⑤ · nokevin → ④ 는 통과해야 한다 · claybody → ⑧ 구조 · nodetail → ⑧ 그림
     IEnumerator PlayerStage(CharacterController cc)
     {
         var b = body;
@@ -2770,11 +2775,81 @@ public class M1Check : MonoBehaviour
             $"helmet on head bone moved {devH * 100f:F2} cm · battery on hips {devB * 100f:F2} cm · lamp cord ends (helmet back · battery) {devC * 100f:F2} cm (max 2) over idle · mine · turn");
 
         // ⑦ 세운 몸 그림자 얼룩: 2 m 정면, 머리등 그림자 켬 ÷ 끔 (괴물 monster_skin_no_acne 와 같은 방법)
+        if (sb != null && sb.action == "turn") sb.NextAction();                    // 한 바퀴 → 서 있기 (돌고 있으면 옆모습을 잰다)
         if (sb != null) sb.PlaceOn(P + Vector3.forward * 2f, 180f); else stoodGo.transform.position = P + Vector3.forward * 2f;
         yield return new WaitForSeconds(0.3f);
         float acne = 0f;
         yield return ShadowRatio("53_player_body_acne", sRends.Where(r => r.enabled && r.gameObject.activeInHierarchy).ToArray(), mainCam, x => acne = x);
         Check("player_skin_no_acne", acne >= Tuning.STALKER_ACNE_MIN_RATIO, $"lum ratio shadows on/off {acne:F3} (min {Tuning.STALKER_ACNE_MIN_RATIO}) with bias depth {lamp.shadowDepthBias} normal {lamp.shadowNormalBias}");
+
+        // ⑧ 3D-P2 재질 — 2 m 정면, 멈춘 채: 새 · 옛 · 천 결 0 · 몸(PlayerBody · PlayerArms)만 숨김 — 소품은 늘 그대로라 몸 픽셀만 잰다
+        var bodyR = sRends.Where(r => r.name == "PlayerBody" || r.name == "PlayerArms").ToArray();
+        var look = new Dictionary<string, Color32[]>();
+        int sw = 0;
+        float ts0 = Time.timeScale;
+        Time.timeScale = 0f;
+        IEnumerator Shot(string file, Action set)
+        {
+            set();
+            PlayerBody.lookVer++;
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            var tx = ScreenCapture.CaptureScreenshotAsTexture();
+            File.WriteAllBytes(Path.Combine(outDir, file + ".png"), tx.EncodeToPNG());
+            look[file] = tx.GetPixels32(); sw = tx.width;
+            Destroy(tx);
+        }
+        float cd0 = PlayerBody.clothDetail;
+        yield return Shot("54_player_look_new", () => { });
+        yield return Shot("54_player_look_clay", () => PlayerBody.clayLook = true);
+        yield return Shot("54_player_look_nodetail", () => { PlayerBody.clayLook = false; PlayerBody.clothDetail = 0f; });
+        yield return Shot("54_player_look_hidden", () => { PlayerBody.clothDetail = cd0; foreach (var r in bodyR) r.enabled = false; });
+        foreach (var r in bodyR) r.enabled = true;
+        PlayerBody.lookVer++;
+        Rect bodyRect = ScreenRect(mainCam, bodyR);                  // 2 m 정면 그대로일 때 잰다 (아래에서 판정 사진 찍으러 옮긴다)
+        // 판정 ⑤ 사진: 1.5 · 3 m, 앞 · 옆 · 뒤, 새 · 옛 (머리등)
+        foreach (float dist in new[] { 1.5f, 3f })
+            foreach (var (dn, yaw) in new[] { ("front", 180f), ("side", 90f), ("back", 0f) })
+                foreach (bool old in new[] { false, true })
+                {
+                    if (sb != null) sb.PlaceOn(P + Vector3.forward * dist, yaw);
+                    yield return Shot($"55_player_look_{(old ? "old" : "new")}_{dist:0.0}m_{dn}", () => PlayerBody.clayLook = old);
+                }
+        PlayerBody.clayLook = false;
+        PlayerBody.lookVer++;
+        Time.timeScale = ts0;
+        yield return null;                                        // 새 재질로 돌아온 뒤 재질을 읽는다
+        // 몸 픽셀 = 숨긴 화면과 밝기가 다른 곳. 구조값 = 오른쪽 · 아래 이웃 밝기 차 평균 ×1000, 윤 = 가장 밝은 1 % ÷ 평균
+        (float str, float mean, int n) Stats(string key)
+        {
+            var br = bodyRect;
+            var px = look[key]; var hid = look["54_player_look_hidden"];
+            var lums = new List<float>();
+            double g = 0;
+            for (int y = Mathf.Max(1, (int)br.yMin); y < Mathf.Min((int)br.yMax, px.Length / sw - 1); y++)
+                for (int x = Mathf.Max(0, (int)br.xMin); x < Mathf.Min((int)br.xMax, sw - 1); x++)
+                {
+                    int i = y * sw + x;
+                    float l = Lum(px[i]);
+                    if (Mathf.Abs(l - Lum(hid[i])) < 0.02f) continue;
+                    lums.Add(l);
+                    g += Mathf.Abs(Lum(px[i + 1]) - l) + Mathf.Abs(Lum(px[i + sw]) - l);
+                }
+            if (lums.Count == 0) return (0f, 0f, 0);
+            return ((float)(g / lums.Count * 1000.0), lums.Average(), lums.Count);
+        }
+        var sNew = Stats("54_player_look_new"); var sClay = Stats("54_player_look_clay"); var sNoDet = Stats("54_player_look_nodetail");
+        Check("player_body_not_clay", sNew.n > 2000 && sNew.str >= sClay.str * 1.15f,
+            $"body pixels {sNew.n} · structure new {sNew.str:F1} vs old clay {sClay.str:F1} (×{sNew.str / Mathf.Max(sClay.str, 1e-3f):F2}, want ≥ 1.15) · capture 54_player_look_new / _clay");
+        var rt = sSkin != null ? sSkin.sharedMaterial : null;
+        string[] maps = { "_MetallicGlossMap", "_OcclusionMap", "_DetailMask", "_DetailAlbedoMap", "_DetailNormalMap" }, kws = { "_METALLICSPECGLOSSMAP", "_OCCLUSIONMAP", "_DETAIL_MULX2" };
+        var missing = rt == null ? maps.ToList() : maps.Where(m => rt.GetTexture(m) == null).Concat(kws.Where(k => !rt.IsKeywordEnabled(k))).ToList();
+        string[] propNames = { "Helmet_Shell", "Battery_Body", "Belt_Web", "Canteen_Cover", "Belt_Buckle", "Mask_Face", "Lamp_Body", "Towel_Fix" };
+        var bare = propNames.Where(n => { var r = sRends.FirstOrDefault(x => x.name == n); return r == null || r.sharedMaterial.GetTexture("_BaseMap") == null; }).ToList();
+        float detailGain = sNew.str / Mathf.Max(sNoDet.str, 1e-3f);
+        Check("player_look_maps", missing.Count == 0 && bare.Count == 0 && rt.GetTexture("_BaseMap") != null && rt.GetTexture("_BaseMap").name.Contains("dirt") && detailGain >= 1.02f,
+            $"body material {(rt != null ? rt.name : "none")} base {(rt != null && rt.GetTexture("_BaseMap") != null ? rt.GetTexture("_BaseMap").name : "none")} · missing maps/keywords {(missing.Count == 0 ? "none" : string.Join(" ", missing))} · props without texture {(bare.Count == 0 ? "none" : string.Join(" ", bare))} · " +
+            $"cloth weave changes the screen: structure ×{detailGain:F3} vs weave 0 (want ≥ 1.02)");
 
         Destroy(cm);
         Destroy(stoodGo);

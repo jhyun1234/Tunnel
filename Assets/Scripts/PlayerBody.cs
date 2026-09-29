@@ -19,6 +19,12 @@ public class PlayerBody : MonoBehaviour
     public Mode mode;
     public Transform cam;          // Self 가 붙는 곳 (메인 카메라)
     public Pickaxe pickaxe;        // Self: 뷰모델 곡괭이 · Other: 곡괭이 모양을 복사해 온다
+    // 3D-P2 재질 (BuildM1 이 넣는다): 새 재질 PlayerSkin · 옛(찰흙) 재질 · 탄가루 판 셋. 판정 키(DevHud Shift+1~6)는 아래 정적 값을 바꾸고 lookVer 를 올린다
+    public Material skinAsset, clay;
+    public Texture[] dirt = new Texture[0];
+    public static float clothDetail = Tuning.PLAYER_CLOTH_DETAIL, smoothMul = Tuning.PLAYER_SMOOTH_MUL;
+    public static int dirtLevel = Tuning.PLAYER_DIRT_LEVEL, lookVer;
+    public static bool clayLook, forceClay, noDetail;       // forceClay · noDetail = 사보타주 claybody · nodetail
     // 사보타주 (M1Check): 손을 안 붙임 · 1인칭에 몸 전체 · 스위치가 안 먹음 · 세운 몸을 스위치 없이 따로 · Kevin 동작 없이(다른 컴퓨터)
     public static bool noIk, fpBody, noSwitch, standalone, noKevin, twoHands;   // twoHands: 판정 ④ 전 — 캘 때 왼손이 앞 손잡이(GRIP_Front)로
     [System.NonSerialized] public float fpForward = Tuning.PLAYER_FP_OFFSET.z;   // 판정 키 Shift+← →
@@ -41,7 +47,9 @@ public class PlayerBody : MonoBehaviour
     Animator anim;
     Renderer[] rends;
     Renderer arms;
-    Material skin, fpSkin;                                  // 1인칭 팔만 어둡게 (PLAYER_FP_ARM_TINT)
+    Material skinRt, clayRt, fpSkin;
+    float clay0;                                            // 옛 재질의 매끈함 (0.25) — Shift+3 4 배율을 옛 재질에도 (검사가 "윤 몫"을 견준다)                                // 새 재질의 실행 중 사본(판정 키가 바꾼다 — 에셋은 그대로) · 1인칭 팔만 어둡게 (PLAYER_FP_ARM_TINT)
+    int myLookVer = -1;
     SkinnedMeshRenderer bodySkin;
     Vector3 headBind, hipsBind, bodyFix;                    // bodyFix: 동작이 없을 때 몸 가운데를 처음 자리로 (뿌리 기준)
     Transform hips;
@@ -160,14 +168,7 @@ public class PlayerBody : MonoBehaviour
     void Apply()
     {
         bool self = mode == Mode.Self;
-        if (fpSkin == null)
-        {
-            skin = bodySkin.sharedMaterial;                        // 팔 · 몸이 같은 PlayerSkin (복사한 몸의 팔은 어두운 사본을 들고 올 수 있다)
-            fpSkin = new Material(skin) { name = "PlayerSkin_FP" };
-            Color c = skin.GetColor("_BaseColor"), k = c * Tuning.PLAYER_FP_ARM_TINT;
-            fpSkin.SetColor("_BaseColor", new Color(k.r, k.g, k.b, c.a));
-        }
-        arms.sharedMaterial = self ? fpSkin : skin;
+        ApplyLook();
         foreach (var r in rends)
         {
             r.enabled = !self || r == arms || fpBody;
@@ -280,12 +281,33 @@ public class PlayerBody : MonoBehaviour
         state = s;
     }
 
+    // 재질: 판정 키 값을 새 재질 사본에 → 몸 · 팔(1인칭은 어둡게 한 사본). 옛 재질(Shift+6)은 몸만 — 소품은 늘 새 것
+    void ApplyLook()
+    {
+        myLookVer = lookVer;
+        if (skinRt == null) skinRt = new Material(skinAsset != null ? skinAsset : bodySkin.sharedMaterial) { name = "PlayerSkin_Rt" };
+        skinRt.SetFloat("_DetailNormalMapScale", clothDetail);
+        skinRt.SetFloat("_Smoothness", smoothMul);
+        if (dirt.Length == 3) skinRt.SetTexture("_BaseMap", dirt[Mathf.Clamp(dirtLevel, 0, 2)]);
+        if (noDetail) { skinRt.SetTexture("_DetailNormalMap", null); skinRt.DisableKeyword("_DETAIL_MULX2"); }
+        if (clayRt == null && clay != null) { clayRt = new Material(clay) { name = "PlayerSkin_Clay_Rt" }; clay0 = clay.GetFloat("_Smoothness"); }
+        if (clayRt != null) clayRt.SetFloat("_Smoothness", clay0 * smoothMul);
+        var src = (clayLook || forceClay) && clayRt != null ? clayRt : skinRt;
+        if (fpSkin != null) Destroy(fpSkin);
+        fpSkin = new Material(src) { name = "PlayerSkin_FP" };
+        Color c = src.GetColor("_BaseColor"), k = c * Tuning.PLAYER_FP_ARM_TINT;
+        fpSkin.SetColor("_BaseColor", new Color(k.r, k.g, k.b, c.a));
+        bodySkin.sharedMaterial = src;
+        arms.sharedMaterial = mode == Mode.Self ? fpSkin : src;
+    }
+
     void Param(string name, float v) { if (anim.runtimeAnimatorController != null) anim.SetFloat(name, v); }
 
     void Update()
     {
         float dt = Time.deltaTime;
         t += dt;
+        if (myLookVer != lookVer) ApplyLook();
         if (mode == Mode.Self) SelfUpdate(dt); else OtherUpdate(dt);
     }
 

@@ -10,6 +10,9 @@
 | `plaza_src/meshy_car2/textures/*` · 광차 그물 | Meshy 그림 → 3D (유료 구독 = 소유, 2026-09-27). 넣은 그림 = 우리 Blender 광차(`mine_props.mine_car_v2`) 세 방향. 원본 `Documents/MineTunnel/mesh/props/meshy_car2.glb`, 기록 `MINER_ASSET_PIPELINE.md` | Meshy 유료 |
 | `plaza_props.gltf` · `.bin` | 위 Poly Haven 모델 그물 + Blender 코드로 만든 것(`blender/art/mine_props.py` · `make_plaza_props.py`), 판 글자 = Pretendard(OFL, `Assets/Fonts/`) | CC0 + 우리 것 |
 
+| `../Player/Textures/cloth_detail_*` · `../Player/Textures/props/*` (3D-P2 플레이어 재질, 09-30) | Poly Haven denim_fabric (1k jpg, 3D-P2 에서 받음) https://polyhaven.com/a/denim_fabric · 위 rusty_painted_metal · rusty_metal_03 · ambientCG Rock035 — `blender/rig/player_look.py` 가 조각 · 채도 · 색 맞춤 · 탄가루를 구움 | CC0 |
+| `../Player/Textures/player_base_dirt*` · `player_ms` · `player_ao` · `player_detail_mask` | 플레이어 몸 그림(Meshy, 유료 구독)에 우리가 구운 가림 · 탄가루 · 부위별 윤기 (`player_look_bake.py` · `player_look.py`) | 자체 |
+
 이름 규칙: `_DiffRough.png` = 색(RGB) + 거칠기(A — 원본 Roughness 를 알파에 합침, 셰이더가 읽는 횟수를 줄이려고) · `_nor_gl` 노멀(OpenGL). `Assets/Editor/TextureImportRules.cs` 가 이름으로 임포트 설정을 정한다.
 고른 날: 2026-09-27 (사용자, `docs/그림/ART1_질감_후보.png` 에서 벽 2 · 석탄 1 · 바닥 2).
 셰이더 `Assets/Shaders/HexTile.hlsl` 는 mmikk/hextile-demo(MIT) 방법 — 알림은 파일 머리에.

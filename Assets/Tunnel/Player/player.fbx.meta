@@ -7,6 +7,71 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: PB_towel_dirty
+    second: {fileID: 2100000, guid: 5734555a348d96642b747d74a96469f7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PM_canister
+    second: {fileID: 2100000, guid: b9b28898ebf252840bf6064b4ffae19e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PM_lens_rim
+    second: {fileID: 2100000, guid: ce40a6531399c55469e87d93f984a5f9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PM_rubber_black
+    second: {fileID: 2100000, guid: bdf1b6c1b278a0e44946cabf477ca5b1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PM_strap_black
+    second: {fileID: 2100000, guid: 203da7135d5f5734c9e2cd314339220c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerAlu
+    second: {fileID: 2100000, guid: fa35c08fbf4d0434f877ab6f96fab65b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerBattery
+    second: {fileID: 2100000, guid: 5e65c9d83a5ea6a4391dea60d4a586a9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerBezel
+    second: {fileID: 2100000, guid: 7aa1e073e0d4f6b4e97c4f5907d589ba, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerCord
+    second: {fileID: 2100000, guid: 3dd2be96431e6ce4f8d7283a973555b0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerHelmet
+    second: {fileID: 2100000, guid: 872cd2c0484b8da4d8279cac3c0ef8b3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerLampBody
+    second: {fileID: 2100000, guid: 859d618f06cfebd4d9a1d0e487934de1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerMetal
+    second: {fileID: 2100000, guid: e0dbd8d59bdeed54fb6cbb4cd2a7ae45, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PlayerOlive
+    second: {fileID: 2100000, guid: bd7379b3b01d9a345838ed167ca3a41f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: PlayerSkin
     second: {fileID: 2100000, guid: a8a390393cbe53e439236ef17171cff0, type: 2}
   materials:

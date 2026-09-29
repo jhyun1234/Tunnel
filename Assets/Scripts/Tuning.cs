@@ -246,6 +246,11 @@ public static class Tuning
     public const float PLAYER_PALM_IN_M = 0.03f;
     public const float PLAYER_FIST_DEG = 60f;            // 쥘 때 검지 세 마디 — 손가락 뼈가 엄지 · 검지뿐이라 네 손가락이 따라 굽는다(사용자 "가", P11 시험 값)
     public const float PLAYER_THUMB_DEG = 30f;
+    // 3D-P2 재질 현실감 (제안서 docs/제안서_3DP2_플레이어_재질_현실감.md, 승인 09-30) — 그림은 blender/rig/player_look.py, 재질은 Editor/PlayerLookSetup
+    public const float PLAYER_CLOTH_DETAIL = 1.0f;       // 천 결(세부 노멀) 세기 ※ — 판정 키 Shift+1 2
+    public const float PLAYER_CLOTH_TILE_M = 0.5f;       // 천 결 무늬 한 장이 몸에서 차지하는 길이(m) = 원본 denim_fabric 조각의 실제 크기
+    public const float PLAYER_SMOOTH_MUL = 1.0f;         // 매끈함 배율 (부위별 윤기 그림 × 이 값: 옷 0.07 · 장화 0.45 · 장갑 0.35) — Shift+3 4
+    public const int PLAYER_DIRT_LEVEL = 1;              // 탄가루 0 옅게 · 1 보통 · 2 짙게 (사용자 09-30 "보통") — Shift+5
     public const float PLAYER_STAND_M = 2.5f;            // Shift+7: 내 앞에 세우는 거리
     public const float PLAYER_TURN_S = 6f;               // Shift+8 세 번째 동작: 한 바퀴 도는 시간
 

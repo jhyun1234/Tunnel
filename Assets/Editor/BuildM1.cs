@@ -280,6 +280,9 @@ public static class BuildM1
         var playerBody = bodyGo.AddComponent<PlayerBody>();
         playerBody.cam = camGo.transform;
         playerBody.pickaxe = pickaxe;
+        playerBody.skinAsset = AssetDatabase.LoadAssetAtPath<Material>(PlayerLookSetup.SKIN);           // 3D-P2 재질 (Editor/PlayerLookSetup)
+        playerBody.clay = AssetDatabase.LoadAssetAtPath<Material>(PlayerLookSetup.CLAY);
+        playerBody.dirt = Enumerable.Range(0, 3).Select(i => (Texture)AssetDatabase.LoadAssetAtPath<Texture2D>(PlayerLookSetup.Dirt(i))).ToArray();
         hud.body = playerBody;
         check.body = playerBody;
 
