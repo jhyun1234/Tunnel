@@ -216,7 +216,7 @@ public class DevHud : MonoBehaviour
     }
 
     string BodyLine() => body == null ? "" :
-        $"\nplayer arms: shoulder fwd {body.fpForward * 100f:0} cm (PLAYER_FP_OFFSET.z {Tuning.PLAYER_FP_OFFSET.z * 100f:0}) [Shift+← Shift+→]  grip R {(body.RightOn ? $"{Vector3.Distance(body.RightGripPoint, pickaxe.gripRear.position) * 100f:0.0} cm" : "-")} L {(body.LeftOn ? $"{Vector3.Distance(body.LeftGripPoint, pickaxe.gripFront.position) * 100f:0.0} cm" : "-")}" +
+        $"\nplayer arms: shoulder fwd {body.fpForward * 100f:0} cm (PLAYER_FP_OFFSET.z {Tuning.PLAYER_FP_OFFSET.z * 100f:0}) [Shift+← Shift+→]  grip R {(body.RightOn ? $"{Vector3.Distance(body.RightGripPoint, pickaxe.gripRear.position) * 100f:0.0} cm" : "-")}" +
         $"   stood body {(stood == null ? "off" : stood.GetComponent<PlayerBody>() is PlayerBody sb ? sb.action.ToUpper() : "?")} [Shift+7] next action [Shift+8]{(PlayerBody.noKevin || body.Anim.runtimeAnimatorController == null ? "  (no Kevin motion)" : "")}";
 
     // ORE-1 판정 손잡이: 광석(결 덩이 coal_lump · 캘 덩이 coal_fresh) 반짝임 = 거칠기 ÷ oreShine. 받은 숫자를 Tuning.ORE_SHINE 에

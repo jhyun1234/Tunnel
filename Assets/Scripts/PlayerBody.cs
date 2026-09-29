@@ -4,7 +4,8 @@ using UnityEngine.Rendering;
 
 // 3D-P 플레이어 몸 (제안서 docs/제안서_3DP_플레이어_모델.md, 승인 09-29). 모델 하나(Assets/Tunnel/Player/player.fbx, 사람형 · Mixamo 뼈대)에 스위치 하나:
 //  Self (내 몸, 1인칭) = 카메라에 붙고 팔(PlayerArms)만 그린다 · 곡괭이 층(ViewModel 레이어 — 오버레이 카메라, PickLight 만 비춤) · 그림자 없음.
-//    곡괭이가 주인이다 — 곡괭이 움직임은 안 바꾸고 손이 뷰모델 곡괭이 손잡이를 따라간다: 오른손 GRIP_Rear · 캘 때 왼손 GRIP_Front · 빈손이면 두 손 화면 밖.
+//    곡괭이가 주인이다 — 곡괭이 움직임은 안 바꾸고 오른손이 뷰모델 곡괭이 손잡이 GRIP_Rear 를 따라간다. 왼손은 캘 때도 화면 밖 — 한 손 캐기
+//    (판정 ④ 사용자 09-30 "두 손으로 캘 때 손 위치가 이상하다. 중지와 검지 사이에 자루가 들어가 있다. 한 손으로 캐는 걸로"). 빈손이면 두 손 화면 밖.
 //    캐는 동안(동작 표)은 몸이 표 틀(Kevin 몸 자리)에 서고 Kevin 캐기 동작을 곡괭이와 같은 박자로 튼다. 팔이 안 닿으면 (안 그리는) 몸을 손잡이 쪽으로 민다.
 //  Other (남의 몸, 3인칭) = 땅에 서서 몸 · 팔 · 소품을 다 그린다 · 보통 층(머리등이 비춤) · 곡괭이 복사본을 오른손에 쥔다. Shift+7 판정 몸 · NET-1 다른 플레이어.
 // 스위치는 그리는 것 · 조명 층 · 붙는 곳만 바꾼다 — 모델 · 뼈대 · 동작 묶음은 같다. 세운 몸(Stand)은 내 몸을 복사해 Other 로 바꾼 것.
@@ -19,7 +20,7 @@ public class PlayerBody : MonoBehaviour
     public Transform cam;          // Self 가 붙는 곳 (메인 카메라)
     public Pickaxe pickaxe;        // Self: 뷰모델 곡괭이 · Other: 곡괭이 모양을 복사해 온다
     // 사보타주 (M1Check): 손을 안 붙임 · 1인칭에 몸 전체 · 스위치가 안 먹음 · 세운 몸을 스위치 없이 따로 · Kevin 동작 없이(다른 컴퓨터)
-    public static bool noIk, fpBody, noSwitch, standalone, noKevin;
+    public static bool noIk, fpBody, noSwitch, standalone, noKevin, twoHands;   // twoHands: 판정 ④ 전 — 캘 때 왼손이 앞 손잡이(GRIP_Front)로
     [System.NonSerialized] public float fpForward = Tuning.PLAYER_FP_OFFSET.z;   // 판정 키 Shift+← →
     [System.NonSerialized] public string action = "idle";                        // Other: idle → mine → turn (Shift+8)
 
@@ -45,7 +46,7 @@ public class PlayerBody : MonoBehaviour
     Vector3 headBind, hipsBind, bodyFix;                    // bodyFix: 동작이 없을 때 몸 가운데를 처음 자리로 (뿌리 기준)
     Transform hips;
     int lateFrames;
-    Transform ownPick, ownGripFront;
+    Transform ownPick;
     float wMine, t, yaw0, idleLen = 1f, mineLen = 1f;
     bool hasMine, hasClips;
     bool Still => noKevin || !hasClips;                     // 동작 없음(Kevin 이 없는 컴퓨터) — 사람형 빈 상태는 몸 가운데를 발밑에 둬 93 cm 가라앉았다(09-29 nokevin)
@@ -61,7 +62,6 @@ public class PlayerBody : MonoBehaviour
     public Vector3 LeftGripPoint => L.hand.TransformPoint(L.palm);
     public bool RightOn => R.w >= 1f;                                // 다 쥔 채 (바뀌는 중이 아님)
     public bool LeftOn => L.w >= 1f;
-    public Transform LeftGripTarget => mode == Mode.Self ? pickaxe.gripFront : ownGripFront;
 
     void Awake()
     {
@@ -194,7 +194,6 @@ public class PlayerBody : MonoBehaviour
         ownPick.name = "HeldPick";
         ownPick.localRotation = R.grip;
         ownPick.localPosition = R.palm - ownPick.localRotation * Vector3.Scale(ownPick.localScale, Tuning.GRIP_REAR);
-        ownGripFront = ownPick.Find("GRIP_Front");
         foreach (var x in ownPick.GetComponentsInChildren<Transform>(true)) x.gameObject.layer = 0;
         foreach (var r in ownPick.GetComponentsInChildren<Renderer>(true))
         {
@@ -295,7 +294,7 @@ public class PlayerBody : MonoBehaviour
         bool hasPick = pickaxe.hasPick, direct = pickaxe.Direct;
         float blend = dt / Tuning.PLAYER_HAND_BLEND_S;
         R.w = Mathf.MoveTowards(R.w, hasPick ? 1f : 0f, blend);
-        L.w = Mathf.MoveTowards(L.w, hasPick && pickaxe.Mining ? 1f : 0f, blend);
+        L.w = Mathf.MoveTowards(L.w, twoHands && hasPick && pickaxe.Mining ? 1f : 0f, blend);
         bool toMine = direct && pickaxe.minePhase != "lower";
         wMine = Mathf.MoveTowards(wMine, toMine ? 1f : 0f, dt / (toMine ? Tuning.MINE_MOTION_BLEND_S : Tuning.MINE_LOWER_S));
         Play(direct ? "Mine" : "Idle");
@@ -332,14 +331,8 @@ public class PlayerBody : MonoBehaviour
         Param("MineT", t / mineLen % 1f);
         Param("IdleT", t / idleLen % 1f);
         if (action == "turn") transform.rotation = Quaternion.Euler(0f, yaw0 + 360f * t / Tuning.PLAYER_TURN_S, 0f);
-        // 오른손은 곡괭이를 쥐고 있다(손 자식). 왼손은 캘 때 앞 손잡이로 — Kevin 캐기는 한 손이라 닿는 동안만 (몸을 밀면 보인다)
-        float d = Vector3.Distance(ownGripFront.position, transform.TransformPoint(L.shLocal));
-        float reach = Mathf.Clamp01((Tuning.PLAYER_ARM_REACH_M + 0.08f - d) / 0.08f);
-        L.w = Mathf.MoveTowards(L.w, action == "mine" ? reach : 0f, dt / Tuning.PLAYER_HAND_BLEND_S);
-        Aim(L, ownGripFront.position, ownPick.rotation, L.hand.position);
-        R.w = 1f;
-        R.ik = false;
-        L.ik = L.w > 0f;
+        R.w = 1f;                                                 // 오른손은 곡괭이를 쥐고 있다(손 자식) · 왼손은 동작 그대로 — 한 손 캐기
+        R.ik = L.ik = false;
     }
 
     // 손목 목표: 쥐는 점이 손잡이에 오게 (손 방향은 쥘수록 곡괭이를 쥔 방향으로), 쥐지 않으면 rest(손목 자리)로

@@ -236,11 +236,11 @@ public static class Tuning
     // 캐는 동안(동작 표) 몸 뿌리는 표 틀(원점 = 내려친 순간 눈)의 −이 자리에 — Kevin 캐기 동작을 이 몸에 입혀 잰 내려친 순간 눈(몸 뿌리 기준, PlayerRigTest.MeasureMineBatch).
     // 그러면 몸이 Kevin 과 같은 자리에서 표의 곡괭이를 쥔다(오른손 어깨 → 손잡이 가장 멀 때 52.7 cm)
     public static readonly Vector3 PLAYER_MINE_EYE = new Vector3(0.009f, 1.513f, 0.313f);
-    public const float PLAYER_ARM_REACH_M = 0.52f;       // 1인칭: 어깨 → 쥐는 점이 이보다 멀면 (안 그리는) 몸을 손잡이 쪽으로 민다. Kevin 캐기는 한 손이라 왼손 앞 손잡이가 어깨에서 64~82 cm
+    public const float PLAYER_ARM_REACH_M = 0.52f;       // 1인칭: 어깨 → 쥐는 점이 이보다 멀면 (안 그리는) 몸을 손잡이 쪽으로 민다 (Kevin 캐기 틀에서 오른손 가장 멀 때 52.7 cm)
     public const float PLAYER_HAND_BLEND_S = 0.15f;      // 한 손 ↔ 두 손 · 빈손으로 바뀌는 시간
     public const float PLAYER_FP_ARM_TINT = 0.7f;        // 1인칭 팔만 색을 이만큼 — 흰 면장갑 등 · 소매 끝이 곡괭이 등(30 cm 앞)에 하얗게 탔다(5.2 %, 문턱 3 %, 09-29)
     public static readonly Vector3 PLAYER_REST_R = new Vector3(0.28f, -0.75f, 0.15f);    // 곡괭이가 없을 때 오른손 (카메라 기준, 화면 밖)
-    public static readonly Vector3 PLAYER_REST_L = new Vector3(-0.28f, -0.75f, 0.15f);   // 걸을 때 · 빈손일 때 왼손 (화면 밖, 09-27 기본값)
+    public static readonly Vector3 PLAYER_REST_L = new Vector3(-0.28f, -0.75f, 0.15f);   // 왼손은 늘 여기 (화면 밖) — 캘 때도 한 손(판정 ④ 사용자 09-30)
     public static readonly Vector3 PLAYER_ELBOW = new Vector3(0.25f, -0.35f, -0.10f);   // 팔꿈치가 향하는 쪽 (어깨 기준 · 오른팔, 왼팔은 x 반대) — 바깥 · 아래 · 조금 뒤
     public const float PLAYER_PALM_ALONG_M = 0.04f;      // 쥐는 점 = 손목 뼈에서 손가락 쪽으로 · 손바닥 쪽으로 (자루 지름 3.5 cm 를 감아쥔 주먹 가운데)
     public const float PLAYER_PALM_IN_M = 0.03f;

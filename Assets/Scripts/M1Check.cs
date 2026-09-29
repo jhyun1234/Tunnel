@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -144,6 +144,7 @@ public class M1Check : MonoBehaviour
         PlayerBody.noSwitch = sabotage == "noswitch";       // 스위치를 바꿔도 내 몸 그대로
         PlayerBody.standalone = sabotage == "standalone";   // 세운 몸을 스위치 없이 따로 만든 몸으로
         PlayerBody.noKevin = sabotage == "nokevin";         // Kevin 동작 없이 (다른 컴퓨터) — 손은 그래도 곡괭이를 쥐어야 한다
+        PlayerBody.twoHands = sabotage == "twohands";       // 판정 ④ 전: 캘 때 왼손도 자루로 (사용자 09-30 "한 손으로 캐는 걸로")
         if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
             MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
@@ -2589,10 +2590,11 @@ public class M1Check : MonoBehaviour
 
     // ================= 3D-P 플레이어 몸 (제안서 docs/제안서_3DP_플레이어_모델.md, 승인 09-29). -only player
     // ① 모델: 사람형 · 양손 손가락 뼈 · 물체마다 재질 하나 ② 1인칭: 팔만 그림 + 캐는 동안 장갑 · 소매가 화면에 (팔을 끈 화면과 픽셀로) ③ 1인칭 팔이 안 탐
-    // ④ 손이 손잡이에: 걷기 · 서서 캐기 · 쪼그려 캐기 동안 쥐는 점 ↔ GRIP_Rear · 캘 때 왼손 ↔ GRIP_Front, 프레임마다 잰 가장 먼 값 ≤ 3 cm (한 손 ↔ 두 손 바뀌는 0.15 s 는 뺌)
+    // ④ 손이 손잡이에: 걷기 · 서서 캐기 · 쪼그려 캐기 동안 오른손 쥐는 점 ↔ GRIP_Rear, 프레임마다 잰 가장 먼 값 ≤ 3 cm (빈손 ↔ 쥠 바뀌는 0.15 s 는 뺌)
+    //   + 한 손 캐기(판정 ④ 사용자 09-30): 캐는 동안 왼손은 자루를 안 쥐고 화면에도 안 나온다
     // ⑤ 스위치 Self → Other → Self (그리는 것 · 조명 층 · 붙는 곳 · 발바닥) + 세운 몸(Shift+7 과 같은 길)이 같은 모델 · 뼈대 · 동작 묶음의 Other
     // ⑥ 세운 몸 소품이 뼈를 따라감(서 있기 → 서서 캐기 → 한 바퀴, ≤ 2 cm) ⑦ 세운 몸 머리등 그림자 얼룩 없음. 사람이 볼 캡처 50_player_fp_* · 51_player_body_* · 52_player_body_mine_*
-    // 사보타주: noik → ④ · fpbody → ② · noswitch · standalone → ⑤ · nokevin → ④ 는 통과해야 한다
+    // 사보타주: noik · twohands → ④ · fpbody → ② · noswitch · standalone → ⑤ · nokevin → ④ 는 통과해야 한다
     IEnumerator PlayerStage(CharacterController cc)
     {
         var b = body;
@@ -2622,11 +2624,13 @@ public class M1Check : MonoBehaviour
             $"controller {(ctrl != null ? $"{ctrl.name} clips {string.Join(" ", ctrl.animationClips.Select(c => c.name))}" : "none")}");
 
         // ④ 손이 손잡이에 — 0 걷기 · 1 서서 캐기 · 2 쪼그려 캐기
-        var maxR = new float[3]; var maxL = new float[3]; var nR = new int[3]; var nL = new int[3];
+        var maxR = new float[3]; var nR = new int[3]; var leftGrip = new int[3]; var leftSeen = new int[3];
         void Sample(int k)
         {
             if (b.RightOn) { maxR[k] = Mathf.Max(maxR[k], Vector3.Distance(b.RightGripPoint, pickaxe.gripRear.position)); nR[k]++; }
-            if (b.LeftOn) { maxL[k] = Mathf.Max(maxL[k], Vector3.Distance(b.LeftGripPoint, pickaxe.gripFront.position)); nL[k]++; }
+            if (b.LeftOn) leftGrip[k]++;
+            Vector3 v = vm.WorldToViewportPoint(b.LeftGripPoint);
+            if (v.z > 0f && v.x > 0f && v.x < 1f && v.y > 0f && v.y < 1f) leftSeen[k]++;
         }
         Teleport(cc, new Vector3(0f, 0.1f, 4f), 0f);
         player.Look(new Vector2(0f, player.Pitch / (Tuning.MOUSE_SENSITIVITY * Mathf.Rad2Deg)));
@@ -2660,7 +2664,7 @@ public class M1Check : MonoBehaviour
             yield return new WaitForEndOfFrame();
             Sample(1);
             if (!shotTop && pickaxe.minePhase == "top") { shotTop = true; ScreenCapture.CaptureScreenshot(Path.Combine(outDir, "50_player_fp_top.png")); }
-            if (armRect.width == 0f && pickaxe.minePhase == "stuck" && pickaxe.strikeTimes.Count >= 2 && b.LeftOn)
+            if (armRect.width == 0f && pickaxe.minePhase == "stuck" && pickaxe.strikeTimes.Count >= 2)
             {
                 vpR = vm.WorldToViewportPoint(b.RightGripPoint);
                 vpL = vm.WorldToViewportPoint(b.LeftGripPoint);
@@ -2689,10 +2693,10 @@ public class M1Check : MonoBehaviour
         InputSystem.QueueStateEvent(kb, new KeyboardState());
         yield return new WaitForSeconds(0.3f);
         const float GripMax = 0.03f;
-        bool gripOk = nR.All(n => n >= 30) && nL[1] >= 30 && nL[2] >= 30 && maxR.All(d => d <= GripMax) && maxL.All(d => d <= GripMax);
+        bool gripOk = nR.All(n => n >= 30) && maxR.All(d => d <= GripMax) && leftGrip.Sum() == 0 && leftSeen.Sum() == 0;
         Check("player_hands_on_grip", gripOk,
-            $"right ↔ GRIP_Rear max walk {maxR[0] * 100f:F1} · stand mine {maxR[1] * 100f:F1} · crouch mine {maxR[2] * 100f:F1} cm (frames {nR[0]} {nR[1]} {nR[2]}) · " +
-            $"left ↔ GRIP_Front max stand {maxL[1] * 100f:F1} · crouch {maxL[2] * 100f:F1} cm (frames {nL[1]} {nL[2]}) — want ≤ {GripMax * 100f:0} cm, ≥ 30 frames each · Kevin motion {(PlayerBody.noKevin || ctrl == null ? "off" : "on")}");
+            $"right ↔ GRIP_Rear max walk {maxR[0] * 100f:F1} · stand mine {maxR[1] * 100f:F1} · crouch mine {maxR[2] * 100f:F1} cm (frames {nR[0]} {nR[1]} {nR[2]}) — want ≤ {GripMax * 100f:0} cm, ≥ 30 frames each · " +
+            $"one-handed: left hand gripping {leftGrip[0]} {leftGrip[1]} {leftGrip[2]} · on screen {leftSeen[0]} {leftSeen[1]} {leftSeen[2]} frames (want 0) · Kevin motion {(PlayerBody.noKevin || ctrl == null ? "off" : "on")}");
 
         // ② ③ 1인칭 팔만 · 캐는 동안 화면에 · 안 탐 (서서 캐기 두 번째 콱, 두 손)
         var onNames = rends.Where(r => r.enabled).Select(r => r.name).ToArray();
@@ -2747,8 +2751,8 @@ public class M1Check : MonoBehaviour
         int iTop = Enumerable.Range(0, cw.Length).OrderBy(i => (cw[i] - clipAt).sqrMagnitude).First(), iBot = Enumerable.Range(0, cw.Length).OrderBy(i => (cw[i] - batAt).sqrMagnitude).First();
         Vector3 h0 = head.InverseTransformPoint(helmet.position), b0 = hips.InverseTransformPoint(battery.position), c0 = clip.InverseTransformPoint(cw[iTop]), c1 = battery.InverseTransformPoint(cw[iBot]);
         Debug.Log($"CORD ends: top vertex {iTop} {(cw[iTop] - clipAt).magnitude * 100f:F1} cm from Helmet_CordClip · bottom vertex {iBot} {(cw[iBot] - batAt).magnitude * 100f:F1} cm from Battery_Body · {cw.Length} vertices");
-        float devH = 0f, devB = 0f, devC = 0f, leftMin = 9f;
-        int leftOn = 0, mineFrames = 0, shots = 0;
+        float devH = 0f, devB = 0f, devC = 0f;
+        int shots = 0;
         float mineAt = 2f, turnAt = 5.5f;
         for (float s = 0f; s < turnAt + Tuning.PLAYER_TURN_S; s += Time.deltaTime)
         {
@@ -2759,17 +2763,11 @@ public class M1Check : MonoBehaviour
             devH = Mathf.Max(devH, (head.InverseTransformPoint(helmet.position) - h0).magnitude);
             devB = Mathf.Max(devB, (hips.InverseTransformPoint(battery.position) - b0).magnitude);
             devC = Mathf.Max(devC, (clip.InverseTransformPoint(cw[iTop]) - c0).magnitude, (battery.InverseTransformPoint(cw[iBot]) - c1).magnitude);
-            if (sb != null && sb.action == "mine")
-            {
-                mineFrames++;
-                if (sb.LeftOn) leftOn++;
-                leftMin = Mathf.Min(leftMin, Vector3.Distance(sb.LeftGripPoint, sb.LeftGripTarget.position));
-                if (s > mineAt + 0.5f + shots * 0.25f && shots < 8) ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"52_player_body_mine_{shots++}.png"));
-            }
+            if (sb != null && sb.action == "mine" && s > mineAt + 0.5f + shots * 0.25f && shots < 8)
+                ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"52_player_body_mine_{shots++}.png"));
         }
         Check("player_body_props_attached", devH <= 0.02f && devB <= 0.02f && devC <= 0.02f && cw.Length > 0,
-            $"helmet on head bone moved {devH * 100f:F2} cm · battery on hips {devB * 100f:F2} cm · lamp cord ends (helmet back · battery) {devC * 100f:F2} cm (max 2) over idle · mine · turn | " +
-            $"stood body mining: left hand on the front grip {leftOn}/{mineFrames} frames, closest {leftMin * 100f:F1} cm (Kevin mining is one-handed)");
+            $"helmet on head bone moved {devH * 100f:F2} cm · battery on hips {devB * 100f:F2} cm · lamp cord ends (helmet back · battery) {devC * 100f:F2} cm (max 2) over idle · mine · turn");
 
         // ⑦ 세운 몸 그림자 얼룩: 2 m 정면, 머리등 그림자 켬 ÷ 끔 (괴물 monster_skin_no_acne 와 같은 방법)
         if (sb != null) sb.PlaceOn(P + Vector3.forward * 2f, 180f); else stoodGo.transform.position = P + Vector3.forward * 2f;
