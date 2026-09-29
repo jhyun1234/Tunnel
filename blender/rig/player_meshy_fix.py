@@ -8,7 +8,7 @@
   ③ 굵은 팔: 검은 소매만(원래 그림 색으로 가림) 팔 축 쪽으로 × 0.86 (※ 어림)
 자리 값(목 · 안전모)은 밑그림 장면의 scene["player_info"] — 소품이 맞는 같은 틀.
 검사(FAIL 이면 종료 1): 머리가 안전모 안쪽에 들어감 · 목 둘레 덩어리가 목에서 2.5 cm 안 · 소매 굵기가 줄었나 · 점 수 그대로
-사보타주: SABOTAGE=nofix(아무것도 안 고침) → 세 검사 FAIL · helmetfwd(안전모를 옛 자리에 둠) → 챙 균형 FAIL
+사보타주: SABOTAGE=nofix(아무것도 안 고침) → 세 검사 FAIL · helmetfwd(안전모를 옛 자리에 둠) → 챙 균형 FAIL · norepaint(목 옆 · 뒤통수 얼룩을 안 칠함, 그림 판에서만) → 얼룩 두 검사 FAIL
 출력: build/player/player_<이름>_fix.blend · MineTunnel/mesh/meshy_<이름>_fix.glb(고친 몸, 원래 그림) · 그림 P2_*_fix*"""
 import bpy, os, sys, math
 import numpy as np
@@ -150,7 +150,7 @@ B.check(fails, "fix_helmet_balanced", abs(fo - bo) < 0.015,
 B.check(fails, "fix_same_vertices", len(me.vertices) == n and len(me.polygons) == 30762, f"점 {len(me.vertices)} · 면 {len(me.polygons)} (그대로여야 다시 입힌 그림이 맞는다)")
 
 # ── 저장 · 그림 ── (사보타주 때는 결과 파일을 덮어쓰지 않는다)
-if SAB:
+if SAB and SAB != "norepaint":
     print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
 tag = f"{name}_fix"
 if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 씌운다
@@ -171,6 +171,68 @@ if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 �
         keep = glove | cotton
         grime = np.clip(rp[..., :3].mean(axis=-1) / 0.30, 0, 1)[..., None]
         out = rp.copy(); out[..., :3] = np.where(keep[..., None], op_[..., :3] * (0.55 + 0.45 * grime), rp[..., :3])
+        # ⑤ 목 옆 얼룩(사용자 09-29 "목 옆 얼룩 고쳐라"): Meshy 목깃 자리의 빨강 · 흰색 — ① 귀 아래 ~ 목수건 위 목 ② 목 속으로 넣은 목깃 조각(목 살 사이로 비친다)
+        #    은 목 살색으로, ③ 뒤통수 아래(두 귀 사이, 안전모 밑)에 드러난 살색 조각은 머리카락 색으로. 밝고 어두운 결(때)은 남기고 색만 바꾼다
+        # 면(삼각형) 가운데 자리로 구역을 나눈다(09-29 두 번 해 보니 얼룩은 목 가운데에서 11~13 cm, 목수건 위 ~ 귀 높이 뒤통수 아래에 많았다)
+        me.calc_loop_triangles(); uvl = me.uv_layers[0].data
+        fc = np.array([co[list(p_.vertices)].mean(axis=0) for p_ in me.polygons])
+        rn_c = np.hypot(fc[:, 0] - nk_c[0], fc[:, 1] - nk_c[1]); dy = fc[:, 1] - nk_c[1]; ax = np.abs(fc[:, 0] - hcx); fz = fc[:, 2]
+        lump_f = np.array([lump[list(p_.vertices)].any() for p_ in me.polygons])
+        front_face = (dy < -0.04) & (fz > nb + 0.02)                                   # 얼굴(방독면 속) — 입술 · 눈은 그대로
+        ear = (ax > 0.062) & (fz > nb + 0.04) & (np.abs(dy) < 0.06)
+        near = rn_c < 0.17
+        hair_f = near & (fz > nb + 0.03) & (fz < rim) & (dy > 0.03) & ~ear              # ③ 뒤통수 아래(안전모 밑) → 머리카락 색
+        neck_f = (near & (fz > nb - 0.06) & (fz < nb + 0.075) & ~front_face & ~ear & ~hair_f) | lump_f   # ①② 목 → 살색
+        low_f = near & (fz > nb - 0.14) & (fz <= nb - 0.06) & ~neck_f                   # ④ 목수건 아래 옷깃 → 빨강 · 흰 칸만 옷 색
+        def raster(fsel, grow=True):
+            m_ = np.zeros((rh, rw), bool)
+            for lt in me.loop_triangles:
+                if not fsel[lt.polygon_index]: continue
+                t3 = np.array([uvl[l].uv[:] for l in lt.loops]) * [rw, rh]
+                x0, y0 = np.floor(t3.min(axis=0)).astype(int); x1, y1 = np.ceil(t3.max(axis=0)).astype(int)
+                xs, ys = np.meshgrid(np.arange(max(x0, 0), min(x1, rw - 1) + 1), np.arange(max(y0, 0), min(y1, rh - 1) + 1))
+                if xs.size == 0: continue
+                (ax_, ay_), (bx_, by_), (cx_, cy_) = t3; den = (by_ - cy_) * (ax_ - cx_) + (cx_ - bx_) * (ay_ - cy_)
+                if abs(den) < 1e-9: continue
+                px_, py_ = xs + 0.5, ys + 0.5
+                l1 = ((by_ - cy_) * (px_ - cx_) + (cx_ - bx_) * (py_ - cy_)) / den; l2 = ((cy_ - ay_) * (px_ - cx_) + (ax_ - cx_) * (py_ - cy_)) / den
+                ins = (l1 >= -0.02) & (l2 >= -0.02) & (1 - l1 - l2 >= -0.02)
+                m_[ys[ins], xs[ins]] = True
+            if grow:   # 그림 조각 밖 빈칸으로만 12 칸 넓힌다 — 멀리서 쓰는 흐린 그림(밉맵)이 옆 칸 색을 섞어 와 가장자리에 빨간 줄이 났다(09-29)
+                for _ in range(12):
+                    m_ = m_ | ((np.roll(m_, 1, 0) | np.roll(m_, -1, 0) | np.roll(m_, 1, 1) | np.roll(m_, -1, 1)) & pad)
+            return m_
+        pad = ~raster(np.ones(len(me.polygons), bool), grow=False)                   # 어느 조각에도 안 쓰이는 빈칸
+        nmask = raster(neck_f); hmask = raster(hair_f) & ~nmask; lmask = raster(low_f, grow=False) & ~nmask & ~hmask
+        allm = nmask | hmask | lmask
+        def is_stain(c3):
+            lum_ = c3.mean(axis=1); sat_ = c3.max(axis=1) - c3.min(axis=1)
+            return ((c3[:, 0] > 1.55 * c3[:, 1]) & (c3[:, 0] > 0.3)) | ((lum_ > 0.6) & (sat_ < 0.15))
+        def stains(img): return float(is_stain(img[allm][:, :3]).mean())
+        def bright(img): return float((img[hmask][:, :3].mean(axis=1) > 0.3).mean())
+        st0, br0 = stains(out), bright(out)
+        def repaint(m_, base, ref):
+            c3 = out[m_][:, :3]; lum_ = c3.mean(axis=1)
+            out[m_, :3] = base[None, :] * np.clip(lum_ / max(ref, 1e-3), 0.75, 1.15)[:, None] * 0.92
+        c3 = out[nmask][:, :3]; lum_ = c3.mean(axis=1)
+        skinlike = (c3[:, 0] > c3[:, 1]) & (c3[:, 1] > c3[:, 2]) & (lum_ > 0.2) & (lum_ < 0.7) & (c3[:, 0] < 1.45 * c3[:, 1])
+        base = np.median(c3[skinlike], axis=0) * 0.85 if skinlike.sum() > 100 else np.array([0.40, 0.30, 0.23])   # 목은 그늘 · 때로 얼굴보다 조금 어둡게(어림)
+        h3 = out[hmask][:, :3]; hl = h3.mean(axis=1)
+        hbase = np.median(h3[hl < 0.15], axis=0) if (hl < 0.15).sum() > 100 else np.array([0.05, 0.045, 0.04])
+        l3 = out[lmask][:, :3]; ll = l3.mean(axis=1)
+        jbase = np.median(l3[ll < 0.2], axis=0) if (ll < 0.2).sum() > 100 else np.array([0.08, 0.08, 0.08])
+        if SAB != "norepaint":
+            repaint(nmask, base, float(np.median(lum_[skinlike])) if skinlike.sum() > 100 else 0.35)
+            repaint(hmask, hbase, float(np.median(hl[hl < 0.15])) if (hl < 0.15).sum() > 100 else 0.05)
+            lst = np.zeros_like(lmask); lst[lmask] = is_stain(out[lmask][:, :3])
+            out[lst, :3] = jbase[None, :]
+        st1, br1 = stains(out), bright(out)
+        B.check(fails, "fix_neck_stain", st1 < 0.01,
+                f"목 · 뒤통수 아래 · 옷깃 그림 칸 {allm.sum()} 개 — 빨강 · 흰 얼룩 {st0*100:.1f} → {st1*100:.1f} % (< 1 %) · 칠한 살색 {tuple(round(float(v), 2) for v in base)} · 옷 색 {tuple(round(float(v), 2) for v in jbase)}")
+        B.check(fails, "fix_hair_patch", br1 < 0.02,
+                f"뒤통수 아래 그림 칸 {hmask.sum()} 개 — 밝은 조각 {br0*100:.1f} → {br1*100:.1f} % (< 2 %) · 머리카락 색 {tuple(round(float(v), 3) for v in hbase)}")
+        if SAB == "norepaint":
+            print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
         ni = bpy.data.images.new("player_fix_retex_base", rw, rh, alpha=True); ni.pixels.foreach_set(out.ravel())
         ni.filepath_raw = os.path.join(V.OUT, f"player_{tag}_base.png"); ni.file_format = "PNG"; ni.save(); tex_node.image = ni
         print(f"INFO 장갑 · 손목 색 되살림: 고무 {glove.mean()*100:.2f} % · 면(흰색) {cotton.mean()*100:.2f} % 의 그림 칸")
