@@ -8,7 +8,7 @@
 만드는 법: 머리 속 한 점에서 얼굴 쪽으로 선을 쏘아 겉면을 찾고, 그 위로 띄운 그물(가장자리는 얼굴에 붙고 가운데는 뜬 컵)에 두께를 준다.
 검사(FAIL 이면 종료 1): 마스크 안쪽이 얼굴에 안 파묻힘(≥ 2 mm) · 가리는 곳(half: 코끝 · 입 / full: 눈 · 코 · 입)을 앞에서 쏘면 마스크에 먼저 닿음 ·
     크기(half: 폭 15 · 높이 10 · 앞뒤 9.5 cm ±1.5) · full 은 윗 끝이 안전모 챙 아래
-사보타주: SABOTAGE=nogap(얼굴에서 안 띄움 → 파묻힘 FAIL) · small(half 폭 0.6 배 → 크기 FAIL)
+사보타주: SABOTAGE=nogap(얼굴에서 안 띄움 → 파묻힘 FAIL) · small(half 폭 0.6 배 → 크기 FAIL) · strapbelow(아래 끈 옛 높이 → 끈 가림 FAIL)
 출력: build/player/player_mask_<half|full>.blend · 그림 P2_player1_fix_retex2_mask_<half|full>_*.png"""
 import bpy, bmesh, os, sys, math
 import numpy as np
@@ -118,6 +118,11 @@ def strap(name, z_front, z_back, a0, width, material):
     return o
 
 
+def low_back(old):
+    """아래 끈 목 뒤 높이 = 목수건 뒤 가운데(player_meshy_fix.py 가 남김) — 목수건을 올린 뒤 옛 높이(턱 기준)면 끈이 목수건 아래 목깃 위로 지나갔다(판정 ⑨)."""
+    return old if SAB == "strapbelow" else info.get("towel_zb", old)
+
+
 parts = []
 if KIND == "half":
     rub = mat("rubber_bluegrey", (0.10, 0.13, 0.17), 0.55)                     # 문경 유물 회청색(사진에서 잼)
@@ -141,7 +146,7 @@ if KIND == "half":
         parts.append(obj(f"Mask_Buckle{jj}{side}", bm, metal))
     white = mat("strap_clear", (0.70, 0.70, 0.66), 0.4)
     parts += [strap("Mask_StrapUp", nose[2] + 0.02, eye_z + 0.02, math.radians(38), 0.014, white),
-              strap("Mask_StrapLow", mouth_z - 0.01, chin_z - 0.035, math.radians(55), 0.014, white)]
+              strap("Mask_StrapLow", mouth_z - 0.01, low_back(chin_z - 0.035), math.radians(55), 0.014, white)]
 else:
     rub = mat("rubber_black", (0.03, 0.03, 0.03), 0.6)
     z_top = min(rim - P.BRIM_DROP - 0.008, eye_z + 0.045)
@@ -165,7 +170,7 @@ else:
     strapc = mat("strap_black", (0.05, 0.05, 0.05), 0.7)
     parts += [strap("Mask_StrapTop", z_top - 0.01, rim + 0.03, math.radians(50), 0.02, strapc),
               strap("Mask_StrapMid", eye_z, eye_z + 0.01, math.radians(62), 0.02, strapc),
-              strap("Mask_StrapLow", mouth_z - 0.01, chin_z - 0.03, math.radians(62), 0.02, strapc)]
+              strap("Mask_StrapLow", mouth_z - 0.01, low_back(chin_z - 0.03), math.radians(62), 0.02, strapc)]
 
 # ── 검사 ──
 bpy.context.view_layer.update(); dg = bpy.context.evaluated_depsgraph_get()
@@ -202,6 +207,11 @@ if KIND == "half":
 else:
     B.check(fails, "mask_under_brim", hi[2] < rim - P.BRIM_DROP, f"마스크 윗 끝 {hi[2]*100:.1f} cm · 챙 앞끝 {(rim - P.BRIM_DROP)*100:.1f} cm")
     print(f"INFO 방독면 폭 {dx*100:.1f} · 높이 {dz*100:.1f} · 앞뒤 {dy*100:.1f} cm (※ 기록 없음)")
+low = next(o for o in parts if o.name == "Mask_StrapLow"); lp = [low.matrix_world @ Vector(p_.co[:3]) for p_ in low.data.splines[0].points]
+back_pt = max(lp, key=lambda q: q.y)                                                    # 목 뒤 한가운데
+tw_o = bpy.data.objects.get("Towel_Fix")
+tw_hit = BVHTree.FromObject(tw_o, dg).ray_cast(back_pt, Vector((0, 1, 0)), 0.1)[0] if tw_o else None
+B.check(fails, "mask_strap_under_towel", tw_hit is not None, f"아래 끈 목 뒤({back_pt.z:.3f} m)를 뒤에서 보면 목수건에 가려지나 — {'가려짐' if tw_hit is not None else '안 가려짐'}")
 if SAB:
     print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(V.OUT, f"player_mask_{KIND}.blend"))
