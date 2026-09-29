@@ -33,6 +33,8 @@ public class DevHud : MonoBehaviour
     [System.NonSerialized] public bool startVisible = Tuning.DEVHUD_START_VISIBLE;   // 첫 Update 에서 한 번 적용 (UI-1d: 꺼진 채 시작). 사보타주 hudon 이 켠다
     public MiningHud miningHud;                            // 소음 원·마지막 소음 (UI-1c: 원은 DevHud 켰을 때만)
     public static bool Visible { get; private set; }       // F1 상태 — MiningHud 가 본다. 컴포넌트가 꺼지면(검사) false
+    public static float TextHeight, BoxHeight;             // 검사: 글이 상자 안에 다 들어가나 (넘치면 아래 줄이 잘린다)
+    public static string LastText = "";                    // 검사: 마지막으로 그린 글 (판정 키 줄이 들어 있나)
 
     void Start()
     {
@@ -324,10 +326,15 @@ public class DevHud : MonoBehaviour
             $"\nstalker {(stalker.enabled ? stalker.state.ToString() : "OFF [0]")}  sense {stalker.sense}  heard {stalker.lastHeard}  dist {stalker.DistToPlayer:0.0} m  spots {stalker.spotsVisited}  caught {stalker.catches}  hp {stalker.hp:0} hits {stalker.hitsTaken} hidden {stalker.hiddenLeft:0} s   EAR x{stalker.earMul:0.0} (NOISE_PICK {Tuning.NOISE_PICK:0} m) · EYE {Tuning.STALKER_EYE_M:0} m {Tuning.STALKER_EYE_DEG:0}° · LIGHT {Tuning.STALKER_LIGHT_M:0} m" +
             (stalker.GetComponentInChildren<StalkerAnim>() is StalkerAnim an ? $"\nanim {an.Current} x{an.Rate:0.00} at {an.Speed:0.0} m/s{(stalker.enabled ? "" : "   [N] next clip")}   wander gait {StalkerAnim.GaitName(an.gait)} [U]   jaw {an.JawDeg:0}° (roar/catch {an.jawWideDeg:0}° [H J])\nhead test {StalkerAnim.HeadTestName(an.headTest)} [G]  face {an.HeadYaw:0}° (max {an.headYawMax:0}° [T Y])  tilt {an.HeadTiltNow:0}° (listen {an.headTilt:0}° [O P])\nneck out {an.NeckOutNow * 100f * Tuning.STALKER_MODEL_SCALE:0} cm in game (model {an.NeckOutNow * 100f:0} of {an.neckWant * 100f:0} cm [Z X], max {Tuning.STALKER_NECK_OUT_MAX_M * 100f:0})  full out in {an.neckOutS:0.00} s [C B]{(walkPreview ? "  WALK-IN PREVIEW ([9] stop)" : "")}" : "") +
             (stalker.GetComponentInChildren<StalkerLook>() is StalkerLook lk ? $"\nskin relief x{lk.normalScale:0.00} [7 8]   rough x{lk.roughMul:0.00} [, .]   eye glow {lk.eyeEmission:0.00} [k l]   neck red {lk.neckRed:0.0} [I M] bright x{lk.neckBright:0.00} [Q R]\n{LureLine(lk)}   [9] freeze monster in front of me · [0] on/off" : "");
-        GUI.Label(new Rect(10, 10, 1100, 390),
+        string text =
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + HitLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster);
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + BodyLine() + HitLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster;
+        var box = new Rect(10, 10, 1100, 390);
+        TextHeight = GUI.skin.label.CalcHeight(new GUIContent(text), box.width);
+        LastText = text;
+        BoxHeight = box.height;
+        GUI.Label(box, text);
     }
 }

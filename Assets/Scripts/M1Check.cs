@@ -360,7 +360,7 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit")
             yield return BoothStage(cc);
         if (only == "" || only == "art")
             yield return ArtStage(cc);
@@ -368,6 +368,8 @@ public class M1Check : MonoBehaviour
             yield return OreStage(cc);
         if (only == "" || only == "repair")
             yield return RepairStage(cc);
+        if (only == "" || only == "hudfit")
+            yield return HudFit("booth");
         if (only == "")
         {
             SceneManager.LoadScene("M1_Tunnel");                // 복도 씬의 M1Check 가 나머지 구간을 잇는다 (fails 는 static)
@@ -4442,6 +4444,32 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.05f);
         InputSystem.QueueStateEvent(mouse, new MouseState());
         yield return null;
+    }
+
+    // 판정 글(F1)이 상자 안에 다 들어가나 — 부스 맵은 줄이 가장 많다(전등 · 막힘 · 고칠 곳 · 틈 · 현실감). 사람이 볼 캡처 19_devhud_<곳>
+    IEnumerator HudFit(string where)
+    {
+        var hud = GetComponent<DevHud>();
+        var kb = InputSystem.AddDevice<Keyboard>("HudFitKeyboard");
+        hud.enabled = true;
+        yield return null;
+        yield return null;
+        if (!DevHud.Visible) yield return PressKey(kb, Key.F1);
+        if (body != null) PlayerBody.Stand(body, player.transform.position + player.transform.forward * Tuning.PLAYER_STAND_M, player.transform.eulerAngles.y + 180f).name = "HudFitStood";
+        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"19_devhud_{where}.png"));
+        yield return null;
+        float th = DevHud.TextHeight, bh = DevHud.BoxHeight;
+        string[] want = { "player arms", "player look", "mine motion" };           // 판정 키 줄 (3D-P · 3D-P2 · MINE-2)
+        var missing = want.Where(w => !DevHud.LastText.Contains(w)).ToList();
+        yield return PressKey(kb, Key.F1);
+        hud.enabled = false;
+        var st = GameObject.Find("HudFitStood");
+        if (st != null) Destroy(st);
+        InputSystem.RemoveDevice(kb);
+        Check($"devhud_text_fits_{where}", th > 0f && th <= bh && missing.Count == 0,
+            $"F1 text height {th:F0} px, box {bh:F0} px (lines past the box are cut off) · judgment-key lines missing {(missing.Count == 0 ? "none" : string.Join(", ", missing))} (user 09-30 \"Shift values not visible\" — BodyLine was never joined into the text) · capture 19_devhud_{where}");
     }
 
     IEnumerator PressKey(Keyboard kb, Key key)

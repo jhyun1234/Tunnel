@@ -19,6 +19,9 @@
 | `M1Check` | 검사가 전부 혼자 기준이다 |
 | `NoiseBus` | **위치만 봐서 그대로 쓸 수 있다** |
 
+**09-30 (63차 이어서) — 판정 ⑥ 중 사용자 "Shift의 값들이 F1을 켰을 때 정보가 안 보인다" → 고침.** 3D-P 차례 4 때 `BodyLine()`(player arms · player look 줄)을 F1 글에 이어 붙이는 한 줄이 빠져 있었다(바꾸기가 원문과 안 맞아 조용히 실패). 새 검사 `devhud_text_fits_booth`(`-only hudfit`, 고치기 전 FAIL 확인). 판정 ⑥ 다시.
+- 알게 된 것: 파이썬으로 원본을 고칠 때 `str.replace` 는 못 찾아도 오류가 없다 — 늘 개수를 확인(assert)하고 고친다.
+
 **09-30 (63차 이어서) — 3D-P2 판정 ⑤ 통과(사용자 "통과. 주머니도 때 묻혀라. 판정 ⑥으로 가라") → 주머니 때 → 실행 파일 판정 ⑥ 대기.**
 - 주머니는 베이지라 살로 잘못 갈려 있었다 → 따로 한 부위로 때 · 천 결(자세한 것은 제안서 "판정 ⑤ 뒤"). 화면 밝기 옛 224 → 새 135. `-only player` ALL PASS 9 — 단 `player_body_not_clay` ×1.15 로 문턱에 붙음.
 - **판정 ⑥ 방법**: `build/Tunnel/Tunnel.exe` → 인트로 "시작" → 부스 맵(전등 아래 · 머리등 둘 다) · **Shift+7** 세운 몸 · 0 괴물 끄기 · F1 줄 `player look` — **Shift+1 2** 천 결 · **Shift+3 4** 옷 윤기 · **Shift+5** 탄가루 옅게/보통/짙게 · **Shift+6** 옛/새. 받은 숫자 → `Tuning.PLAYER_CLOTH_DETAIL` · `PLAYER_SMOOTH_MUL` · `PLAYER_DIRT_LEVEL` → `PlayerLookSetup.Run`(재질에 굽기) → 전체 build.sh 한 번 → 커밋. 판정 중엔 봇 안 돌림.
