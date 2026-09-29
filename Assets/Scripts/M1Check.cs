@@ -360,7 +360,7 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes")
             yield return BoothStage(cc);
         if (only == "" || only == "art")
             yield return ArtStage(cc);
@@ -370,6 +370,8 @@ public class M1Check : MonoBehaviour
             yield return RepairStage(cc);
         if (only == "" || only == "hudfit")
             yield return HudFit("booth");
+        if (only == "sizes")                                    // 크기 · 눈높이 재기 — 전체 실행엔 안 넣는다 (판정 아닌 측정)
+            yield return SizesStage(cc);
         if (only == "")
         {
             SceneManager.LoadScene("M1_Tunnel");                // 복도 씬의 M1Check 가 나머지 구간을 잇는다 (fails 는 static)
@@ -4444,6 +4446,232 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.05f);
         InputSystem.QueueStateEvent(mouse, new MouseState());
         yield return null;
+    }
+
+    // ================= 크기 · 눈높이 재기 (사용자 09-30 "플레이어 모델 크기 · 괴물 모델 크기 · 1인칭 눈높이가 안 맞는다"). -only sizes — 판정이 아니라 잰 값 · 캡처를 남긴다
+    // 부스 광장 첫 자리(인트로 "시작"이 여는 곳)에서 내 눈 앞 PLAYER_STAND_M 에 세운 몸(Shift+7 과 같은 길) · 괴물(행동 끔, 게임에서 멈춰 선 동작 up_stand)을 나란히.
+    // 캡처 60_sizes_fp_body · _monster(내 눈, 고개 수평 — 화면 가운데 줄 = 내 눈높이, 한 몸씩 같은 자리) · 60_sizes_ortho(나란히, 정사영 — 높이를 자로 읽는다).
+    // 꼭대기 = 몸을 숨긴 장과 보인 장에서 달라진 가장 높은 줄(그림에서 잰다). 괴물 눈 = 눈 발광을 세게 켠 장과 끈 장의 차이. 괴물 동작마다 머리 꼭대기도 잰다. 값은 로그 SIZES 줄 + sizes.json → python docs/그림/크기_눈높이.py 가 한 장으로
+    IEnumerator SizesStage(CharacterController cc)
+    {
+        var kb = InputSystem.AddDevice<Keyboard>("SizesKeyboard");
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string F(float v) => v.ToString("0.000", inv);
+        stalker.enabled = false;
+        lamp.lampOn = true;
+        Vector3 spawn = OnNav(Slot("SPAWN_Player").position);
+        float yaw = Quaternion.LookRotation(Flat3(Slot("LOOK_Player").position - spawn)).eulerAngles.y;
+        Teleport(cc, spawn + Vector3.up * 0.1f, yaw);
+        player.Pitch = 0f;                                       // 고개 수평 — 화면 가운데 줄이 곧 내 눈높이
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 0.5f);
+        var cam = pickaxe.cam;
+        var mainCam = cam.GetComponent<Camera>();
+        var vm = mainCam.GetUniversalAdditionalCameraData().cameraStack[0];
+        float Up(Vector3 p)                                      // 머리 위 천장까지 (캡슐은 건너뛴다)
+        {
+            var hits = Physics.RaycastAll(p + Vector3.up * 0.5f, Vector3.up, 10f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            var h = hits.Where(x => !(x.collider is CharacterController)).OrderBy(x => x.distance).ToArray();
+            return h.Length > 0 ? h[0].point.y : float.NaN;
+        }
+
+        // 내 눈 · 숙인 눈 · 몸 캡슐
+        Vector3 me = player.transform.position;
+        float ground = PlayerBody.Ground(me).y, eye = cam.position.y - ground, capsule = cc.height, ceilMe = Up(me) - ground, rootGap = me.y - ground, camOnRoot = cam.position.y - me.y;
+        InputSystem.QueueStateEvent(kb, new KeyboardState(Key.LeftCtrl));
+        yield return new WaitForSeconds(Tuning.CROUCH_TIME + 0.4f);
+        float crouchEye = cam.position.y - ground;
+        InputSystem.QueueStateEvent(kb, new KeyboardState());
+        yield return new WaitForSeconds(Tuning.CROUCH_TIME + 0.4f);
+
+        // 세운 몸 · 괴물 — 1인칭은 한 몸씩 내 앞 가운데 같은 자리(Shift+7 · 9 키와 같은 거리), 옆 그림은 나란히
+        Quaternion q = Quaternion.Euler(0f, yaw, 0f);
+        Vector3 fwd = q * Vector3.forward, right = q * Vector3.right;
+        float D = Tuning.PLAYER_STAND_M, bodyX = -0.6f, monX = 0.9f;          // 옆 그림 자리 — 괴물이 1 m 넘게 옆이면 머리등 밖 어둠, 세운 몸이 -0.8 이면 광장 안내판(케이지 승강장)이 얼굴을 가린다
+        Vector3 at = me + fwd * D;
+        var stood = PlayerBody.Stand(body, at, yaw + 180f);
+        var sb = stood.GetComponent<PlayerBody>();
+        var scc = stalker.GetComponent<CharacterController>();
+        Vector3 Grounded(Vector3 p) => PlayerBody.Ground(p) + Vector3.up * scc.skinWidth;   // 게임처럼 — 중력으로 떨어진 괴물 뿌리는 바닥 + skinWidth (길찾기 점에 놓으면 발이 13 cm 떴다, 09-30)
+        stalker.Teleport(Grounded(at), yaw + 180f);
+        var sa = stalker.GetComponentInChildren<StalkerAnim>();
+        var lk = stalker.GetComponentInChildren<StalkerLook>();
+        var mBones = sa.GetComponentsInChildren<Transform>().Where(b => b.name.StartsWith("mixamorig:")).ToArray();
+        Transform MBone(string n) => mBones.FirstOrDefault(b => b.name == "mixamorig:" + n);
+        Transform mHead = MBone("Head"), mTop = MBone("HeadTop_End");
+        if (mHead == null || mTop == null) { Check("sizes_measured", false, $"monster bones: Head {mHead != null} HeadTop_End {mTop != null}"); yield break; }
+        var monR = sa.GetComponentsInChildren<Renderer>().ToArray();
+        var bodyR = stood.GetComponentsInChildren<Renderer>().ToArray();
+        void Show(Renderer[] rs, bool on) { foreach (var r in rs) r.forceRenderingOff = !on; }
+        void Pose(string clip) => sa.manual = Array.IndexOf(StalkerAnim.ManualClips, clip);
+        Pose("up_stand");
+
+        // 캡처 ① 내 눈 (게임 화면 그대로, 고개 수평) — 세운 몸만, 괴물만
+        Show(monR, false);
+        yield return Capture("60_sizes_fp_body", _ => { });
+        Show(monR, true); Show(bodyR, false);
+        yield return new WaitForSeconds(Tuning.STALKER_LURE_FLICKER_S + Tuning.STALKER_LURE_GAP_S + Tuning.STALKER_LURE_FADE_S + 0.5f);   // 가까이 오면 미끼 램프가 꺼지고 눈이 켜진다
+        yield return Capture("60_sizes_fp_monster", _ => { });
+        Show(bodyR, true);
+
+        // 옆 그림 자리로
+        sb.PlaceOn(at + right * bodyX, yaw + 180f);
+        stalker.Teleport(Grounded(at + right * monX), yaw + 180f);
+        var baked = new Mesh();
+        yield return new WaitForSeconds(0.5f);
+        float mFloor = PlayerBody.Ground(stalker.transform.position).y, bFloor = PlayerBody.Ground(stood.transform.position).y, ceilMon = Up(stalker.transform.position) - mFloor;
+
+        // 세운 몸 뼈 · 몸 그물만 꼭대기 (크기 1 이라 굽기가 맞다 — 괴물은 부품 여럿 · ×1.5 라 굽기가 그림과 안 맞아(2.59 · 4.32 vs 그림 2.86) 그림에서 잰다)
+        var sAnim = stood.GetComponent<Animator>();
+        var sBody = stood.GetComponentsInChildren<SkinnedMeshRenderer>().First(r => r.name == "PlayerBody");
+        sBody.BakeMesh(baked, true);
+        float bodyOnlyTop = baked.vertices.Max(v => (sBody.transform.position + sBody.transform.rotation * v).y) - bFloor;
+        float bodyHead = sAnim.GetBoneTransform(HumanBodyBones.Head).position.y - bFloor;
+        var bTopT = stood.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name.EndsWith("HeadTop_End"));
+        float bodyHeadTop = bTopT != null ? bTopT.position.y - bFloor : float.NaN;
+
+        // ② 같은 자리 정사영 — 바닥 −0.1 ~ 3.9 m, 1 m = 270 px. 팔 · 곡괭이(겹친 카메라)는 끈다
+        const float OrthoHalf = 2.0f, OrthoMid = 1.9f;
+        vm.enabled = false;
+        mainCam.orthographic = true;
+        mainCam.orthographicSize = OrthoHalf;
+        cam.localPosition = new Vector3(0f, ground + OrthoMid - cam.position.y, 0f);
+        Transform camParent = cam.parent;                        // 재는 동안 머리에서 뗀다 — 뛰는 괴물의 발 구르기가 머리를 쉬지 않고 흔들어 두 장이 안 겹쳤다(09-30)
+        Quaternion camRot = cam.localRotation;
+        cam.SetParent(null, true);
+        float camY = cam.position.y;
+        int w = 0, h = 0;
+        IEnumerator Grab(string file, Action<Color32[]> got)
+        {
+            yield return new WaitForEndOfFrame();
+            var tex = ScreenCapture.CaptureScreenshotAsTexture();
+            if (file != null) File.WriteAllBytes(Path.Combine(outDir, file + ".png"), tex.EncodeToPNG());
+            w = tex.width; h = tex.height;
+            got(tex.GetPixels32());
+            Destroy(tex);
+        }
+        float RowH(float row, float floor) => camY + ((row + 0.5f) / h * 2f - 1f) * OrthoHalf - floor;
+        int Col(float dx) => Mathf.Clamp((int)(w / 2f + dx * h / (2f * OrthoHalf)), 0, w);
+        // 꼭대기 = 그 몸만 숨긴 장 ↔ 바로 다음 프레임의 보인 장에서 달라진 가장 높은 줄 (먼지 한두 알은 안 친다: 이웃한 두 줄이 모두 6 px 넘게 달라야).
+        // 재는 장은 두 몸의 그림자 · 화면 후처리를 끈다 — 머리등이 괴물 그림자를 뒷벽 높이 드리우고, 안개 · 후처리 잔무늬가 프레임마다 바뀌어 뒷벽 전체가 "달라진 곳"으로 잡혔다(09-30)
+        int TopRow(Color32[] a, Color32[] b, int x0, int x1)
+        {
+            int prev = 0;
+            for (int y = h - 1; y >= 0; y--)
+            {
+                int n = 0;
+                for (int x = x0; x < x1; x++) if (Mathf.Abs(Lum(a[y * w + x]) - Lum(b[y * w + x])) > 0.06f) n++;
+                if (n >= 6 && prev >= 6) return y + 1;
+                prev = n;
+            }
+            return -1;
+        }
+        var bothR = monR.Concat(bodyR).ToArray();
+        var shadowWas = bothR.Select(r => r.shadowCastingMode).ToArray();
+        foreach (var r in bothR) r.shadowCastingMode = ShadowCastingMode.Off;
+        var camData = mainCam.GetUniversalAdditionalCameraData();
+        bool postWas = camData.renderPostProcessing;
+        camData.renderPostProcessing = false;
+        Color32[] empty = null, shot = null;
+        IEnumerator Pair(Renderer[] hide, string file)
+        {
+            Show(hide, false);
+            yield return Grab(null, px => empty = px);
+            Show(hide, true);
+            yield return Grab(null, px => shot = px);
+            if (file != null) { SavePng(file + "_empty", empty); SavePng(file, shot); }
+        }
+        void SavePng(string file, Color32[] px)
+        {
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            t.SetPixels32(px);
+            File.WriteAllBytes(Path.Combine(outDir, file + ".png"), t.EncodeToPNG());
+            Destroy(t);
+        }
+        float Top(float dx0, float dx1, float floor) { int r = TopRow(shot, empty, Col(dx0), Col(dx1)); return r < 0 ? float.NaN : RowH(r, floor); }
+        float Sole(float dx0, float dx1, float floor)            // 달라진 가장 낮은 줄 = 발바닥 (바닥 기준이 자리마다 맞나 — 레일 · 침목)
+        {
+            int x0 = Col(dx0), x1 = Col(dx1), prev = 0;
+            for (int y = 0; y < h; y++)
+            {
+                int n = 0;
+                for (int x = x0; x < x1; x++) if (Mathf.Abs(Lum(shot[y * w + x]) - Lum(empty[y * w + x])) > 0.06f) n++;
+                if (n >= 6 && prev >= 6) return RowH(y - 1, floor);
+                prev = n;
+            }
+            return float.NaN;
+        }
+
+        // 괴물 동작마다 머리 꼭대기(그림) · 머리 끝 뼈 · 머리 뼈 (6 장 · 0.25 s 마다, 가장 낮은~높은). 게임에서 쓰는 선 괴물 동작 + 9 키 첫 동작(idle_crouch)
+        var poses = new List<string>();
+        foreach (var clip in new[] { "up_walk", "up_jog", "up_run", "up_grope", "idle_crouch", "up_stand" })
+        {
+            Pose(clip);
+            yield return new WaitForSeconds(Tuning.STALKER_ANIM_FADE_S + 0.4f);
+            float tMin = 99f, tMax = -99f, hMin = 99f, hMax = -99f, eMin = 99f, eMax = -99f;
+            for (int i = 0; i < 6; i++)
+            {
+                yield return Pair(monR, i == 0 ? $"60_sizes_pose_{clip}" : null);
+                float top = Top(monX - 1.5f, monX + 1.2f, mFloor), hb = mHead.position.y - mFloor, he = mTop.position.y - mFloor;
+                tMin = Mathf.Min(tMin, top); tMax = Mathf.Max(tMax, top);
+                hMin = Mathf.Min(hMin, hb); hMax = Mathf.Max(hMax, hb);
+                eMin = Mathf.Min(eMin, he); eMax = Mathf.Max(eMax, he);
+                yield return new WaitForSeconds(0.25f);
+            }
+            Debug.Log($"SIZES monster {clip}: top in picture {tMin:F2}~{tMax:F2} · HeadTop_End {eMin:F2}~{eMax:F2} · Head bone {hMin:F2}~{hMax:F2} m above floor");
+            poses.Add($"{{\"clip\":\"{clip}\",\"top\":[{F(tMin)},{F(tMax)}],\"headTopEnd\":[{F(eMin)},{F(eMax)}],\"head\":[{F(hMin)},{F(hMax)}]}}");
+        }
+        yield return Pair(monR, null);                            // up_stand
+        float monTop = Top(monX - 1.5f, monX + 1.2f, mFloor), monSole = Sole(monX - 1.5f, monX + 1.2f, mFloor), monHead = mHead.position.y - mFloor, monHeadTop = mTop.position.y - mFloor;
+        Show(monR, false);                                        // 세운 몸을 잴 땐 괴물을 숨긴다 — 두 장 사이에 괴물 팔이 움직여 몸 꼭대기로 잡혔다(09-30: 2.49)
+        yield return Pair(bodyR, "60_sizes_body");
+        Show(monR, true);
+        float bodyTop = Top(bodyX - 0.6f, bodyX + 0.6f, bFloor), bodySole = Sole(bodyX - 0.6f, bodyX + 0.6f, bFloor);
+
+        // 괴물 눈: 발광 ×8 과 0 의 차이, 머리 상자 안에서만 — 상자 없이 재면 눈 말고 다른 살(갈비 · 턱)도 빛나 가운데가 턱으로 끌려 내려갔다(09-30: 2.20 vs 그림 약 2.5)
+        float eyeGlow = lk.eyeEmission;
+        Color32[] hi = null, off = null;
+        foreach (var (mul, name) in new[] { (8f, "hi"), (0f, "off") })
+        {
+            lk.eyeEmission = eyeGlow * mul;
+            lk.Apply();
+            yield return new WaitForSeconds(0.3f);
+            yield return Grab($"60_sizes_ortho_eyes_{name}", px => { if (name == "hi") hi = px; else off = px; });
+        }
+        lk.eyeEmission = eyeGlow;
+        lk.Apply();
+        double rowSum = 0; int eyeN = 0;
+        Vector3 sH = mainCam.WorldToScreenPoint(mHead.position), sT = mainCam.WorldToScreenPoint(mTop.position);
+        float ppm = h / (2f * OrthoHalf);
+        int bx0 = Mathf.Max(0, (int)(Mathf.Min(sH.x, sT.x) - 0.3f * ppm)), bx1 = Mathf.Min(w, (int)(Mathf.Max(sH.x, sT.x) + 0.3f * ppm));
+        int by0 = Mathf.Max(0, (int)(Mathf.Min(sH.y, sT.y) - 0.05f * ppm)), by1 = Mathf.Min(h, (int)(Mathf.Max(sH.y, sT.y) + 0.05f * ppm));
+        for (int y = by0; y < by1; y++)
+            for (int x = bx0; x < bx1; x++)
+                if (Lum(hi[y * w + x]) - Lum(off[y * w + x]) > 0.15f) { rowSum += y; eyeN++; }
+        float monEye = eyeN > 0 ? RowH((float)(rowSum / eyeN), mFloor) : float.NaN;
+        for (int i = 0; i < bothR.Length; i++) bothR[i].shadowCastingMode = shadowWas[i];
+        camData.renderPostProcessing = postWas;
+        yield return new WaitForSeconds(0.3f);
+        yield return Grab("60_sizes_ortho", px => shot = px);   // 한 장에 쓰는 것 (up_stand, 게임 화면 그대로 — 그림자 · 후처리 켬)
+        cam.SetParent(camParent, false);
+        cam.localPosition = Vector3.zero;
+        cam.localRotation = camRot;
+        mainCam.orthographic = false;
+        vm.enabled = true;
+        Destroy(stood);
+        InputSystem.RemoveDevice(kb);
+
+        Debug.Log($"SIZES me: eye {eye:F3} above floor = body root {rootGap:F3} above floor (skinWidth {cc.skinWidth:F3}) + camera {camOnRoot:F3} above root (EYE_HEIGHT {Tuning.EYE_HEIGHT}) · crouch eye {crouchEye:F3} (CROUCH_EYE {Tuning.CROUCH_EYE}) · capsule {capsule:F2} · ceiling {ceilMe:F2} m");
+        Debug.Log($"SIZES floors: me {ground:F3} · stood body {bFloor:F3} · monster {mFloor:F3} m (world) · soles in picture: stood body {bodySole:F3} · monster {monSole:F3} m above their floor");
+        Debug.Log($"SIZES stood body: top in picture (helmet) {bodyTop:F3} · body mesh top {bodyOnlyTop:F3} · HeadTop_End {bodyHeadTop:F3} · Head bone {bodyHead:F3} m above floor");
+        Debug.Log($"SIZES monster up_stand: top in picture {monTop:F3} · HeadTop_End {monHeadTop:F3} · Head bone {monHead:F3} · eye glow {monEye:F3} ({eyeN} px) · capsule {Tuning.BOOTH_STALKER_H} (booth) / {Tuning.STALKER_H} (corridor) · STALKER_EYE_H {Tuning.STALKER_EYE_H} · ceiling {ceilMon:F2} m");
+        File.WriteAllText(Path.Combine(outDir, "sizes.json"),
+            $"{{\"eye\":{F(eye)},\"rootGap\":{F(rootGap)},\"crouchEye\":{F(crouchEye)},\"capsule\":{F(capsule)},\"ceilMe\":{F(ceilMe)},\"ceilMon\":{F(ceilMon)},\"dist\":{F(D)},\"bodyX\":{F(bodyX)},\"monX\":{F(monX)}," +
+            $"\"bodyTop\":{F(bodyTop)},\"bodyOnlyTop\":{F(bodyOnlyTop)},\"bodyHeadTop\":{F(bodyHeadTop)},\"bodyHead\":{F(bodyHead)}," +
+            $"\"monTop\":{F(monTop)},\"monHeadTop\":{F(monHeadTop)},\"monHead\":{F(monHead)},\"monEye\":{F(monEye)},\"monEyePx\":{eyeN}," +
+            $"\"bodySole\":{F(bodySole)},\"monSole\":{F(monSole)},\"monCapsuleBooth\":{F(Tuning.BOOTH_STALKER_H)},\"monCapsule\":{F(Tuning.STALKER_H)},\"monEyeRay\":{F(Tuning.STALKER_EYE_H)},\"monScale\":{F(Tuning.STALKER_MODEL_SCALE)}," +
+            $"\"fov\":{F(mainCam.fieldOfView)},\"orthoHalf\":{F(OrthoHalf)},\"orthoMid\":{F(OrthoMid)},\"poses\":[{string.Join(",", poses)}]}}");
+        Check("sizes_measured", Mathf.Abs(camOnRoot - Tuning.EYE_HEIGHT) < 0.02f && bTopT != null && eyeN > 0 && !float.IsNaN(monTop) && !float.IsNaN(bodyTop),
+            $"my eye {eye:F2} m above floor (camera {camOnRoot:F2} above body root, EYE_HEIGHT {Tuning.EYE_HEIGHT} · root {rootGap:F2} above floor) · stood body top {bodyTop:F2} · monster top {monTop:F2} · monster eye glow {monEye:F2} m ({eyeN} px) · captures 60_sizes_fp_body / _monster / 60_sizes_ortho · sizes.json");
     }
 
     // 판정 글(F1)이 상자 안에 다 들어가나 — 부스 맵은 줄이 가장 많다(전등 · 막힘 · 고칠 곳 · 틈 · 현실감). 사람이 볼 캡처 19_devhud_<곳>
