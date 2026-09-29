@@ -132,7 +132,9 @@ for sd, (sel, c, d) in arm.items():
     B.check(fails, f"fix_arm_{'R' if sd < 0 else 'L'}", g1 < g0 * 0.9, f"소매 반지름 가운데 {g0*100:.1f} → {g1*100:.1f} cm")
 B.check(fails, "fix_same_vertices", len(me.vertices) == n and len(me.polygons) == 30762, f"점 {len(me.vertices)} · 면 {len(me.polygons)} (그대로여야 다시 입힌 그림이 맞는다)")
 
-# ── 저장 · 그림 ──
+# ── 저장 · 그림 ── (사보타주 때는 결과 파일을 덮어쓰지 않는다)
+if SAB:
+    print("ALL PASS" if not fails else "FAILS: " + ", ".join(fails)); sys.exit(1 if fails else 0)
 tag = f"{name}_fix"
 if tex:   # 같은 UV — Meshy 가 다시 입힌 그림(재질)으로 바꿔 씌운다
     before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=V.src_of(tex))
