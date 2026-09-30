@@ -77,7 +77,7 @@ public class Intro : MonoBehaviour
         if (only == "" || only == "intro")
             StartCoroutine(CheckIntro());
         else
-            SceneManager.LoadScene(only == "booth" || only == "repair" || only == "art" || only == "ore" || only == "hudfit" || only == "sizes" ? Tuning.BOOTH_SCENE : "M1_Tunnel");   // 한 구간만: 부스 검사는 부스 맵, 나머지는 복도
+            SceneManager.LoadScene(only == "booth" || only == "repair" || only == "art" || only == "ore" || only == "hudfit" || only == "sizes" || only == "glare" ? Tuning.BOOTH_SCENE : "M1_Tunnel");   // 한 구간만: 부스 검사는 부스 맵, 나머지는 복도
     }
 
     void Update()

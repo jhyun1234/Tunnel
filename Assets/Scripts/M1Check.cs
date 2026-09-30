@@ -364,7 +364,7 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare")
             yield return BoothStage(cc);
         if (only == "" || only == "art")
             yield return ArtStage(cc);
@@ -376,6 +376,8 @@ public class M1Check : MonoBehaviour
             yield return HudFit("booth");
         if (only == "sizes")                                    // 크기 · 눈높이 재기 — 전체 실행엔 안 넣는다 (판정 아닌 측정)
             yield return SizesStage(cc);
+        if (only == "glare")                                    // 램프 빛 번짐 재기 — 전체 실행엔 안 넣는다 (판정 아닌 측정)
+            yield return GlareStage(cc);
         if (only == "")
         {
             SceneManager.LoadScene("M1_Tunnel");                // 복도 씬의 M1Check 가 나머지 구간을 잇는다 (fails 는 static)
@@ -4461,6 +4463,84 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.05f);
         InputSystem.QueueStateEvent(mouse, new MouseState());
         yield return null;
+    }
+
+    // ================= 램프 빛 번짐 재기 (사용자 09-30 "램프의 빛 번짐 · 발광이 너무 심해서 글씨와 모델링이 잘 안 보인다" — 스크린샷: 표지판 둘 · 세운 몸 코앞). -only glare
+    // 판정이 아니라 원인 재기: 같은 자리에서 ① 지금 ② 빛 번짐(Bloom) 끔 ③ 머리등이 그 물체를 "가까운 면"으로 봄(부딪힘 상자를 잠깐 붙임 — 가까운 면 감광은
+    // 부딪힘 몸체가 있는 면까지만 잰다) ④ 둘 다 를 찍어 물체 위 하얗게 탄 몫 · 밝기 · 잔무늬(글자 · 옷 결). 캡처 61_glare_<물체>_<경우>, 로그 GLARE 줄
+    IEnumerator GlareStage(CharacterController cc)
+    {
+        stalker.enabled = false;
+        stalker.Teleport(stalker.homePos + Vector3.up * 50f);         // 멀리 (화면 · 빛에 안 끼게)
+        lamp.lampOn = true;
+        var bloom = ArtLook.Instance != null && ArtLook.Instance.artVolume != null && ArtLook.Instance.artVolume.profile.TryGet<Bloom>(out var b0) ? b0 : null;
+        float bloom0 = bloom != null ? bloom.intensity.value : 0f;
+        var mainCam = pickaxe.cam.GetComponent<Camera>();
+        var targets = new List<(string name, Renderer[] rends, Vector3 at, Vector3 normal, float dist, GameObject hitGo)>();
+        foreach (var board in pieces.GetComponentsInChildren<MeshRenderer>(true).Where(r => r.name.StartsWith("SignBoard")))
+        {
+            var group = board.transform.parent;
+            var text = group.GetComponentsInChildren<Renderer>().Where(r => r.name.StartsWith("SignText")).ToArray();
+            Vector3 n = Flat3(text.Length > 0 ? text[0].bounds.center - board.bounds.center : board.transform.forward).normalized;   // 글자가 판 앞에 붙어 있다
+            targets.Add(($"sign{targets.Count}_{text.Length}lines", group.GetComponentsInChildren<Renderer>(), board.bounds.center, n, 1.0f, board.gameObject));
+        }
+        Vector3 spawn = OnNav(Slot("SPAWN_Player").position);
+        float yaw0 = Quaternion.LookRotation(Flat3(Slot("LOOK_Player").position - spawn)).eulerAngles.y;
+        Vector3 fwd0 = Quaternion.Euler(0f, yaw0, 0f) * Vector3.forward;
+        var stood = PlayerBody.Stand(body, spawn + fwd0 * 0.8f, yaw0 + 180f);
+        yield return new WaitForSeconds(0.3f);
+        targets.Add(("stoodbody_0.8m", stood.GetComponentsInChildren<Renderer>(), stood.transform.position + Vector3.up * 1.45f * PlayerBody.scale, -fwd0, 0.8f, stood));
+        // 뒤가 트인 곳(스크린샷 4): 광장 첫 자리에서 벽이 가장 먼 쪽으로 0.6 m 앞에 — 뒤 벽이 4 m 밖이면 가까운 면 감광이 안 걸린다
+        float bestYaw = yaw0, bestD = 0f;
+        for (int a = 0; a < 360; a += 15)
+        {
+            Vector3 dir = Quaternion.Euler(0f, a, 0f) * Vector3.forward;
+            float d = Physics.Raycast(spawn + Vector3.up * 1.6f, dir, out RaycastHit hh, 30f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ? hh.distance : 30f;
+            if (d > bestD) { bestD = d; bestYaw = a; }
+        }
+        Vector3 fwdO = Quaternion.Euler(0f, bestYaw, 0f) * Vector3.forward;
+        var stoodO = PlayerBody.Stand(body, spawn + fwdO * 0.6f, bestYaw + 180f);
+        yield return new WaitForSeconds(0.3f);
+        targets.Add(($"stoodbody_open_0.6m_wall{bestD:0}m", stoodO.GetComponentsInChildren<Renderer>(), stoodO.transform.position + Vector3.up * 1.45f * PlayerBody.scale, -fwdO, 0.6f, stoodO));
+
+        foreach (var t in targets)
+        {
+            Vector3 stand = t.name.StartsWith("stood") ? spawn : OnNav(t.at + t.normal * t.dist, 1.5f);
+            foreach (var o in targets.Where(o => o.name.StartsWith("stood"))) o.hitGo.SetActive(o.name == t.name);   // 세운 몸은 재는 것만
+            Teleport(cc, stand + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(t.at - stand)).eulerAngles.y);
+            yield return new WaitForSeconds(0.4f);
+            AimAt(t.at);
+            yield return new WaitForSeconds(0.2f);
+            bool isSign = !t.name.StartsWith("stood");
+            var boardR = isSign ? t.hitGo.GetComponent<Renderer>() : null;
+            string colId = boardR != null && boardR.material.HasProperty("baseColorFactor") ? "baseColorFactor" : "_BaseColor";   // glTF 로 들어온 소품은 baseColorFactor
+            Color board0 = boardR != null ? boardR.material.GetColor(colId) : default;   // 판만 사본 재질
+            if (boardR != null) Debug.Log($"GLARE {t.name} board shader {boardR.material.shader.name} · {colId} {board0}");
+            foreach (var (tag, noBloom, sees) in new[] { ("now", false, false), ("nobloom", true, false), (isSign ? "darkboard" : "lampsees", false, true), ("both", true, true) })
+            {
+                if (bloom != null) bloom.intensity.value = noBloom ? 0f : bloom0;
+                if (boardR != null) boardR.material.SetColor(colId, sees ? new Color(board0.r * 0.25f, board0.g * 0.25f, board0.b * 0.25f, board0.a) : board0);   // 판 바탕을 ×0.25 (인트로 간판 판정 0.15 ≈ 흰 판 0.66 × 0.23)
+                Collider col = null;
+                if (sees)
+                {
+                    if (t.name.StartsWith("stood"))
+                    {
+                        var cap = t.hitGo.AddComponent<CapsuleCollider>();
+                        cap.radius = 0.3f; cap.height = 1.9f; cap.center = Vector3.up * 0.95f;   // 몸 뿌리 기준(크기 배는 몸이 곱한다)
+                        Physics.IgnoreCollision(cc, cap);                   // 내 캡슐이 밀려나지 않게 (광선만 맞는다)
+                        col = cap;
+                    }
+                    else col = null;
+                }
+                Vector3 v = default;
+                yield return Capture($"61_glare_{t.name}_{tag}", x => v = x, default, () => ScreenRect(mainCam, t.rends.Where(r => r.enabled).ToArray()));
+                Debug.Log($"GLARE {t.name} {tag}: burnt {v.z * 100f:F1} % · mean {v.x:F3} · structure {v.y:F1} · lamp near-dim x{lamp.nearDim:F2} · distance {Vector3.Distance(pickaxe.cam.position, t.at):F2} m");
+                if (col != null) Destroy(col);
+            }
+        }
+        if (bloom != null) bloom.intensity.value = bloom0;
+        Destroy(stood); Destroy(stoodO);
+        Check("glare_measured", targets.Count >= 2, $"{targets.Count} targets (signs {targets.Count - 1} + stood body) · captures 61_glare_* · log GLARE");
     }
 
     // ================= 크기 · 눈높이 재기 (사용자 09-30 "플레이어 모델 크기 · 괴물 모델 크기 · 1인칭 눈높이가 안 맞는다"). -only sizes — 판정이 아니라 잰 값 · 캡처를 남긴다
