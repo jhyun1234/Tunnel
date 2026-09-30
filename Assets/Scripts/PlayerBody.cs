@@ -178,6 +178,8 @@ public class PlayerBody : MonoBehaviour
             r.renderingLayerMask = self ? Pickaxe.ViewModelRenderingLayer : Pickaxe.DefaultRenderingLayer;
             r.shadowCastingMode = self ? ShadowCastingMode.Off : ShadowCastingMode.On;
         }
+        Headlamp.Probes.Remove(bodySkin);
+        if (!self) Headlamp.Probes.Add(bodySkin);                 // 남의 몸은 머리등 가까운 면 감광이 본다 (부딪힘 몸체가 없어도) — 내 몸은 머리등이 그 안에 있어 뺀다
         if (self) transform.SetParent(cam, false);
         else
         {
@@ -224,6 +226,8 @@ public class PlayerBody : MonoBehaviour
     }
 
     // Shift+7: 내 몸을 복사해 남의 몸으로 — 같은 모델 · 뼈대 · 동작 묶음
+    void OnDestroy() => Headlamp.Probes.Remove(bodySkin);
+
     public static GameObject Stand(PlayerBody src, Vector3 pos, float yaw)
     {
         var go = Instantiate(src.gameObject);

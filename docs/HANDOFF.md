@@ -19,6 +19,17 @@
 | `M1Check` | 검사가 전부 혼자 기준이다 |
 | `NoiseBus` | **위치만 봐서 그대로 쓸 수 있다** |
 
+**09-30 (64차 이어서) — ① 램프 빛 번짐 고침(사용자 "표지판 + 머리등 둘 다" 추천대로) ② 사용자 "괴물을 공격할 때 곡괭이를 까딱까딱한다. 광물을 캘 때의 모션으로" → 구현 → 실행 파일 판정 ⑧ 대기(번짐 값 · 공격 박자).** 크레딧 0 · 푸시 안 함.
+- **① 번짐**: 표지판 바탕 × `SIGN_BOARD_BRIGHT` 0.25(`ArtLook` 이 `SignBoard*` 재질 사본의 `baseColorFactor` 에 곱함) · 머리등 가까운 면 감광이 **`Headlamp.Probes`**(표지판 판 · 남의 몸 = `PlayerBody` Other) 경계 상자도 본다 × `LAMP_PROBE_DIM` 1.0(밝기 단계로 섞음 — 그냥 섞으면 0.5 · 0.7 은 옛 모습, 1 에서 확 어두웠다) + **가운데 광선이 그 물체에 맞으면 그 거리가 기준**(바깥 광선 8 개는 30° 벌어져 1 m 앞 0.9 m 판엔 가운데 하나만 맞아 효과가 1/9 로 묽어졌다). 결과(1 m, 탄 몫): 표지판 84~89 % → 1~5 % · 뒤가 트인 곳 세운 몸 0.6 m 14 % → 1 %(1.0 에선 옷이 꽤 어둡다 — 판정으로).
+  - 판정 키: **Shift+Home / Shift+End** 표지판 바탕 ÷× 1.25 · **Shift+PgDn / Shift+PgUp** 머리등이 보는 정도 −/+ 0.1 (Home/End 젖음 · PgDn/PgUp 튀는 빛은 Shift 없을 때만). F1: art 줄 `sign board` · lamp 줄 끝 `near x · sees signs/bodies`.
+  - 검사(전체 실행에 넣음, 부스): `sign_readable_1m`(≤ 15 %) · `lamp_sees_near_body`(≤ 6 %) · 사보타주 `brightboard` · `lampblind` FAIL 확인. `-only glare` 는 고치기 전 · 번짐 끔 · 보는 정도 0.5 · 0.7 까지 찍는다 → `python docs/그림/램프_번짐.py` → `build/player/P18_램프_번짐.png`.
+  - 따라 고친 검사: `player_body_not_clay`(2 m 세운 몸 재질 비교)는 이제 머리등이 몸을 보고 x0.33 으로 어두워 ×0.92 로 뒤집혔다 → 재질 비교 찍는 동안만 보는 정도 0(09-30 전 조명) — 문턱 그대로, ×1.36.
+- **괴물 캡처 자리**: `MonsterStage` 가 행동 끈 괴물을 y 0.1 에 띄워 찍었다 — 몸 바닥 붙이기 뒤 내 눈만 8 cm 내려가 괴물이 게임보다 10 cm 높게 찍혀 `monster_no_magenta_no_burn` 2.6 → 3.5 %(-only monster 에서 늘, 사보타주 floatroot 로 2.59 확인) → `StalkerOnFloor`(게임처럼 선 자리)로. 2.36 %. 게임 속 나 ↔ 괴물 높이 차는 그대로다.
+- **② 괴물 치기 = 캐기 한 콱과 같은 동작** (`Pickaxe.Attack`): 캐기 표(1인칭 팔도 따라감)로 들기 → 꼭대기 → 내려치기(맞음) → 박힌 채 → 내리기, 표가 없으면 MINE-1 코드 자세. 몸 · 고개는 안 묶는다(캐기와 다름 — 곡괭이는 지금 고개를 따라간다). 표 준비는 `StartMotion` 하나로(캐기 묶음과 같이). 옛 `Swing`(제자리 기울이기)은 사보타주 `minefast` · `oldswing` 에만.
+  - **박자는 따로** `ATTACK_STRIKE` {0.15 · 0 · 0.12 · 0.15 · 0.20} × `ATTACK_TEMPO` — 캐기 박자(누르고 맞기까지 0.70 s)로 해 보니 1.6 m 앞에서 달려드는 괴물이 먼저 잡았다(-only retreat: 두 대 뒤 Catch). 지금 맞기까지 0.27 s(옛 0.20). 판정 키 **Shift+Del**(빠르게) · **Shift+Bksp**(느리게), F1 mine 줄 `attack hit`. Del/Bksp 미끄러짐은 Shift 없을 때만.
+  - 검사: `mine_monster_quick_swing`(0.4 s 안, 09-27 MINE-1 "괴물은 옛 빠른 휘두르기") → **`mine_monster_attack_motion`**(맞는 때 = ATTACK 박자 ±0.15 · 곡괭이가 쉬는 자리보다 0.25 m 넘게 올라감 · 표가 있으면 표로 · 묶음 아님). 0.28 s · 0.63 m. 사보타주 `oldswing` FAIL(0.00 m) · `nomotion` 은 코드 자세로 통과(0.52 m). `retreat` 7 그대로 통과(검사가 swingTimeMul 0.2 로 빠르게 — 공격도 따른다).
+- **판정 ⑧ 방법**: `build/Tunnel/Tunnel.exe` → "시작" → 부스 맵. 표지판 셋(안전제일 · 케이지 기둥 · 동쪽 벽 작업현황)을 1 m 앞에서 · Shift+7 세운 몸을 코앞에서(뒤가 트인 곳) — Shift+Home End · Shift+PgDn PgUp. 0 · 9 로 괴물을 세워 곡괭이로 쳐 보기 — Shift+Del Bksp. 받은 숫자 → `Tuning.SIGN_BOARD_BRIGHT` · `LAMP_PROBE_DIM` · `ATTACK_TEMPO` → 전체 build.sh → 커밋.
+
 **09-30 (64차 이어서) — 판정 ⑦ 사용자 "모델링 통과"(내 눈 1.70 · 몸 ×1.119 그대로, Tuning 안 바꿈) · 새 지적 "램프의 빛 번짐 · 발광이 너무 심해 글씨와 모델링이 잘 안 보인다"(스크린샷 4장: 표지판 둘 · 바위 표지판 · 코앞 세운 몸) → 봇으로 재현 · 원인 잼 → 방향 여쭘(값은 안 바꿈).** 한 장 `build/player/P18_램프_번짐.png`(← `bash tools/quick.sh glare` → `python docs/그림/램프_번짐.py`, 새 측정 구간 `-only glare` 전체 실행엔 안 넣음).
   | 물체(1 m 안팎) | 지금 | 빛 번짐 끔 | 판 ×0.25 / 머리등이 봄 | 둘 다 |
   |---|---|---|---|---|

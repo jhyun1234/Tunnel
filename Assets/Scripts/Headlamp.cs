@@ -21,6 +21,9 @@ public class Headlamp : MonoBehaviour
     [System.NonSerialized] public float nearRef = Tuning.LAMP_NEAR_REF;
     [System.NonSerialized] public float nearPow = Tuning.LAMP_NEAR_POW;
     [System.NonSerialized] public float nearDim = 1f;
+    // 부딪힘 몸체가 없어 광선이 지나치는 물체(표지판 판 · 남의 몸). 가까운 면 감광이 이 경계 상자도 본다 — 안 보면 코앞 물체가 뒤 벽 기준 세기를 다 받아 하얗게 탔다(09-30)
+    public static readonly System.Collections.Generic.List<Renderer> Probes = new System.Collections.Generic.List<Renderer>();
+    public static float probeDim = Tuning.LAMP_PROBE_DIM;   // 판정 키 Shift+PgDn PgUp (DevHud)
     [System.NonSerialized] public float darkAdaptAmbient = Tuning.DARK_ADAPT_AMBIENT;
     [System.NonSerialized] public float adapt;     // 0 = 평소, 1 = 어둠에 다 적응
     [System.NonSerialized] public float bobDeg = Tuning.LAMP_BOB_DEG;   // 검사가 읽는다 (사용자 판정값 0.6, 09-16)
@@ -115,13 +118,23 @@ public class Headlamp : MonoBehaviour
 
     float NearDim()
     {
-        float sum = 0f;
-        foreach (var dir in RayDirs)
+        float sum = 0f, center = 1f;
+        for (int i = 0; i < RayDirs.Length; i++)
         {
-            float d = Physics.Raycast(transform.position, transform.rotation * dir, out RaycastHit hit, nearRef, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+            var ray = new Ray(transform.position, transform.rotation * RayDirs[i]);
+            float d = Physics.Raycast(ray, out RaycastHit hit, nearRef, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
                 ? hit.distance : nearRef;
-            sum += Mathf.Pow(Mathf.Max(d, 0.05f) / nearRef, nearPow);
+            float f = Mathf.Pow(Mathf.Max(d, 0.05f) / nearRef, nearPow), dp = d;
+            foreach (var r in Probes)
+                if (r != null && r.enabled && r.gameObject.activeInHierarchy && r.bounds.IntersectRay(ray, out float t) && t > 0f && t < dp) dp = t;
+            if (dp < d)
+            {
+                float fp = Mathf.Pow(Mathf.Max(dp, 0.05f) / nearRef, nearPow);
+                f = Mathf.Pow(f, 1f - probeDim) * Mathf.Pow(fp, probeDim);   // 밝기 단계(곱)로 섞는다 — 그냥 섞으면 0.5 · 0.7 은 거의 옛 모습, 1 에서 확 어두워졌다(09-30 잼)
+                if (i == 0) center = Mathf.Pow(fp, probeDim);   // 가운데 광선(보고 있는 것) — 바깥 광선은 30° 벌어져 1 m 앞 0.9 m 판엔 가운데 하나만 맞는다(09-30: 효과가 1/9 로 묽어짐)
+            }
+            sum += f;
         }
-        return sum / RayDirs.Length;
+        return Mathf.Min(sum / RayDirs.Length, center);
     }
 }

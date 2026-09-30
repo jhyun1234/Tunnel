@@ -194,8 +194,10 @@ public class DevHud : MonoBehaviour
         if (kb.upArrowKey.wasPressedThisFrame && !shift) { pickaxe.tempo = Mathf.Min(3f, pickaxe.tempo * 1.1f); show = true; }
         if (kb.downArrowKey.wasPressedThisFrame && shift) { pickaxe.bobMul = Mathf.Max(0f, Mathf.Round(pickaxe.bobMul * 10f - 1f) / 10f); show = true; }
         if (kb.upArrowKey.wasPressedThisFrame && shift) { pickaxe.bobMul = Mathf.Min(1f, Mathf.Round(pickaxe.bobMul * 10f + 1f) / 10f); show = true; }
-        if (kb.deleteKey.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Max(0f, Mathf.Round((pickaxe.slipChance - 0.1f) * 100f) / 100f); show = true; }
-        if (kb.backspaceKey.wasPressedThisFrame) { pickaxe.slipChance = Mathf.Min(1f, Mathf.Round((pickaxe.slipChance + 0.1f) * 100f) / 100f); show = true; }
+        if (kb.deleteKey.wasPressedThisFrame && !shift) { pickaxe.slipChance = Mathf.Max(0f, Mathf.Round((pickaxe.slipChance - 0.1f) * 100f) / 100f); show = true; }
+        if (kb.backspaceKey.wasPressedThisFrame && !shift) { pickaxe.slipChance = Mathf.Min(1f, Mathf.Round((pickaxe.slipChance + 0.1f) * 100f) / 100f); show = true; }
+        if (kb.deleteKey.wasPressedThisFrame && shift) { pickaxe.attackTempo = Mathf.Max(0.3f, Mathf.Round(pickaxe.attackTempo / 1.1f * 100f) / 100f); show = true; }   // 괴물 치기 빠르게 → Tuning.ATTACK_TEMPO
+        if (kb.backspaceKey.wasPressedThisFrame && shift) { pickaxe.attackTempo = Mathf.Min(4f, Mathf.Round(pickaxe.attackTempo * 1.1f * 100f) / 100f); show = true; }
         if (kb.backquoteKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Max(0f, pickaxe.lookYaw - 10f); show = true; }
         if (kb.tabKey.wasPressedThisFrame) { pickaxe.lookYaw = Mathf.Min(180f, pickaxe.lookYaw + 10f); show = true; }
     }
@@ -216,6 +218,11 @@ public class DevHud : MonoBehaviour
         }
         if (kb.digit8Key.wasPressedThisFrame && stood != null && stood.GetComponent<PlayerBody>() is PlayerBody sb) { sb.NextAction(); show = true; }
         // 몸 키 (사용자 09-30 "모델 1.72 와 시점 1.78 의 차이가 크다" → 키 하나로 같이): 1인칭 눈과 몸 모델 크기를 같이 1 cm. 받은 눈 → Tuning.EYE_HEIGHT
+        if (kb.pageDownKey.wasPressedThisFrame || kb.pageUpKey.wasPressedThisFrame)   // 머리등이 표지판 · 남의 몸도 가까운 면으로 보는 정도 → Tuning.LAMP_PROBE_DIM
+        {
+            Headlamp.probeDim = Mathf.Clamp01(Mathf.Round(Headlamp.probeDim * 10f + (kb.pageUpKey.wasPressedThisFrame ? 1f : -1f)) / 10f);
+            show = true;
+        }
         if (kb.minusKey.wasPressedThisFrame || kb.equalsKey.wasPressedThisFrame)
         {
             player.standEye = Mathf.Clamp(Mathf.Round(player.standEye * 100f + (kb.equalsKey.wasPressedThisFrame ? 1f : -1f)) / 100f, 1.40f, 2.00f);
@@ -298,7 +305,7 @@ public class DevHud : MonoBehaviour
 
     string MineLine() => pickaxe == null ? "" :
         $"\nmine {(pickaxe.Mining ? $"{pickaxe.minePhase.ToUpper()} {(pickaxe.mineCrouch ? "crouch" : "stand")}" : "-")}  tempo x{pickaxe.tempo:0.00} (stand bundle {StandBundle(pickaxe.tempo):0.0} s) [↓ ↑]  slip {pickaxe.slipChance * 100f:0}% [Del Bksp]  look ±{pickaxe.lookYaw:0}° [` Tab]  strike {pickaxe.softNoise:0} m · slip {Tuning.NOISE_PICK:0} m  bundles {pickaxe.bundles} slips {pickaxe.slips} regrips {pickaxe.regrips}" +
-        $"\nmine motion {(pickaxe.MotionOn ? pickaxe.motion.clipName : "none (code poses)")}  head bob {pickaxe.bobMul * 100f:0}% (MINE_MOTION_BOB {Tuning.MINE_MOTION_BOB * 100f:0}%) [Shift+↓ Shift+↑]";
+        $"\nmine motion {(pickaxe.MotionOn ? pickaxe.motion.clipName : "none (code poses)")}  head bob {pickaxe.bobMul * 100f:0}% (MINE_MOTION_BOB {Tuning.MINE_MOTION_BOB * 100f:0}%) [Shift+↓ Shift+↑]  attack hit {pickaxe.AttackHitS:0.00} s x{pickaxe.attackTempo:0.00} (ATTACK_TEMPO {Tuning.ATTACK_TEMPO:0.00}) [Shift+Del Shift+Bksp]";
 
     static float StandBundle(float tempo)
     {
@@ -337,7 +344,7 @@ public class DevHud : MonoBehaviour
         string text =
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
-            $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]\n" +
+            $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]   near x{lamp.nearDim:0.00} · sees signs/bodies x{Headlamp.probeDim:0.0} (LAMP_PROBE_DIM {Tuning.LAMP_PROBE_DIM:0.0}) [Shift+PgDn PgUp]\n" +
             $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + BodyLine() + HitLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster;
         var box = new Rect(10, 10, 1100, 390);
         TextHeight = GUI.skin.label.CalcHeight(new GUIContent(text), box.width);

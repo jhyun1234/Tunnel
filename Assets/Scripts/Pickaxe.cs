@@ -10,7 +10,9 @@ using UnityEngine.Rendering;
 //   포켓 체력이 곧 진행이라 손을 떼도 남는다. 평소 콱은 MINE_NOISE_SOFT(6 m). 묶음마다 MINE_SLIP_CHANCE 로 미끄러질 조짐(꼭대기에서 떨림) —
 //   MINE_SLIP_WARN_S 안에 좌클릭을 떼었다 다시 누르면 고쳐 잡기(조용), 계속 누르면 '쨍' NOISE_PICK 한 번(괴물 한 칸 — 사용자 09-27 "약하게").
 //   캐는 동안 몸은 멈추고 고개만 MINE_LOOK_* 안에서 돈다(Player.BeginMine). 고개를 돌려도 곡괭이는 광석을 친다(시작 카메라 기준으로 되돌려 둔다).
-// 괴물을 겨냥하면 옛 빠른 휘두르기(Swing): 뒤로 들기 → 내려치기 → 끝나는 순간 다시 쏴서 맞은 것을 친다 → 박힌 채 잠깐 멈춤 → 되돌리기.
+// 괴물을 겨냥하면 캐기 한 콱과 같은 동작(Attack, 사용자 09-30 "괴물을 공격할 때 곡괭이를 까딱까딱한다. 광물을 캘 때의 모션으로"): 들기 → 꼭대기 → 내려치기
+//   (끝나는 순간 다시 쏴서 맞은 것을 친다) → 박힌 채 → 내리기. 박자 = ATTACK_STRIKE × attackTempo(캐기 박자면 달려드는 괴물이 먼저 잡는다), 몸은 안 멈추고 곡괭이는 고개를 따라간다.
+//   옛 빠른 휘두르기(Swing: 제자리에서 기울이기만)는 사보타주 minefast · oldswing 에만 남는다.
 // 곡괭이는 ViewModel 레이어라 오버레이 카메라가 그린다(벽 속으로 들어가도 벽 위에 보인다). 헤드램프는 안 비추고 PickLight 만 비춘다.
 // 우클릭 = 던지기 (M6). 곡괭이는 하나뿐 — 던지면 hasPick 이 false 라 못 캐고, ThrownPick 옆에서 E 로 주워야(Return) 다시 캔다.
 // 내구도 (UI-1a): 콱마다 MINE_WEAR_BUNDLE ÷ 콱 수(한 묶음 = 2, 캐기 30 번 = 60), 미끄러지면 MINE_WEAR_SLIP, 괴물 타격 −1, 던지기 −5.
@@ -45,6 +47,7 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public bool breaks = true;    // 사보타주 everlasting 이 끈다 — 0 이어도 손에 남고 캐지는 상태
     // MINE-1 판정 키(DevHud 숫자패드 7 8 · 1 2 · / *)와 사보타주
     [System.NonSerialized] public float tempo = Tuning.MINE_TEMPO;
+    [System.NonSerialized] public float attackTempo = Tuning.ATTACK_TEMPO;   // 괴물 치기 박자 배 — 판정 키 Shift+Del Bksp
     [System.NonSerialized] public float slipChance = Tuning.MINE_SLIP_CHANCE;
     [System.NonSerialized] public float softNoise = Tuning.MINE_NOISE_SOFT;    // 사보타주 loudsoft 가 NOISE_PICK 으로
     [System.NonSerialized] public float lookYaw = Tuning.MINE_LOOK_YAW_DEG;    // 사보타주 lookfree 가 180 으로
@@ -57,7 +60,8 @@ public class Pickaxe : MonoBehaviour
     [System.NonSerialized] public bool warpTempo = true;     // 사보타주 rawtempo 가 끈다 — 늘려 맞추지 않고 Kevin 원래 박자(0.967 s)
     [System.NonSerialized] public float bobMul = Tuning.MINE_MOTION_BOB;
     public bool MotionOn => useMotion && motion != null && motion.Samples > 1;
-    public bool Direct => direct;                        // 검사가 읽는다: 지금 표로 움직이는 중
+    public bool Direct => direct;
+    public float AttackHitS => (Tuning.ATTACK_STRIKE[0] + Tuning.ATTACK_STRIKE[1] + Tuning.ATTACK_STRIKE[2]) * attackTempo;   // 괴물 치기: 누르고 맞기까지 (검사 · DevHud)                        // 검사가 읽는다: 지금 표로 움직이는 중
     // 3D-P: 동작 표 틀(원점 = 내려친 순간 눈, 표 좌표)을 카메라 기준으로 — 1인칭 팔 몸이 이 틀에 서면 Kevin 몸과 같은 자리에서 곡괭이를 쥔다 (ApplyPose 와 같은 계산)
     public float ClipNow => clipNow;
     public Quaternion MotionFrameRot => Quaternion.Inverse(cam.rotation) * mineCamRot * align;
@@ -75,7 +79,8 @@ public class Pickaxe : MonoBehaviour
 
     static readonly RaycastHit[] Hits = new RaycastHit[16];
     float cooldown;
-    bool swinging;
+    bool swinging, attacking;                            // attacking: 괴물 치기(캐기 동작) — swinging 도 켠다
+    [System.NonSerialized] public bool oldSwing;         // 사보타주 oldswing — 09-30 전 괴물 치기(제자리 기울이기)
     Vector3 basePos = Tuning.PICK_POS;                   // 흔들림(걷기)까지 더한 자리. 떨림은 이 위에 얹는다
     float shakeLeft;
     Coroutine mining;
@@ -121,6 +126,12 @@ public class Pickaxe : MonoBehaviour
             ApplyPose();
             return;
         }
+        if (attacking)                                       // 괴물 치기: 캐기와 같은 자세 계산, 곡괭이는 지금 고개를 따라간다(몸 · 고개를 안 묶는다)
+        {
+            mineCamRot = cam.rotation;
+            ApplyPose();
+            return;
+        }
         if (!swinging && hasPick && mouse != null && mouse.rightButton.wasPressedThisFrame && !player.Busy)
         {
             Throw();
@@ -131,7 +142,7 @@ public class Pickaxe : MonoBehaviour
             if (stalker != null || oldMining)
             {
                 cooldown = cooldownTime;
-                StartCoroutine(Swing());
+                StartCoroutine(stalker != null && !oldSwing ? Attack() : Swing());
             }
             else
             {
@@ -261,16 +272,7 @@ public class Pickaxe : MonoBehaviour
             // 박자: 늘려 맞추면 MINE-1 표 그대로, 아니면(rawtempo) 표의 원래 시간
             var m = motion;
             if (!warpTempo) { st = new[] { m.Span(m.releaseT, m.topT), 0f, m.Span(m.topT, m.strikeT), m.Span(m.strikeT, m.releaseT), 0f }; T = 1f; }
-            motionScale = mineCrouch ? Tuning.MINE_MOTION_CROUCH_SCALE : 1f;
-            m.Eval(m.strikeT, out var ps, out var qs, out _, out _);
-            Vector3 tipK = ps + qs * Vector3.Scale(mesh.localScale, Tuning.PICK_BLADE_TIP);
-            Vector3 tipM = Tuning.MINE_HIT_POS + Quaternion.Euler(Tuning.MINE_HIT_TILT, Tuning.MINE_SWING_YAW, 0f) * (mesh.localPosition + mesh.localRotation * Vector3.Scale(mesh.localScale, Tuning.PICK_BLADE_TIP));
-            align = Quaternion.FromToRotation(tipK, tipM);
-            direct = true;
-            dPos = transform.localPosition;
-            dRot = transform.localRotation;
-            dBob = Vector3.zero;
-            clipNow = m.releaseT;
+            StartMotion(mineCrouch);
         }
         bool firstLift = true;
         int slipAt = !slipsOn ? -1 : slipChance >= 1f ? 0 : Random.value < slipChance ? Random.Range(0, Mathf.Max(1, Mathf.Min(remaining, per))) : -1;
@@ -449,6 +451,22 @@ public class Pickaxe : MonoBehaviour
     }
 
     // ---- MINE-2 표로 움직이기 ----
+    // 표로 움직이기 시작: 쪼그려 크기 · 내려친 순간 날 끝이 MINE-1 콱 자리를 보게 돌리기 · 지금 자세에서 이어 붙이기. 캐기 묶음 · 괴물 치기가 같이 쓴다
+    void StartMotion(bool crouch)
+    {
+        var m = motion;
+        motionScale = crouch ? Tuning.MINE_MOTION_CROUCH_SCALE : 1f;
+        m.Eval(m.strikeT, out var ps, out var qs, out _, out _);
+        Vector3 tipK = ps + qs * Vector3.Scale(mesh.localScale, Tuning.PICK_BLADE_TIP);
+        Vector3 tipM = Tuning.MINE_HIT_POS + Quaternion.Euler(Tuning.MINE_HIT_TILT, Tuning.MINE_SWING_YAW, 0f) * (mesh.localPosition + mesh.localRotation * Vector3.Scale(mesh.localScale, Tuning.PICK_BLADE_TIP));
+        align = Quaternion.FromToRotation(tipK, tipM);
+        direct = true;
+        dPos = transform.localPosition;
+        dRot = transform.localRotation;
+        dBob = Vector3.zero;
+        clipNow = m.releaseT;
+    }
+
     // 표의 시각 t 자세를 dPos · dRot 에 (쪼그려 크기 · 날 끝 맞춤 회전 · 곡괭이 모델 뿌리 → 뷰모델 노드), 눈 움직임은 bobMul 만 머리에
     void MotionAt(float t)
     {
@@ -521,7 +539,47 @@ public class Pickaxe : MonoBehaviour
         player.mineBob = Vector3.zero;
     }
 
-    // ---- 괴물 (옛 빠른 휘두르기) ----
+    // ---- 괴물 치기 = 캐기 한 콱 (사용자 09-30) ----
+    // 들기 → 꼭대기 → 내려치기 → Strike → 박힌 채(표의 버팀) → 내리기. 손을 떼도 한 콱은 끝까지. 표가 없으면 MINE-1 코드 자세(캐기와 같다)
+    IEnumerator Attack()
+    {
+        swinging = attacking = true;
+        bool crouch = player.stance == "crouch";
+        float[] st = Tuning.ATTACK_STRIKE;
+        float T = attackTempo * swingTimeMul;
+        mineCamRot = cam.rotation;
+        posePos = transform.localPosition;
+        poseTilt = Tuning.PICK_TILT_DEG;
+        poseYaw = 0f;
+        bool mm = MotionOn;
+        direct = false;
+        if (mm) StartMotion(crouch);
+        minePhase = "lift";
+        if (mm) yield return ClipTo(motion.topT, st[0] * T, null, Tuning.MINE_MOTION_BLEND_S * Mathf.Min(1f, T));
+        else yield return PoseTo(crouch ? Tuning.MINE_RAISE_POS_LOW : Tuning.MINE_RAISE_POS, crouch ? Tuning.MINE_RAISE_TILT_LOW : Tuning.MINE_RAISE_TILT, st[0] * T, EaseOut);
+        minePhase = "top";
+        yield return new WaitForSeconds(st[1] * T);
+        minePhase = "down";
+        if (mm) yield return ClipTo(motion.strikeT, st[2] * T, null);
+        else yield return PoseTo(Tuning.MINE_HIT_POS, Tuning.MINE_HIT_TILT, st[2] * T, EaseIn);
+        Strike();
+        minePhase = "stuck";
+        if (mm) yield return ClipTo(motion.releaseT, st[3] * T, null);
+        else yield return new WaitForSeconds(st[3] * T);
+        minePhase = "lower";
+        if (direct) yield return DirectTo(Tuning.PICK_POS, Quaternion.Euler(Tuning.PICK_TILT_DEG, 0f, 0f), st[4] * T, false);
+        else yield return PoseTo(Tuning.PICK_POS, Tuning.PICK_TILT_DEG, st[4] * T, EaseOut, null, 0f);
+        direct = false;
+        minePhase = "";
+        basePos = Tuning.PICK_POS;
+        transform.localPosition = Tuning.PICK_POS;
+        SetTilt(Tuning.PICK_TILT_DEG);
+        player.mineBob = Vector3.zero;
+        player.mineBobPitch = 0f;
+        swinging = attacking = false;
+    }
+
+    // ---- 옛 빠른 휘두르기 (사보타주 minefast · oldswing) ----
     IEnumerator Swing()
     {
         swinging = true;

@@ -110,6 +110,7 @@ public class M1Check : MonoBehaviour
         pickaxe.slipChance = 0f;                 // MINE-1: 미끄러질 조짐은 확률이라 검사 동안 끈다 — 조짐 검사(MineStage)만 켠다
         if (sabotage == "minefast")              // MINE-1 전: 광석도 휘두를 때마다 25 m, 두 번에 빠진다
             pickaxe.oldMining = true;
+        pickaxe.oldSwing = sabotage == "oldswing";   // 09-30 전: 괴물 치기가 제자리 기울이기(까딱까딱)
         if (sabotage == "loudsoft")              // 평소 콱도 25 m
             pickaxe.softNoise = Tuning.NOISE_PICK;
         if (sabotage == "noslip")                // 조짐이 안 온다
@@ -150,7 +151,9 @@ public class M1Check : MonoBehaviour
         Player.floatRoot = sabotage == "floatroot";         // 09-30 전: 캡슐 가운데 = 키 ÷ 2 — 나와 괴물이 바닥에서 skinWidth(8 cm) 떴다
         if (Player.floatRoot)
             foreach (var c in new[] { player.GetComponent<CharacterController>(), stalker.GetComponent<CharacterController>() }) c.center = Vector3.up * c.height * 0.5f;
-        PlayerBody.scale = Tuning.PLAYER_SCALE * (sabotage == "bigbody" ? 1.1f : 1f);   // bigbody: 몸 모델만 크고 1인칭 눈은 그대로 — 두 눈이 어긋난 상태
+        PlayerBody.scale = Tuning.PLAYER_SCALE * (sabotage == "bigbody" ? 1.1f : 1f);
+        ArtLook.SabBrightBoard = sabotage == "brightboard";   // 09-30 전: 표지판 바탕 옛 칠 그대로 (1 m 앞 84 % 탐)
+        Headlamp.probeDim = sabotage == "lampblind" ? 0f : Tuning.LAMP_PROBE_DIM;   // 09-30 전: 머리등이 표지판 · 남의 몸을 못 보고 뒤 벽까지 잰다   // bigbody: 몸 모델만 크고 1인칭 눈은 그대로 — 두 눈이 어긋난 상태
         if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
             MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
@@ -376,7 +379,7 @@ public class M1Check : MonoBehaviour
             yield return HudFit("booth");
         if (only == "sizes")                                    // 크기 · 눈높이 재기 — 전체 실행엔 안 넣는다 (판정 아닌 측정)
             yield return SizesStage(cc);
-        if (only == "glare")                                    // 램프 빛 번짐 재기 — 전체 실행엔 안 넣는다 (판정 아닌 측정)
+        if (only == "" || only == "glare")                      // 램프 빛 번짐 (09-30) — 전체 실행은 "지금" 한 장씩 + 검사 둘, -only glare 는 네 경우를 다 찍는다
             yield return GlareStage(cc);
         if (only == "")
         {
@@ -2575,7 +2578,8 @@ public class M1Check : MonoBehaviour
         InputSystem.QueueStateEvent(kb, new KeyboardState());
         yield return new WaitForSeconds(0.3f);
 
-        // ⑨ 괴물을 겨냥하면 옛 빠른 휘두르기 (묶음이 아니다)
+        // ⑨ 괴물을 겨냥하면 캐기 한 콱과 같은 동작 (사용자 09-30 "괴물을 공격할 때 곡괭이를 까딱까딱한다. 광물을 캘 때의 모션으로") — 묶음은 아니다.
+        //    표가 있으면 표로(1인칭 팔이 따라간다) · 곡괭이가 머리 위로 든다 · 맞는 때 = ATTACK_STRIKE 들기 + 꼭대기 + 내려치기. 사보타주 oldswing → FAIL
         Vector3 S = new Vector3(0f, 0.1f, 20f);
         st.Teleport(S, 180f);
         st.hp = Tuning.STALKER_HP;
@@ -2585,12 +2589,22 @@ public class M1Check : MonoBehaviour
         yield return null;
         int b0 = pickaxe.bundles;
         float c0 = Time.time;
+        float maxRise = 0f;
+        bool sawDirect = false;
         yield return Click(mouse);
         t = 0f;
-        while (st.hitsSeen == 0 && t < 1f) { t += Time.deltaTime; yield return null; }
+        while (st.hitsSeen == 0 && t < 2f)
+        {
+            t += Time.deltaTime;
+            maxRise = Mathf.Max(maxRise, pickaxe.transform.localPosition.y - Tuning.PICK_POS.y);
+            sawDirect |= pickaxe.Direct;
+            yield return null;
+        }
         float qs = Time.time - c0;
-        Check("mine_monster_quick_swing", st.hitsSeen == 1 && qs < 0.4f && pickaxe.bundles == b0,
-            $"monster hit after {qs:F2} s (want < 0.4, old swing {Tuning.PICK_WINDUP_TIME + Tuning.PICK_DOWN_TIME:F2} s), bundles +{pickaxe.bundles - b0}");
+        float qWant = pickaxe.AttackHitS;
+        const float RiseMin = 0.25f;                                      // 쉬는 자리에서 머리 위로 — 캐기 코드 자세의 절반 (MINE_RAISE_POS.y − PICK_POS.y = 0.52 m). 옛 기울이기는 0
+        Check("mine_monster_attack_motion", st.hitsSeen == 1 && Mathf.Abs(qs - qWant) <= 0.15f && pickaxe.bundles == b0 && (!pickaxe.MotionOn || sawDirect) && maxRise >= RiseMin,
+            $"monster hit after {qs:F2} s (want {qWant:F2} ±0.15 = ATTACK_STRIKE lift + top + down × attackTempo) · pick rose {maxRise:F2} m above rest (want ≥ {RiseMin}) · moved by the mining motion table {sawDirect} (table {pickaxe.MotionOn}) · bundles +{pickaxe.bundles - b0} (want 0) · old swing hit after {Tuning.PICK_WINDUP_TIME + Tuning.PICK_DOWN_TIME:F2} s without rising");
         yield return new WaitForSeconds(0.5f);
         st.hp = Tuning.STALKER_HP;
         st.Teleport(st.homePos);
@@ -2807,6 +2821,9 @@ public class M1Check : MonoBehaviour
         var bodyR = sRends.Where(r => r.name == "PlayerBody" || r.name == "PlayerArms").ToArray();
         var look = new Dictionary<string, Color32[]>();
         int sw = 0;
+        float pd0 = Headlamp.probeDim;
+        Headlamp.probeDim = 0f;                                   // 재질 비교는 09-30 전 조명 그대로 — 머리등이 몸을 보고 어둡게 비추는 것(2 m 에서 x0.33)은 lamp_sees_near_body 가 본다
+        yield return new WaitForSeconds(0.5f);                    // 감광이 따라오게 (멈춘 시간에는 안 따라온다)
         float ts0 = Time.timeScale;
         Time.timeScale = 0f;
         IEnumerator Shot(string file, Action set)
@@ -2839,6 +2856,7 @@ public class M1Check : MonoBehaviour
         PlayerBody.clayLook = false;
         PlayerBody.lookVer++;
         Time.timeScale = ts0;
+        Headlamp.probeDim = pd0;
         yield return null;                                        // 새 재질로 돌아온 뒤 재질을 읽는다
         // 몸 픽셀 = 숨긴 화면과 밝기가 다른 곳. 구조값 = 오른쪽 · 아래 이웃 밝기 차 평균 ×1000, 윤 = 가장 밝은 1 % ÷ 평균
         (float str, float mean, int n) Stats(string key)
@@ -4255,6 +4273,14 @@ public class M1Check : MonoBehaviour
     // M3: 소음을 듣는 괴물. 포켓은 안 캐지게(health 1e6) 두고 소음만 낸다. 괴물 자리는 소리를 내기 직전에 놓는다 — 그 순간의 거리가 기준이다
     // 3D-①: 괴물 모델 miner_rigged (캡슐 대신). 램프 켜고 행동을 끈 채 갱도 가운데 앞 14·7·2 m 에 세워 찍고, 2 m 에서 4방향과 램프 좌우 20° 를 찍는다.
     // 형태·색 판정은 사용자 몫(캡처 13_monster_*). 여기서는 모델·동작·노멀이 들어왔는지, 밝기가 캡슐 때 기준 안인지, 분홍(재질 없음)·흰 점이 없는지만 잰다
+    // 행동을 끈 괴물은 중력이 없다 — 게임처럼 선 자리(캡슐 밑 = 바닥 + skinWidth)에 놓는다. y 0.1 에 띄워 두면 몸 바닥 붙이기(09-30) 뒤
+    // 내 눈만 8 cm 내려가 괴물이 게임보다 10 cm 높게 찍혔다(2 m 정면 탄 몫 2.6 → 3.5 %, 게임 속 둘의 높이 차는 그대로)
+    Vector3 StalkerOnFloor(Vector3 p)
+    {
+        var c = stalker.GetComponent<CharacterController>();
+        return PlayerBody.Ground(p) + Vector3.up * (c.skinWidth - (c.center.y - c.height * 0.5f));
+    }
+
     IEnumerator MonsterStage(CharacterController cc)
     {
         var st = stalker;
@@ -4298,7 +4324,7 @@ public class M1Check : MonoBehaviour
         int magenta = 0;
         foreach (float dist in new[] { 14f, 7f, 2f })
         {
-            st.Teleport(P + Vector3.forward * dist, 180f);        // 플레이어를 본다
+            st.Teleport(StalkerOnFloor(P + Vector3.forward * dist), 180f);   // 플레이어를 본다
             Rect r = default;
             Vector3 v = default, h = default;
             yield return Capture($"13_monster_at_{dist:0}m", x => v = x, default, () => r = ScreenRect(mainCam, bodyR));
@@ -4320,7 +4346,7 @@ public class M1Check : MonoBehaviour
         float[] dirYaw = { 180f, 90f, 270f, 0f };
         for (int i = 0; i < 4; i++)
         {
-            st.Teleport(P + Vector3.forward * 2f, dirYaw[i]);
+            st.Teleport(StalkerOnFloor(P + Vector3.forward * 2f), dirYaw[i]);
             Vector3 v = default;
             yield return Capture($"13_monster_2m_{dirNames[i]}", x => v = x, default, () => ScreenRect(mainCam, bodyR));
             magenta += lastMagenta;
@@ -4466,8 +4492,10 @@ public class M1Check : MonoBehaviour
     }
 
     // ================= 램프 빛 번짐 재기 (사용자 09-30 "램프의 빛 번짐 · 발광이 너무 심해서 글씨와 모델링이 잘 안 보인다" — 스크린샷: 표지판 둘 · 세운 몸 코앞). -only glare
-    // 판정이 아니라 원인 재기: 같은 자리에서 ① 지금 ② 빛 번짐(Bloom) 끔 ③ 머리등이 그 물체를 "가까운 면"으로 봄(부딪힘 상자를 잠깐 붙임 — 가까운 면 감광은
-    // 부딪힘 몸체가 있는 면까지만 잰다) ④ 둘 다 를 찍어 물체 위 하얗게 탄 몫 · 밝기 · 잔무늬(글자 · 옷 결). 캡처 61_glare_<물체>_<경우>, 로그 GLARE 줄
+    // -only glare 는 원인 재기: 같은 자리에서 ① 지금 ② 빛 번짐(Bloom) 끔 ③ 고치기 전(표지판 옛 칠 · 머리등이 못 봄) ④ 고치기 전 + 번짐 끔 — 몸은 ② ③ 대신 머리등이 보는 정도 0.5 · 0.7
+    // 를 찍어 물체 위 하얗게 탄 몫 · 밝기 · 잔무늬. 캡처 61_glare_<물체>_<경우>, 로그 GLARE 줄. 전체 실행은 ① 만 찍고 검사 둘:
+    // sign_readable_1m (표지판 셋 1 m 앞 탄 몫 ≤ 15 %, 사보타주 brightboard) · lamp_sees_near_body (뒤가 트인 곳 세운 몸 0.6 m 탄 몫 ≤ 6 %, 사보타주 lampblind)
+    // (09-30 고친 뒤: 표지판 바탕 × SIGN_BOARD_BRIGHT · 머리등이 Headlamp.Probes(표지판 판 · 남의 몸)도 봄 × LAMP_PROBE_DIM)
     IEnumerator GlareStage(CharacterController cc)
     {
         stalker.enabled = false;
@@ -4477,6 +4505,7 @@ public class M1Check : MonoBehaviour
         float bloom0 = bloom != null ? bloom.intensity.value : 0f;
         var mainCam = pickaxe.cam.GetComponent<Camera>();
         var targets = new List<(string name, Renderer[] rends, Vector3 at, Vector3 normal, float dist, GameObject hitGo)>();
+        var burnt = new Dictionary<string, (float burnt, float dim)>();
         foreach (var board in pieces.GetComponentsInChildren<MeshRenderer>(true).Where(r => r.name.StartsWith("SignBoard")))
         {
             var group = board.transform.parent;
@@ -4511,36 +4540,33 @@ public class M1Check : MonoBehaviour
             yield return new WaitForSeconds(0.4f);
             AimAt(t.at);
             yield return new WaitForSeconds(0.2f);
+            // 경우 = (이름, 빛 번짐 끔, 판 배율, 머리등이 가까운 물체를 보는 정도). "before" = 09-30 고치기 전(판 옛 칠 · 못 봄)
             bool isSign = !t.name.StartsWith("stood");
-            var boardR = isSign ? t.hitGo.GetComponent<Renderer>() : null;
-            string colId = boardR != null && boardR.material.HasProperty("baseColorFactor") ? "baseColorFactor" : "_BaseColor";   // glTF 로 들어온 소품은 baseColorFactor
-            Color board0 = boardR != null ? boardR.material.GetColor(colId) : default;   // 판만 사본 재질
-            if (boardR != null) Debug.Log($"GLARE {t.name} board shader {boardR.material.shader.name} · {colId} {board0}");
-            foreach (var (tag, noBloom, sees) in new[] { ("now", false, false), ("nobloom", true, false), (isSign ? "darkboard" : "lampsees", false, true), ("both", true, true) })
+            float sb0 = ArtLook.SignBright, pd0 = Headlamp.probeDim;
+            var cases = isSign
+                ? new[] { ("now", false, sb0, pd0), ("nobloom", true, sb0, pd0), ("before", false, 1f, 0f), ("before_nobloom", true, 1f, 0f) }
+                : new[] { ("now", false, sb0, pd0), ("probe0.5", false, sb0, 0.5f), ("probe0.7", false, sb0, 0.7f), ("before", false, sb0, 0f) };
+            foreach (var (tag, noBloom, board, probe) in only == "glare" ? cases : cases.Take(1))
             {
                 if (bloom != null) bloom.intensity.value = noBloom ? 0f : bloom0;
-                if (boardR != null) boardR.material.SetColor(colId, sees ? new Color(board0.r * 0.25f, board0.g * 0.25f, board0.b * 0.25f, board0.a) : board0);   // 판 바탕을 ×0.25 (인트로 간판 판정 0.15 ≈ 흰 판 0.66 × 0.23)
-                Collider col = null;
-                if (sees)
-                {
-                    if (t.name.StartsWith("stood"))
-                    {
-                        var cap = t.hitGo.AddComponent<CapsuleCollider>();
-                        cap.radius = 0.3f; cap.height = 1.9f; cap.center = Vector3.up * 0.95f;   // 몸 뿌리 기준(크기 배는 몸이 곱한다)
-                        Physics.IgnoreCollision(cc, cap);                   // 내 캡슐이 밀려나지 않게 (광선만 맞는다)
-                        col = cap;
-                    }
-                    else col = null;
-                }
+                ArtLook.SignBright = board;
+                Headlamp.probeDim = probe;
                 Vector3 v = default;
                 yield return Capture($"61_glare_{t.name}_{tag}", x => v = x, default, () => ScreenRect(mainCam, t.rends.Where(r => r.enabled).ToArray()));
-                Debug.Log($"GLARE {t.name} {tag}: burnt {v.z * 100f:F1} % · mean {v.x:F3} · structure {v.y:F1} · lamp near-dim x{lamp.nearDim:F2} · distance {Vector3.Distance(pickaxe.cam.position, t.at):F2} m");
-                if (col != null) Destroy(col);
+                Debug.Log($"GLARE {t.name} {tag}: burnt {v.z * 100f:F1} % · mean {v.x:F3} · structure {v.y:F1} · lamp near-dim x{lamp.nearDim:F2} · board x{board:F2} · sees x{probe:F1} · distance {Vector3.Distance(pickaxe.cam.position, t.at):F2} m");
+                if (tag == "now") burnt[t.name] = (v.z, lamp.nearDim);
             }
+            ArtLook.SignBright = sb0;
+            Headlamp.probeDim = pd0;
         }
         if (bloom != null) bloom.intensity.value = bloom0;
         Destroy(stood); Destroy(stoodO);
-        Check("glare_measured", targets.Count >= 2, $"{targets.Count} targets (signs {targets.Count - 1} + stood body) · captures 61_glare_* · log GLARE");
+        var signB = burnt.Where(k => k.Key.StartsWith("sign")).ToArray();
+        var openB = burnt.First(k => k.Key.StartsWith("stoodbody_open"));
+        Check("sign_readable_1m", signB.Length >= 3 && signB.All(k => k.Value.burnt <= 0.15f),
+            $"signs 1 m in front, burnt share on the board: {string.Join(" · ", signB.Select(k => $"{k.Key} {k.Value.burnt * 100f:F0} % (lamp x{k.Value.dim:F2})"))} — want ≤ 15 % (before 09-30: 84~89 %, text unreadable) · board x{(ArtLook.SabBrightBoard ? 1f : ArtLook.SignBright):F2} · captures 61_glare_sign*_now");
+        Check("lamp_sees_near_body", openB.Value.burnt <= 0.06f,
+            $"stood body 0.6 m in front, open space behind ({openB.Key}): burnt {openB.Value.burnt * 100f:F1} % — want ≤ 6 % (before 09-30: 14 %) · lamp near-dim x{openB.Value.dim:F2} · sees bodies x{Headlamp.probeDim:F1} · capture 61_glare_{openB.Key}_now");
     }
 
     // ================= 크기 · 눈높이 재기 (사용자 09-30 "플레이어 모델 크기 · 괴물 모델 크기 · 1인칭 눈높이가 안 맞는다"). -only sizes — 판정이 아니라 잰 값 · 캡처를 남긴다
@@ -4585,8 +4611,7 @@ public class M1Check : MonoBehaviour
         Vector3 at = me + fwd * D;
         var stood = PlayerBody.Stand(body, at, yaw + 180f);
         var sb = stood.GetComponent<PlayerBody>();
-        var scc = stalker.GetComponent<CharacterController>();
-        Vector3 Grounded(Vector3 p) => PlayerBody.Ground(p) + Vector3.up * (scc.skinWidth - (scc.center.y - scc.height * 0.5f));   // 게임처럼 — 중력으로 떨어진 괴물은 캡슐 밑이 바닥 + skinWidth (길찾기 점에 놓으면 발이 13 cm 떴다, 09-30)
+        Vector3 Grounded(Vector3 p) => StalkerOnFloor(p);                  // 게임처럼 선 자리 (길찾기 점에 놓으면 발이 13 cm 떴다, 09-30)
         stalker.Teleport(Grounded(at), yaw + 180f);
         var sa = stalker.GetComponentInChildren<StalkerAnim>();
         var lk = stalker.GetComponentInChildren<StalkerLook>();
@@ -4785,7 +4810,7 @@ public class M1Check : MonoBehaviour
         ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"19_devhud_{where}.png"));
         yield return null;
         float th = DevHud.TextHeight, bh = DevHud.BoxHeight;
-        string[] want = { "player height", "player arms", "player look", "mine motion" };   // 판정 키 줄 (몸 키 09-30 · 3D-P · 3D-P2 · MINE-2)
+        string[] want = { "player height", "player arms", "player look", "mine motion", "attack hit", "sign board", "sees signs/bodies" };   // 판정 키 줄 (몸 키 · 램프 번짐 09-30 · 3D-P · 3D-P2 · MINE-2)
         var missing = want.Where(w => !DevHud.LastText.Contains(w)).ToList();
         yield return PressKey(kb, Key.F1);
         hud.enabled = false;

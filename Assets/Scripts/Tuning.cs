@@ -85,6 +85,9 @@ public static class Tuning
     // (발광점을 카메라 뒤로 빼는 방법은 실측으로 기각: 뒤로 0.35 m 에서 탄 픽셀 45 → 55 %, 원뿔이 벽을 더 넓게 덮을 뿐)
     public const float LAMP_NEAR_REF = 4.0f;       // m, 이보다 먼 면은 감광 없음
     public const float LAMP_NEAR_POW = 1.4f;
+    // 머리등이 부딪힘 몸체 없는 물체(표지판 판 · 남의 몸 — Headlamp.Probes)도 가까운 면으로 보는 정도 0~1(밝기 단계로 섞음). 0 = 옛(뒤의 벽까지 잼), 1 = 벽과 같은 곡선. 가운데 광선에 맞으면 그 거리가 기준.
+    // 사용자 09-30 "램프 빛 번짐 · 발광이 너무 심해 글씨와 모델링이 안 보인다" → 뒤가 트인 곳 세운 몸 0.6 m: 탄 몫 14 % → 2 % (1 에서 밝기 0.25 → 0.07). 판정 키 Shift+PgDn PgUp
+    public const float LAMP_PROBE_DIM = 1.0f;
     public const float LAMP_NEAR_TIME = 0.15f;     // 초, 감광이 따라가는 시간 — 광선이 기둥 가장자리를 넘을 때 깜빡이지 않게
     public static readonly Color LAMP_COLOR = new Color(1.00f, 0.96f, 0.88f);
     public const bool LAMP_SHADOW = true;
@@ -146,6 +149,7 @@ public static class Tuning
     public const float ART_BOUNCE_DROP = 1.6f;                  // m, 튀는 빛은 전등보다 이만큼 아래 (바닥에서 튀어 오르는 빛)
     public static readonly Color ART_BOUNCE_TINT = new Color(0.85f, 0.7f, 0.55f);   // 바위·진흙에서 튄 빛은 더 누렇다 (전등 색에 곱함)
     public const float ART_GRAIN = 0.25f;                       // 필름 입자 (부스 화면 설정 M11_BoothVolume)
+    public const float SIGN_BOARD_BRIGHT = 0.25f;               // 부스 표지판 바탕 칠 배율 (Blender 칠 × 이 값) — 1 m 앞 흰 판이 84 % 탔다(09-30 잼, ×0.25 에서 5 %). 인트로 간판 판정 0.15 와 같은 까닭. 판정 키 Shift+Home End
     public const float ART_BLOOM = 0.35f;                       // 빛 번짐 (전등 · 헤드램프 밝은 곳)
     public const float ART_CONTRAST = 10f;                      // 색 대비 +
     public const float BOOTH_STALKER_H = 2.1f;                  // m, 부스 맵 괴물 충돌 캡슐 — 부스 천장 2.7~3.2 m(09-24 +0.5 m 전 2.2~2.7 에 맞춘 값) (복도는 STALKER_H 2.8 그대로)
@@ -356,7 +360,12 @@ public static class Tuning
     public const float PICK_YAW_DEG = 90.0f;       // 머리 긴 축(X)을 앞뒤로 세운다
     public const float PICK_ROLL_DEG = 10.0f;      // 자루 끝을 앞으로 기울인 각
     public const float PICK_SWING_DEG = 55.0f;     // 내려치는 각
-    public const float PICK_DOWN_TIME = 0.12f;     // 초, 내려치기 — 끝나는 순간이 타격
+    // 괴물 치기 = 캐기 한 콱과 같은 동작(표), 박자만 따로 (사용자 09-30 "괴물을 공격할 때 곡괭이를 까딱까딱한다. 광물을 캘 때의 모션으로"). 들기 · 꼭대기 · 내려치기 · 박힌 채 · 내리기 (s).
+    // 캐기 박자(서서 누르고 맞기까지 0.70 s)로는 1.6 m 앞에서 달려드는 괴물이 먼저 잡았다(09-30 -only retreat: 세 대 중 두 대 뒤 Catch) → 맞기까지 0.27 s (옛 휘두르기 0.20).
+    // 판정 키 Shift+Del(빠르게) · Shift+Bksp(느리게) = ATTACK_TEMPO 배
+    public static readonly float[] ATTACK_STRIKE = { 0.15f, 0.00f, 0.12f, 0.15f, 0.20f };
+    public const float ATTACK_TEMPO = 1.0f;
+    public const float PICK_DOWN_TIME = 0.12f;     // 초, 내려치기 — 끝나는 순간이 타격 (옛 휘두르기 — 사보타주 minefast · oldswing)
     public const float PICK_UP_TIME = 0.23f;       // 초, 되돌리기
     // 무게 (사용자 09-14 "휘두르기 가볍다"). Unity 전용: 치기 전에 뒤로 들고, 맞는 순간 잠깐 멈추고, 매 타격 화면을 작게 흔든다
     public const float PICK_WINDUP_DEG = 20.0f;    // 뒤로 드는 각
