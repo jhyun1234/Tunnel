@@ -1963,7 +1963,8 @@ public class M1Check : MonoBehaviour
         NoiseSound.last3D = "-";
         var mouse = InputSystem.AddDevice<Mouse>("SoundMouse");
         yield return Click(mouse);
-        yield return new WaitForSeconds(0.5f);
+        for (float w = 0f; st.hitsSeen == 0 && w < 1.5f; w += Time.deltaTime) yield return null;   // 괴물 치기는 맞기까지 0.70 s(판정 ⑧) — 들킨 괴물이 굳은 1.0 s 안에 맞는다
+        yield return new WaitForSeconds(0.1f);
         Check("stalker_hit_sound_is_flesh", st.hitsSeen >= 1 && NoiseSound.last3D.StartsWith("pick_flesh"), $"hits seen {st.hitsSeen}, last 3D sound '{NoiseSound.last3D}'");
         InputSystem.RemoveDevice(mouse);
         st.hp = Tuning.STALKER_HP;
@@ -2958,8 +2959,10 @@ public class M1Check : MonoBehaviour
         yield return null;
         float hp0 = st.hp;
         float cool0 = pickaxe.cooldownTime, mul0 = pickaxe.swingTimeMul;
-        pickaxe.cooldownTime = 0f;                                     // 스턴 0.5 s 안에 두 타가 닿게 이 두 번만 빠르게 (사람은 0.69 s 걸려 못 한다). 첫 타 뒤엔 되돌리기(0.29 s)가 두 번째를 막는다
-        pickaxe.swingTimeMul = 0.2f;
+        // 이 절은 체력 · 스턴 · 철수 · 벽타기 규칙을 본다 — 곡괭이 빠르기는 mine_monster_attack_motion 이 본다. 괴물 치기가 맞기까지 0.70 s(판정 ⑧)라
+        // 1.6 m 앞 추격 괴물이 먼저 잡고(3.0 → 1.5 m 를 0.23 s), 스턴 0.5 s 안에 두 번째도 못 친다 → 절 내내 20 배 빠르게(맞기까지 0.035 s)
+        pickaxe.cooldownTime = 0f;
+        pickaxe.swingTimeMul = 0.05f;
         yield return Click(mouse);
         t = 0f;
         while (st.state != Stalker.State.Stun && t < 1f) { t += Time.deltaTime; yield return null; }
@@ -2970,8 +2973,6 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.1f);                         // 첫 휘두르기(0.1 s)가 끝난 뒤
         yield return Click(mouse);                                     // 스턴 중 한 대 더 — 닿지만 안 먹혀야 한다
         yield return new WaitForSeconds(0.15f);
-        pickaxe.cooldownTime = cool0;
-        pickaxe.swingTimeMul = mul0;
         int taken = st.hitsTaken;
         while (st.state == Stalker.State.Stun && Time.time - stunStart < 3f) yield return null;
         float stunT = Time.time - stunStart;
@@ -3056,6 +3057,8 @@ public class M1Check : MonoBehaviour
         Check("reappears_at_far_crack_full_hp", st.state == Stalker.State.Wander && st.hp == Tuning.STALKER_HP && shown && d2 > 15f && Mathf.Abs(d2 - far) < 1.5f,
             $"state {st.state}, hp {st.hp:0}, visible {shown}, {d2:F1} m from player (far crack {far:F1} m)");
         lamp.lampOn = true;
+        pickaxe.cooldownTime = cool0;
+        pickaxe.swingTimeMul = mul0;
     }
 
     // A1 Meshy 소품 1차 (승인 09-23): 조각 _v2 의 갱목(통나무)·갓등, 곡괭이 pickaxe.glb — 실제 크기 · 바닥 붙음 · 면·그림 예산 · 재질 빠짐(분홍) 0 · 갱목 이름 그대로.

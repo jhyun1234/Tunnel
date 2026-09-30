@@ -362,9 +362,10 @@ public static class Tuning
     public const float PICK_SWING_DEG = 55.0f;     // 내려치는 각
     // 괴물 치기 = 캐기 한 콱과 같은 동작(표), 박자만 따로 (사용자 09-30 "괴물을 공격할 때 곡괭이를 까딱까딱한다. 광물을 캘 때의 모션으로"). 들기 · 꼭대기 · 내려치기 · 박힌 채 · 내리기 (s).
     // 캐기 박자(서서 누르고 맞기까지 0.70 s)로는 1.6 m 앞에서 달려드는 괴물이 먼저 잡았다(09-30 -only retreat: 세 대 중 두 대 뒤 Catch) → 맞기까지 0.27 s (옛 휘두르기 0.20).
-    // 판정 키 Shift+Del(빠르게) · Shift+Bksp(느리게) = ATTACK_TEMPO 배
+    // 판정 키 Shift+Del(빠르게) · Shift+Bksp(느리게) = ATTACK_TEMPO 배. 사용자 판정 ⑧(09-30): 맞기까지 0.70 s (= 0.27 × 2.593) — 캐기 한 콱과 같다.
+    // 그러면 달려드는 괴물은 못 맞힌다: 닿는 거리 MINE_RANGE 3.0 → 잡는 거리 1.5 m 를 추격 6.5 m/s 로 0.23 s. 맞힐 틈 = 멈춰 있을 때(포효 STALKER_ALERT_S 1.0 s · 배회 · 스턴)
     public static readonly float[] ATTACK_STRIKE = { 0.15f, 0.00f, 0.12f, 0.15f, 0.20f };
-    public const float ATTACK_TEMPO = 1.0f;
+    public const float ATTACK_TEMPO = 0.70f / 0.27f;
     public const float PICK_DOWN_TIME = 0.12f;     // 초, 내려치기 — 끝나는 순간이 타격 (옛 휘두르기 — 사보타주 minefast · oldswing)
     public const float PICK_UP_TIME = 0.23f;       // 초, 되돌리기
     // 무게 (사용자 09-14 "휘두르기 가볍다"). Unity 전용: 치기 전에 뒤로 들고, 맞는 순간 잠깐 멈추고, 매 타격 화면을 작게 흔든다
