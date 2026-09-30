@@ -1,6 +1,6 @@
 """MAP4 장면 시안 — 장면 하나를 블록아웃으로 짓고 눈높이 1인칭 그림을 뽑는다 (제안서 docs/제안서_MAP4_장면부터_짠_맵.md 6절 차례 2).
   SCENE=9 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup -P blender/map/scene_mock.py
-  SCENE = 9 (거대한 빈 공간 = 1편 그것의 굴) · 6 (케이지 승강장) · 1 (쇠동발 숲) · 3 (광차 싣는 곳, Fab 모델 — build/tex_test/fab 필요) · 7 (바람문 두 짝, Fab) · t (질감 시험 벽) · f (Fab 갱도 조각)
+  SCENE = 9 (거대한 빈 공간 = 1편 그것의 굴) · 6 (케이지 승강장) · 1 (쇠동발 숲) · 3 (광차 싣는 곳, Fab 모델 — build/tex_test/fab 필요) · 7 (바람문 두 짝, Fab) · 8 (무너진 기둥 굴, Fab) · t (질감 시험 벽) · f (Fab 갱도 조각)
 재질은 부스 맵과 같다(Assets/Tunnel/Pieces/piece_straight.gltf 에서 가져옴 — 안 고친다). 칠 · 콘크리트 · 전구는 여기서 만든 단색 재질.
 동굴 만드는 법도 make_booth.py 와 같다: 공기 덩어리 → 복셀 리메시 → 면 뒤집기 → 벽을 바위 쪽으로만 파는 잡음.
 출력: build/check_map4/scene<번호>/ — fp_*_lamp.png(머리등 + 그 장면의 전등 + 눈이 어둠에 익은 정도, 게임에 가깝게) · fp_*_shape.png(모양을 보려고 밝힘)
@@ -499,6 +499,16 @@ def scene3():
 #   · 예비 사진 독일 광산박물관 Wettertür(강철 아치를 벽돌 벽이 막고 광차가 지나는 큰 두 짝 문 + 사람 문 + 표지판). 국내 사진은 못 찾음.
 #   공통 = 굴 단면 전체를 벽이 아치 모양대로 막는다 · 굵은 문틀 · 속이 안 보이는 통짝 문 · 문에 표지.
 # 일어나는 일: 앞문을 닫아야 뒷문이 열린다(풍문은 늘 닫아 둔다 — 조사 09). 두 문 사이 6 m 는 머리등뿐, 문 너머가 안 보인다. 괴물은 문을 긁는다.
+def tint(m, rgb, name):
+    """재질 사본의 바탕색에 rgb 를 곱한다 — 나뭇결은 그대로 두고 칠 · 타르 색만"""
+    t = m.copy(); t.name = name; nt = t.node_tree
+    inp = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"]
+    mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MULTIPLY"; mix.inputs["Factor"].default_value = 1.0
+    a, b = [x for x in mix.inputs if x.type == "RGBA"][:2]; b.default_value = (*rgb, 1)
+    if inp.links: nt.links.new(inp.links[0].from_socket, a)
+    else: a.default_value = inp.default_value
+    nt.links.new(next(x for x in mix.outputs if x.type == "RGBA"), inp); return t
+
 def slab(bm, x, a, b, z0, ta, tb, t):
     """세운 판자 하나 — y a~b, 두께 t (x 방향), 위 끝이 비스듬 (ta → tb, 아치에 맞춘다)"""
     vs = [bm.verts.new(v) for v in ((x - t / 2, a, z0), (x - t / 2, b, z0), (x - t / 2, b, tb), (x - t / 2, a, ta),
@@ -523,9 +533,11 @@ def bulkhead(x, inner):
         for side in (-1, 1):
             ok = [(a, b) for a, b, t in planks if t > z + 0.15 and side * (a + b) > 2 * fw - 0.01]
             if ok: box(bm, (x + inner * (BOARD_T / 2 + 0.03), (min(a for a, _ in ok) + max(b for _, b in ok)) / 2, z), (0.06, max(b for _, b in ok) - min(a for a, _ in ok), 0.14))
-    for s in (-1, 1): box(bm, (x, s * (DOOR_W / 2 + 0.1), (DOOR_H + 0.2) / 2), (0.22, 0.2, DOOR_H + 0.2))   # 문틀 기둥
-    box(bm, (x, 0, DOOR_H + 0.1), (0.22, DOOR_W + 0.4, 0.2))           # 문틀 머리
     box_uv(obj("BOARDS", bm, M_TIMB).data, 0.8)
+    bm = bmesh.new()
+    for s in (-1, 1): box(bm, (x, s * (DOOR_W / 2 + 0.1), (DOOR_H + 0.2) / 2), (0.26, 0.2, DOOR_H + 0.2))   # 문틀 기둥 (타르 칠 — 벽보다 짙다)
+    box(bm, (x, 0, DOOR_H + 0.1), (0.26, DOOR_W + 0.4, 0.2))           # 문틀 머리
+    box_uv(obj("TIMBER", bm, M_TAR).data, 0.8)
     print("CHECK bulkhead x %.2f  wall y %.2f ~ %.2f  top %.2f" % (x, y0, y1, max(t for *_, t in planks)))
     return y0, y1
 
@@ -543,11 +555,13 @@ def door(x, name, inner, open_to, deg, M_IRON):
         ang = math.atan2(zh - zl, lw - 0.1) * -s                                                # 빗댄 막대: 경첩 쪽 아래 → 여는 쪽 위
         put(bm, (inner * 0.045, -s * lw / 2, (zl + zh) / 2), (0.035, math.hypot(zh - zl, lw - 0.1), 0.12), Matrix.Rotation(ang, 3, "X"))
         for f in (-1, 1): put(bmi, (f * 0.06, -s * (lw - 0.1), 1.05), (0.03, 0.03, 0.3))       # 손잡이 (양쪽)
-    box_uv(obj(name, bm, M_TIMB).data, 0.8); obj(name + "_IRON", bmi, M_IRON)
+    box_uv(obj(name, bm, M_DOOR).data, 0.8); obj(name + "_IRON", bmi, M_IRON)
 
 def scene7():
     M_IRON = paint("iron", (0.08, 0.08, 0.08), 0.6, 0.8); M_PAINT = paint("wallpaint", (0.9, 0.75, 0.1), 0.8)
     M_BLK = paint("gouge", (0.02, 0.015, 0.01), 0.9)
+    global M_DOOR, M_TAR
+    M_DOOR = tint(M_TIMB, (0.62, 0.2, 0.12), "door_redoxide"); M_TAR = tint(M_TIMB, (0.3, 0.26, 0.24), "frame_tar")   # 문 = 붉은 칠(Smallcleugh 문의 빨간 칠) · 문틀 = 타르
     tunnel = []
     steel = arch_run(["wdpnchedw", "wdpnchtdw", "wdpnchedw", "wdpnchtdw"], 0.0, tunnel)          # 운반갱도 = Fab 강철 아치 (시안 ③ 과 같은 조각)
     tun = arch_run(["wcbpdfsdw", "wcbpdgcdw", "wcbpdfsdw"], steel, tunnel)                       # 문 너머 = 곁갱도 = Fab 나무 버팀 (사용자 09-30 굴 종류)
@@ -559,12 +573,12 @@ def scene7():
     door(xb, "DOORB_OPEN", -1, +1, 80, M_IRON)
     face = lambda sgn: (math.radians(90), 0, math.radians(-90 * sgn))  # 글자가 -x(sgn=1) · +x(sgn=-1) 쪽을 본다
     fw = DOOR_W / 2 + 0.2
-    text("풍문", (xa - BOARD_T / 2 - 0.01, 0, DOOR_H + 0.45), 0.45, M_PAINT, face(1))                       # 앞문 (오는 쪽)
-    text("항상 닫을 것", (xa - BOARD_T / 2 - 0.01, -(fw + 0.6), 1.55), 0.16, M_PAINT, face(1))
-    text("반대쪽 문을 닫고 여시오", (xb - BOARD_T / 2 - 0.01, -(fw + 0.65), 1.0), 0.12, M_PAINT, face(1))   # 두 문 사이 — 뒷문 옆 (가로대 사이)
-    text("반대쪽 문을 닫고 여시오", (xa + BOARD_T / 2 + 0.01, fw + 0.65, 1.0), 0.12, M_PAINT, face(-1))      # 두 문 사이 — 앞문 옆 (돌아볼 때)
+    text("풍문", (xa - BOARD_T / 2 - 0.01, 0, DOOR_H + 0.4), 0.6, M_PAINT, face(1))                       # 앞문 (오는 쪽)
+    text("항상 닫을 것", (xa - BOARD_T / 2 - 0.01, -(fw + 0.8), 1.55), 0.22, M_PAINT, face(1))
+    text("반대쪽 문을\n닫고 여시오", (xb - BOARD_T / 2 - 0.01, -(fw + 0.8), 1.2), 0.2, M_PAINT, face(1))   # 두 문 사이 — 뒷문 옆 (가로대 사이)
+    text("반대쪽 문을\n닫고 여시오", (xa + BOARD_T / 2 + 0.01, fw + 0.8, 1.2), 0.2, M_PAINT, face(-1))      # 두 문 사이 — 앞문 옆 (돌아볼 때)
     bm = bmesh.new()                                                  # 긁힌 자국 — 뒷문 옆 판자 (괴물은 문을 긁는다, 제안서 3-1)
-    for k in range(4): box(bm, (xb - BOARD_T / 2 - 0.004, fw + 0.35 + k * 0.07, 2.0 - k * 0.03), (0.008, 0.025, 0.55), Matrix.Rotation(math.radians(22), 3, "X"))
+    for k in range(4): box(bm, (xb - BOARD_T / 2 - 0.005, fw + 0.4 + k * 0.1, 1.95 - k * 0.04), (0.01, 0.04, 0.85), Matrix.Rotation(math.radians(22), 3, "X"))
     obj("GOUGE", bm, M_BLK)
     wall_pipe(0, xb)                                                  # 관은 앞문 벽을 뚫고 뒷문 벽에서 끝난다
     lamps = hang_lamps((2.0, xa - 1.5), 0.9)                          # 운반갱도 전등 — 앞문 앞에 하나 (문 앞은 밝다, 두 문 사이 · 너머는 어둠)
@@ -577,6 +591,79 @@ def scene7():
         shot_only={"DOORB_SHUT": ("fp_1_approach", "fp_2_between", "fp_3_behind"), "DOORB_SHUT_IRON": ("fp_1_approach", "fp_2_between", "fp_3_behind"),
                    "DOORB_OPEN": ("fp_4_through",), "DOORB_OPEN_IRON": ("fp_4_through",)},
         top_hide=tunnel, people=[(xa - 2.5, 0, 0), (xa + 3, 0, 0)], ortho=tun + 4, side_z=1.8, center=(tun / 2, 0))
+
+# ================= 장면 8 — 무너진 기둥 굴 (1편 곁갱도 8 m 구간, 옛 굴 = 우리 바위 굴 + Fab 바위벽 · 돌)
+# 레퍼런스: 카드 8 영국 Sharkham Point 갱도(같은 굴 사진 셋) — 네모 동발(다리 둘 + 갓목)이 기울고 · 다리가 안으로 밀리고 · 천장에서 떨어진 돌 더미 · 바닥에 쓰러진 나무 · 동발 사이는 맨 바위.
+# 일어나는 일: 동발을 안 고치면 천장이 무너져 길 하나가 사라진다(REP-2 — 판 도중에 맵이 바뀐다). 고칠 곳 = 부러져 처진 갓목(빨간 X) 옆에 새 동발 · 쐐기.
+def beam(bm, p0, p1, w=0.2, h=0.2):
+    """p0 → p1 로 누운 · 선 각목 (단면 w × h)"""
+    p0, p1 = Vector(p0), Vector(p1); d = p1 - p0
+    box(bm, (p0 + p1) / 2, (w, h, d.length), d.to_track_quat("Z", "X" if abs(d.normalized().x) < 0.5 else "Y").to_matrix())
+
+def square_set(bm, x, lean=0.0, sag=0.0, kick=(0.0, 0.0), drop=(0.0, 0.0)):
+    """네모 동발: 다리 둘(y ±1.05) + 갓목(2.1 m). lean = 위가 굴 쪽으로 기운 만큼 · sag = 갓목 가운데가 부러져 처진 만큼 · kick = 다리 밑이 안으로 밀린 만큼 · drop = 갓목 끝이 내려앉은 만큼 (왼 · 오른)"""
+    for k, s in enumerate((-1, 1)): beam(bm, (x, s * (1.05 - kick[k]), 0), (x + lean, s * 1.0, 2.1 - drop[k]))
+    L, R = Vector((x + lean, -1.25, 2.21 - drop[0])), Vector((x + lean, 1.25, 2.21 - drop[1]))
+    if sag: M = (L + R) / 2 - Vector((0, 0, sag)); beam(bm, L, M, 0.22, 0.22); beam(bm, M, R, 0.22, 0.22)
+    else: beam(bm, L, R, 0.22, 0.22)
+
+def rock_pile(cx, cy, rx, ry, h, n, s0, s1):
+    """돌 더미 자리들 (fab_many 용) — 가운데가 높은 둥근 더미, 굴 안(y ±1.15)에만"""
+    out = []
+    for _ in range(n):
+        a, r = random.uniform(0, 2 * math.pi), math.sqrt(random.random())
+        py = max(-1.15, min(1.15, cy + math.sin(a) * r * ry))
+        out.append((cx + math.cos(a) * r * rx, py, max(0.0, h * (1 - r * r) * random.uniform(0.4, 1.0) - 0.15), random.uniform(0, 360), random.uniform(s0, s1)))
+    return out
+
+def scene8():
+    tunnel = []
+    a1 = arch_run(["wcbpdfsdw", "wcbpdgcdw"], 0.0, tunnel)                                   # 들어오는 곁갱도 = Fab 나무 버팀 (멀쩡한 곳)
+    tun = arch_run(["wcbpdgcdw", "wcbpdfsdw"], a1 + 8.2, tunnel)                             # 무너진 8 m 구간 너머 다시 멀쩡한 곁갱도
+    xs = [a1 + 0.6 + i * 1.15 for i in range(7)]                                            # 옛 동발 일곱 (1.15 m 마다)
+    bm = bmesh.new()                                                                        # 바위 굴: Fab 구간은 조각 바깥보다 넓게(조각 뒤 바위), 무너진 구간은 폭 2.7 + 천장이 무너진 구멍
+    box(bm, (tun / 2, 0, 1.2), (tun + 2, 4.2, 3.0))
+    box(bm, (a1 + 4.1, 0, 1.12), (8.6, 2.7, 2.85))
+    blob(bm, (xs[3] + 0.5, 0.3, 2.6), (1.3, 0.95, 1.0), 3)
+    sh = shell(bm, 0.3)
+    sh.data.materials[0] = tint(tex_mat(os.path.join(FABDIR, "ueknfaclw"), 2.0), (0.55, 0.5, 0.45), "rock_fab")   # Fab 광산 바위벽 (착암 자국) — 밝아서 조금 어둡게
+    coal_floor(0, tun)
+    M_OLD = tint(M_TIMB, (0.42, 0.36, 0.3), "timber_rotten"); M_RED = paint("redpaint", (0.6, 0.05, 0.03), 0.7)
+    bm = bmesh.new()
+    square_set(bm, xs[0], lean=0.05); square_set(bm, xs[1], lean=0.12)
+    square_set(bm, xs[2], lean=0.08, sag=0.22)                                              # 부러져 처진 갓목 — 고칠 곳
+    square_set(bm, xs[3], lean=0.15, kick=(0, 0.45), drop=(0, 0.35))                        # 오른 다리가 밀려 들어오고 갓목 끝이 내려앉음
+    x = xs[4]; beam(bm, (x, -1.05, 0), (x + 0.1, -1.0, 2.1))                                # 무너진 동발: 왼 다리만 서고
+    beam(bm, (x + 0.1, -1.2, 2.2), (x + 0.45, 0.9, 0.95), 0.22, 0.22)                       #   갓목은 돌 더미 위로 떨어지고
+    beam(bm, (x - 0.7, 0.75, 0.12), (x + 1.1, 0.95, 0.12))                                  #   오른 다리는 바닥에 누움
+    square_set(bm, xs[5], lean=-0.1, sag=0.1); square_set(bm, xs[6], lean=-0.04)
+    for a, b in ((0, 1), (5, 6)):                                                           # 동발 위 덧댄 판자 (멀쩡한 곳만)
+        for y in (-0.8, -0.4, 0.0, 0.4, 0.8): beam(bm, (xs[a] - 0.2, y, 2.36), (xs[b] + 0.25, y, 2.36), 0.18, 0.04)
+    beam(bm, (xs[3] + 0.2, -0.3, 2.36), (xs[3] + 0.95, -0.15, 1.55), 0.18, 0.04)             # 구멍에서 늘어진 부러진 판자
+    beam(bm, (xs[3] + 0.3, 0.35, 2.36), (xs[3] + 0.8, 0.5, 1.8), 0.18, 0.04)
+    box_uv(obj("TIMBER_OLD", bm, M_OLD).data, 0.8)
+    bm = bmesh.new()                                                                        # 새 동발 재료 (고칠 곳 옆 — 벽에 기댄 다리 · 바닥의 갓목 · 쐐기)
+    beam(bm, (xs[2] - 0.55, -1.12, 0), (xs[2] - 0.5, -1.3, 2.0))
+    beam(bm, (xs[1] + 0.2, -1.05, 0.11), (xs[1] + 2.3, -1.0, 0.11), 0.22, 0.22)
+    for k in range(3): box(bm, (xs[2] - 0.2 + k * 0.18, -0.75, 0.04), (0.12, 0.25, 0.07), Matrix.Rotation(random.uniform(-0.4, 0.4), 3, "Z"))
+    box_uv(obj("TIMBER_NEW", bm, M_TIMB).data, 0.8)
+    bm = bmesh.new()                                                                        # 빨간 X — 위험 표시 (고칠 동발 왼 다리, 오는 쪽 면)
+    for s in (-1, 1): box(bm, (xs[2] + 0.057 - 0.12, -1.05, 1.5), (0.006, 0.035, 0.3), Matrix.Rotation(math.radians(30 * s), 3, "X"))
+    obj("MARK", bm, M_RED)
+    FABMAT["wd3efb0"] = tint(tex_mat(os.path.join(FABDIR, "wd3efb0"), 1 / 0.35), (0.62, 0.62, 0.66), "stone_grey")   # 스캔 돌이 붉다 — 벽 바위 색에 맞춰 회색으로
+    fab_many("vmhdagb", [(xs[3] + 0.5, 0.45, 0.0, 30, 1.0)])                                # 흙 더미 + 떨어진 돌 (Fab 스캔 돌 9 cm × 5~12 배)
+    fab_many("wd3efb0", rock_pile(xs[3] + 0.5, 0.55, 1.5, 0.7, 1.0, 80, 3, 8))
+    fall = fab_many("wd3efb0", rock_pile(a1 + 4.4, 0.0, 3.3, 1.35, 2.3, 160, 4, 11))         # 안 고치면 — 무너져 굴이 막힌다 (④ 한 장에만)
+    for o in fall: o.name = "FALL_" + o.name
+    eye_in, at_in = (a1 - 1.6, 0.15, EYE), (a1 + 5.5, 0.0, 1.2)
+    return dict(
+        lights=[], adapt=((a1 + 4, 0, 1.8), 25, 4), fills=([(2, 0), (a1 + 2, 0), (a1 + 6, 0), (tun - 3, 0)], 1.9, 250, 1.5),
+        shots=[("fp_1_enter", eye_in, at_in),                                              # 멀쩡한 곁갱도에서 — 기운 동발 · 처진 갓목 · 돌 더미
+               ("fp_2_squeeze", (xs[2] + 0.45, -0.5, EYE), (xs[5] + 0.8, -0.3, 1.4)),      # 돌 더미 옆 좁아진 길 (폭 약 1 m) — 머리 위 무너진 동발
+               ("fp_3_repair", (xs[2] - 1.7, 0.35, EYE), (xs[2], -0.5, 1.55)),              # 고칠 곳 — 부러진 갓목 · 빨간 X · 새 동발 재료
+               ("fp_4_collapsed", eye_in, at_in)],                                         # 안 고치면 — ① 과 같은 자리, 굴이 막혔다
+        shot_only={o.name: ("fp_4_collapsed",) for o in fall},
+        top_hide=tunnel, people=[(xs[1] + 0.6, -0.6, 0)], ortho=tun + 4, side_z=1.2, center=(tun / 2, 0))
 
 def fab_many(fid, places, **kw):
     """같은 Fab 모델을 여러 자리에 — 한 번만 불러오고 그물을 나눠 쓴다. places = [(x, y, z, yaw, 배율)] (밑면 가운데 자리)"""
@@ -640,7 +727,7 @@ def scene_v():
 
 if SCENE == "t": OUT = os.path.join(ROOT, "build", "check_map4", "tex_" + os.environ.get("TEXNAME", "now"))
 if SCENE == "f": OUT = os.path.join(ROOT, "build", "check_map4", "tex_" + os.environ.get("TEXNAME", "fab_model"))
-S = {"9": scene9, "6": scene6, "1": scene1, "3": scene3, "7": scene7, "t": scene_t, "f": scene_f, "v": scene_v}[SCENE]()
+S = {"9": scene9, "6": scene6, "1": scene1, "3": scene3, "7": scene7, "8": scene8, "t": scene_t, "f": scene_f, "v": scene_v}[SCENE]()
 
 # EXPORT_GLB=<파일> — 장면을 게임에 그대로 넣어 보려고 (엔진 확인, 사용자 09-30 "엔진의 한계인가?"). 카메라 자리 CAM_<이름> · 보는 곳 AT_<이름> · 전등 LAMP_<i> 빈 노드를 같이.
 # Fab 을 쓴 장면은 Assets/Fab/Resources/ 에만 (git 에 안 올림). 그림은 2K 로 줄인다 — Unity 도 기본 2K 로 줄인다.
