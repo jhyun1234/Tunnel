@@ -49,6 +49,9 @@ public class DevHud : MonoBehaviour
             var cam = fab.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("CAM_")).OrderBy(t => t.name).FirstOrDefault();
             if (cam != null) FabTest.StandAt(player, cam, FabTest.Node(fab, "AT_" + cam.name.Substring(4)));
         }
+        // MAP4 1편 전체(사용자 10-01): -map4 — 새 맵 승강장에서 시작 (괴물 없음, 구조 · 텍스처 판정). [ ] = 장면 자리 옮기기
+        if (Map4.Requested && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
+            && Map4.Spawn(player, pickaxe.cam.GetComponent<Camera>()) != null && stalker != null) stalker.gameObject.SetActive(false);
         // 영상 재현 판정(09-30): -fabvideo — FabVideo.glb 에서 시작, 키로 빛 · 화각 (FabVideoTuner). 이 모드에선 DevHud 를 끈다 (판정 키가 부딪힌다)
         if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-fabvideo") >= 0 && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
             && FabTest.Spawn("FabVideo", new Vector3(0f, -160f, 0f)) is GameObject vid)
@@ -77,8 +80,8 @@ public class DevHud : MonoBehaviour
         if (kb == null || fog == null)
             return;
         if (kb.vKey.wasPressedThisFrame) fog.enabled.value = !fog.enabled.value;
-        if (kb.rightBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed) fog.density.value *= 1.5f;   // Shift+[ ] 는 콱 크기 (SND-P)
-        if (kb.leftBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed) fog.density.value /= 1.5f;
+        if (kb.rightBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed && !Map4.Requested) fog.density.value *= 1.5f;   // Shift+[ ] 는 콱 크기 (SND-P) · -map4 에선 장면 자리 옮기기
+        if (kb.leftBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed && !Map4.Requested) fog.density.value /= 1.5f;
         if (kb.equalsKey.wasPressedThisFrame && !kb.shiftKey.isPressed) lamp.energy *= 1.25f;   // Shift+− = 는 몸 키 (BodyKeys)
         if (kb.minusKey.wasPressedThisFrame && !kb.shiftKey.isPressed) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;

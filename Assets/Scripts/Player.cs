@@ -13,6 +13,7 @@ public class Player : MonoBehaviour
     public float stamina = Tuning.STAMINA_MAX;
     public bool exhausted;                 // 0 에서 Shift 를 계속 눌렀다 — 100 찰 때까지 못 움직인다 (시점·숙이기는 됨)
     public string stance = "walk";         // crouch / walk / run
+    [System.NonSerialized] public bool forceCrouch;   // 머리 위가 낮아 설 수 없다 (Map4 가 매 프레임 알려 준다 — 새 맵 낮은 막장 천장 1.2~1.45 m)
     [System.NonSerialized] public int ore; // 캔 광석 수
     [System.NonSerialized] public bool frozen; // 잡힌 동안 — 입력·시점 잠금 (Stalker 가 켜고 끈다)
     [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
@@ -173,7 +174,7 @@ public class Player : MonoBehaviour
         squeezeLower = Mathf.MoveTowards(squeezeLower, repairing != null ? 1f : 0f, dt * 4f);   // 곡괭이를 내린다 (틈 비집기와 같은 자리)
 
         // 자세: Ctrl 숙이기 > Shift 달리기(움직일 때만) > 걷기
-        bool wantCrouch = kb.leftCtrlKey.isPressed || mineCrouch;
+        bool wantCrouch = kb.leftCtrlKey.isPressed || mineCrouch || forceCrouch;
         bool wantRun = kb.leftShiftKey.isPressed && !wantCrouch && input != Vector2.zero;
         if (wantRun && stamina <= 0f && !exhausted)
             exhausted = true;

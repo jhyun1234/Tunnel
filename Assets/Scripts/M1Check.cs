@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|standlow 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -367,12 +367,14 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4")
             yield return BoothStage(cc);
         if (only == "fabtuner")                                 // -fabvideo 판정 키가 도는가 (가상 키보드로 V · B)
             yield return FabTunerStage();
         if (only == "fabvideo")                                 // Fab 소개 영상 재현 (09-30) — 차이를 하나씩 켜 가며 같은 자리에서 찍는다
             yield return FabVideoStage();
+        if (only == "map4")                                     // MAP4 1편 전체 (10-01) — 장면 자리마다 서서 찍고 바닥에 서 있나 · fps
+            yield return Map4Stage();
         if (only == "fabtest")                                  // 엔진 확인 (09-30) — Fab 갱도를 게임에 넣어 Blender 시안과 같은 자리에서 찍고 fps 를 잰다
             yield return FabTestStage(cc);
         if (only == "tour")                                     // 사진 맞히기 (09-30) — 전체 실행엔 안 넣는다 (판정 아닌 사람용 캡처)
@@ -4671,6 +4673,36 @@ public class M1Check : MonoBehaviour
         yield return Capture("62_fab_dark_" + n1, x => v = x);
         Debug.Log($"FABTEST dark adapted {lamp.adapt:0.00} ambient {RenderSettings.ambientLight} screen mean {v}");
         lamp.lampOn = true;
+    }
+
+    // ================= MAP4 1편 전체 (사용자 10-01 "전체 맵을 끝까지"). -only map4 — Map4.glb(git 에 없음)를 놓고 장면 자리(CAM_*)마다 선다 → 64_map4_<이름>.png
+    // 판정: 자리마다 1.5 초 뒤에도 바닥에 서 있다(빠지지 않음 — 발 높이가 선 자리 ±0.3 m) · 시작 자리 fps ≥ 60 (최소 사양 목표). 사람은 exe -map4 로 걷는다
+    IEnumerator Map4Stage()
+    {
+        var m = Map4.Spawn(player, Camera.main);
+        if (m == null) { Check("map4_loaded", false, "no Map4.glb in Resources"); yield break; }
+        if (sabotageName == "standlow") m.enabled = false;      // 사보타주: 머리 위를 안 잰다 → map4_low_face_crouches FAIL
+        stalker.gameObject.SetActive(false);
+        lamp.lampOn = true;
+        Check("map4_loaded", m.spots.Length > 1, $"{m.spots.Length} spots, {m.GetComponentsInChildren<MeshFilter>().Length} meshes, {m.GetComponentsInChildren<Light>().Length} lights");
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 1.0f);
+        int f0 = Time.frameCount; float t0 = Time.realtimeSinceStartup;
+        yield return new WaitForSecondsRealtime(3f);
+        float fps = (Time.frameCount - f0) / (Time.realtimeSinceStartup - t0);
+        Check("map4_fps", fps >= 60f, $"{fps:0} fps at start (booth map is also loaded above)");
+        var fell = new System.Collections.Generic.List<string>();
+        string low = "no crouch_in spot";
+        for (int i = 0; i < m.spots.Length; i++)
+        {
+            m.Go(i); float y0 = player.transform.position.y;
+            yield return new WaitForSeconds(1.5f);
+            float dy = player.transform.position.y - y0;
+            if (Mathf.Abs(dy) > 0.3f) fell.Add($"{m.spots[i].name.Substring(4)} {dy:+0.0;-0.0} m");
+            if (m.spots[i].name.EndsWith("crouch_in")) low = $"stance {player.stance}, eye {Camera.main.transform.position.y - player.transform.position.y:0.00} m";
+            yield return Capture("64_map4_" + m.spots[i].name.Substring(4), x => { });
+        }
+        Check("map4_low_face_crouches", low.StartsWith("stance crouch"), low + " (낮은 막장 ② 천장 1.2~1.45 m — Ctrl 을 안 눌러도 숙는다)");
+        Check("map4_spots_on_floor", fell.Count == 0, fell.Count == 0 ? $"all {m.spots.Length} spots stand on the floor" : "moved: " + string.Join(", ", fell));
     }
 
     // ================= Fab 소개 영상 재현 (사용자 09-30 "영상은 같은 모델인데 우리는 왜 이렇게 못 나오나"). -only fabvideo — 사람용 캡처

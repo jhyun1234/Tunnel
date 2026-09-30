@@ -141,12 +141,14 @@ public static class Tuning
     public const float BOOTH_LIGHT_ENERGY = 60.5f;              // 사용자 판정 09-24 (숫자패드 −/+, 제안값 25). 부스 씬을 만들 때 박힌다 — 바꾸면 MakeBooth -force
     public const float BOOTH_LIGHT_RANGE = 6f;                  // m
     // MAP4 새 맵(Fab 스캔 재질) 빛 · 화각 — 사용자 판정 10-01(exe -fabvideo 키, 영상 재현 갱도). 옛 부스 바위(어두운 재질)의 BOOTH_LIGHT_* 와 따로 둔다
-    // 화각 90 을 게임 전체(CAMERA_FOV 80)에 쓸지 새 맵에만 쓸지는 아직 안 정함. 채움 · 먼 빛 · 색보정(Z X C) 상태도 아직 안 받음
+    // 쓰임(사용자 10-01): 새 맵(MAP4)에서만 — 부스 맵은 새 맵 1편이 다 지어지면 거기서 떼어 온다(그때 부스도 이 값). 지금 MAP2 부스는 CAMERA_FOV 80 · BOOTH_LIGHT_* 그대로
     public const float FAB_LIGHT_ENERGY = 25f;                  // 전등 세기 (옛 부스 60.5 는 밝은 Fab 재질을 하얗게 태웠다)
     public const float FAB_LIGHT_RANGE = 4f;                    // m
     public const float FAB_LIGHT_ORANGE = 0.8f;                 // 0 = 흰빛(1, .93, .85) ~ 1 = BOOTH_LIGHT_COLOR 주황
-    public const float FAB_CAMERA_FOV = 90f;                    // 세로 화각
+    public const float FAB_CAMERA_FOV = 85f;                    // 세로 화각 — 판정 키로 고른 90 을 사용자가 85 로 (10-01)
     public const float FAB_AMBIENT_FILL = 0.16f;                // 은은한 빛(튀는 빛 흉내) — 환경광에 (1, .85, .72) × 이 값을 더한다
+    public const bool FAB_COLOR_GRADE = true;                   // 색보정(그늘 푸르게 · 밝은 곳 따뜻하게, 판정 키 C) — 사용자 10-01 켬
+    public const bool FAB_BLUE_FAR = false;                     // 굴 끝 파란 먼 빛(판정 키 X) — 사용자 10-01: 구역 입구 색 등(카드 15)으로만. 굴 채움(Z)은 넣는다
     // ---- ART-1 현실감 시험 (제안서 docs/제안서_ART1_현실감_광장_시험.md, 승인 09-27). 부스 씬을 만들 때 박히는 것(범위·높이·화면)은 바꾸면 MakeBooth -force
     public const float ART_WET = 1.5f;                          // 젖음 세기 (MineRock 전역 _ArtWet). 판정 키 Home/End ±0.25 — 사용자 판정 09-27 1.50 (제안값 1.0)
     public const float ART_BRIGHT = 1.25f;                      // 바위·석탄·진흙 밝기 배율 (MineRock 전역 _ArtBright). 판정 키 ← → (숫자패드 4/6) ÷× 1.1 — 사용자 09-27 "조금 어둡다" → 1.25, 판정 ③ "1.25 그대로" 확정

@@ -37,13 +37,27 @@ public static class FabTest
 
     public static Transform Node(GameObject go, string name) => go.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name == name);
 
-    // 카메라 자리에 플레이어를 세운다: 발 = 눈 − EYE_HEIGHT, 고개 = 보는 곳 쪽
+    public static readonly Color White = new Color(1f, 0.93f, 0.85f), FillColor = new Color(1f, 0.85f, 0.72f);   // 흰 전등 · 은은한 빛 색 (영상 재현)
+
+    // 색보정 (영상 재현 C 키 — 사용자 10-01 새 맵에 켬): 그늘은 푸르게 · 밝은 곳은 따뜻하게
+    public static UnityEngine.Rendering.Volume Grade()
+    {
+        var g = new GameObject("VideoGrade"); var vol = g.AddComponent<UnityEngine.Rendering.Volume>(); vol.isGlobal = true; vol.priority = 100;
+        vol.profile = ScriptableObject.CreateInstance<UnityEngine.Rendering.VolumeProfile>();
+        var smh = vol.profile.Add<ShadowsMidtonesHighlights>(true);
+        smh.shadows.Override(new Vector4(0.85f, 0.95f, 1.2f, 0f)); smh.highlights.Override(new Vector4(1.12f, 1.0f, 0.85f, 0f));
+        return vol;
+    }
+
+    // 카메라 자리에 플레이어를 세운다: 발 = 카메라 밑 바닥 (숙인 눈 1.0 m 자리도 — 눈 − EYE_HEIGHT 면 바닥 밑으로 빠진다), 고개 = 보는 곳 쪽
     public static void StandAt(Player player, Transform cam, Transform at)
     {
         var cc = player.GetComponent<CharacterController>();
         Vector3 d = at.position - cam.position;
         cc.enabled = false;
-        player.transform.SetPositionAndRotation(cam.position - Vector3.up * Tuning.EYE_HEIGHT + Vector3.up * 0.05f,
+        Physics.SyncTransforms();
+        Vector3 feet = Physics.Raycast(cam.position + Vector3.up * 0.1f, Vector3.down, out var hit, 4f) ? hit.point : cam.position - Vector3.up * Tuning.EYE_HEIGHT;
+        player.transform.SetPositionAndRotation(feet + Vector3.up * 0.05f,
             Quaternion.Euler(0f, Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, 0f));
         cc.enabled = true;
         player.Pitch = -Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
@@ -58,9 +72,9 @@ public class FabVideoTuner : MonoBehaviour
 {
     public Player player; public Camera cam;
     float power = Tuning.FAB_LIGHT_ENERGY, range = Tuning.FAB_LIGHT_RANGE, orange = Tuning.FAB_LIGHT_ORANGE, fov = Tuning.FAB_CAMERA_FOV, fill = Tuning.FAB_AMBIENT_FILL;   // 처음 = 사용자 판정값(10-01)
-    bool dress = true, blue = true, grade;
+    bool dress = true, blue = Tuning.FAB_BLUE_FAR, grade = Tuning.FAB_COLOR_GRADE;   // 처음 = 사용자 판정(10-01): 채움 넣음 · 먼 빛은 구역 입구 등으로만 · 색보정 켬
     Light[] lamps, blues; GameObject[] dressing; UnityEngine.Rendering.Volume vol; Transform start, look;
-    static readonly Color White = new Color(1f, 0.93f, 0.85f), FillColor = new Color(1f, 0.85f, 0.72f);
+    static Color White => FabTest.White; static Color FillColor => FabTest.FillColor;
 
     void Start()
     {
@@ -69,10 +83,7 @@ public class FabVideoTuner : MonoBehaviour
         dressing = GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("DRESS_")).Select(t => t.gameObject).ToArray();
         var cams = GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("CAM_")).OrderBy(t => t.name).ToArray();
         start = cams.FirstOrDefault(); look = start ? FabTest.Node(gameObject, "AT_" + start.name.Substring(4)) : null;
-        var g = new GameObject("VideoGrade"); vol = g.AddComponent<UnityEngine.Rendering.Volume>(); vol.isGlobal = true; vol.priority = 100;
-        vol.profile = ScriptableObject.CreateInstance<UnityEngine.Rendering.VolumeProfile>();
-        var smh = vol.profile.Add<ShadowsMidtonesHighlights>(true);
-        smh.shadows.Override(new Vector4(0.85f, 0.95f, 1.2f, 0f)); smh.highlights.Override(new Vector4(1.12f, 1.0f, 0.85f, 0f));
+        vol = FabTest.Grade();
         if (start) FabTest.StandAt(player, start, look);
         Apply();
     }
