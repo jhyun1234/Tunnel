@@ -906,8 +906,10 @@ def plank_door(center, d, name, iron=False):
 
 def paint_sign(p, n, lines):
     """벽에 칠한 글씨 (카드 4) — p = 벽 위 점, n = 벽이 향한 쪽(수평). 글자가 n 쪽을 본다, 줄마다 0.34 m 아래로"""
-    th = math.atan2(n.x, -n.y)
-    for k, (body, size) in enumerate(lines): text(body, tuple(p + n * 0.04 - Vector((0, 0, k * 0.34))), size, M_SIGN_, (math.radians(90), 0, th))
+    th = math.atan2(n.x, -n.y); wb = max(len(b) * sz * 0.95 for b, sz in lines) + 0.35; hb = 0.26 + sum(sz for _, sz in lines) * 1.25
+    boxes_at = Matrix.Translation(p + n * 0.03 + Vector((0, 0, 0.12 - hb / 2 + lines[0][1] * 0.9))) @ Matrix.Rotation(th, 4, "Z")
+    bm = bmesh.new(); box(bm, (0, 0, 0), (wb, 0.04, hb)); bm.transform(boxes_at); box_uv(obj("SIGNBOARD", bm, M_TAR_).data, 0.8)   # 어두운 나무판 (주황 글씨가 읽히게)
+    for k, (body, size) in enumerate(lines): text(body, tuple(p + n * 0.06 - Vector((0, 0, k * (lines[0][1] * 1.2)))), size, M_SIGN_, (math.radians(90), 0, th))
 
 def box_uv_fast(me, per_m):
     """box_uv 와 같은 UV 를 numpy 로 (맵 바위는 면이 수백만)"""
@@ -991,17 +993,20 @@ SCENE_NAME = {"z6": "⑥ 승강장", "z3": "③ 광차 싣는 곳", "z7": "⑦ �
 def map4():
     global ZT, PASS, SHELL, M_OLD_, M_TAR_, M_SIGN_, M_IRONDOOR_
     plan = json.load(open(MAP_PLAN, encoding="utf-8"))
-    M_OLD_ = tint(M_TIMB, (0.42, 0.36, 0.3), "timber_rotten"); M_TAR_ = tint(M_TIMB, (0.3, 0.26, 0.24), "frame_tar")
+    global M_RUST, M_TIMB
+    M_RUST = tint(M_RUST, (0.42, 0.36, 0.32), "rust_dark"); M_TIMB = tint(M_TIMB, (0.62, 0.56, 0.5), "timber_map")   # 머리등에 하얗게 번쩍이던 것 (검수 10-01)
+    M_OLD_ = tint(M_TIMB, (0.62, 0.56, 0.5), "timber_rotten"); M_TAR_ = tint(M_TIMB, (0.45, 0.4, 0.38), "frame_tar")
     M_SIGN_ = paint("orangepaint", (0.95, 0.45, 0.05), 0.8); M_IRONDOOR_ = paint("irondoor", (0.13, 0.12, 0.11), 0.5, 0.8)
-    M_WATER = paint("water", (0.01, 0.012, 0.012), 0.03); M_MACH = paint("machine", (0.16, 0.24, 0.2), 0.5, 0.5); M_RED = paint("redbox", (0.45, 0.06, 0.04), 0.6)
-    M_WHITE = paint("white", (0.75, 0.75, 0.7), 0.7); M_CLOTH = paint("tarp", (0.14, 0.12, 0.08), 0.95); M_METAL = paint("metal", (0.2, 0.2, 0.21), 0.45, 0.85)
+    M_WATER = paint("water", (0.01, 0.012, 0.012), 0.03); M_MACH = paint("machine", (0.07, 0.1, 0.085), 0.6, 0.6); M_RED = paint("redbox", (0.3, 0.05, 0.03), 0.7)
+    M_WHITE = paint("white", (0.5, 0.49, 0.45), 0.8); M_CLOTH = paint("tarp", (0.08, 0.07, 0.05), 0.95); M_METAL = paint("metal", (0.09, 0.09, 0.1), 0.55, 0.8)
+    M_PAPER = paint("paper", (0.45, 0.42, 0.33), 0.9); M_LADDER = paint("ladderpaint", (0.3, 0.22, 0.05), 0.75, 0.4)
     M_FENCE = tint(M_TIMB, (0.5, 0.42, 0.34), "fence")
     lib("ufekaeedw", key="rail", rails=True)                                                   # 레일 조각 (레일이 X 로 눕게)
     for fid in ("ueujednfa", "ufmodhpfa", "ujzhahdfa"): lib(fid, along=True)                   # 광차 (긴 쪽을 X 로)
     for key, col in (("coal", (0.09, 0.09, 0.1)), ("stone", (0.55, 0.55, 0.58))):               # 스캔 돌 = 석탄 덩이 · 바위 돌 (같은 모델, 다른 색)
         m = tint(tex_mat(os.path.join(FABDIR, "wd3efb0"), 1 / 0.35), col, key + "_lump"); b_ = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         for l in list(b_.inputs["Roughness"].links): m.node_tree.links.remove(l)
-        b_.inputs["Roughness"].default_value = 0.55; b_.inputs["Specular IOR Level"].default_value = 0.25; lib("wd3efb0", key=key, mat=m)
+        b_.inputs["Roughness"].default_value = 0.8; b_.inputs["Specular IOR Level"].default_value = 0.1; lib("wd3efb0", key=key, mat=m)   # 석탄이 은색 쇠처럼 번쩍였다 (검수)
     R = lambda yaw: Matrix.Rotation(math.radians(yaw), 4, "Z")
     FN = {"z6": scene6, "z3": scene3, "z7": scene7, "z8": scene8, "z1": scene1, "z2": scene2, "z9": scene9}
     AIRZ = {"z3": [((L3 / 2, 0, 2.05), (L3 + 1, KIND["haul"][0], KIND["haul"][1]))],
@@ -1033,7 +1038,7 @@ def map4():
             d = Vector((q.x - p.x, q.y - p.y, 0))
             if d.length < 0.3: continue
             d.normalize(); w = KIND[e["kind"]][0]
-            ta = exit_t(e["a"], d) if k == 0 else w / 2 + 0.6; tb = exit_t(e["b"], -d) if k == len(pts) - 2 else w / 2 + 0.6
+            ta = exit_t(e["a"], d) + (0.6 if e["a"] in N else 0.0) if k == 0 else w / 2 + 0.6; tb = exit_t(e["b"], -d) + (0.6 if e["b"] in N else 0.0) if k == len(pts) - 2 else w / 2 + 0.6
             SEG.append(dict(p=p, q=q, kind=e["kind"], ta=ta, tb=tb, edge=e))
     # ---- 1단계: 바위 공기 모으기
     PASS = "air"
@@ -1051,7 +1056,18 @@ def map4():
             bm_ = bmesh.new(); box(bm_, ((i + 0.5) * L / n, 0, za + h / 2), (L / n + (0.8 if slope else 0.0), w, h)); bm_.transform(F); AIR.append((bm_, 0.3, None))
     for s in SEG: tube(s["p"], s["q"], s["kind"])
     for v, k in BEND: b = bmesh.new(); w, h = KIND[k]; box(b, (v.x, v.y, v.z + h / 2), (w + 1.2, w + 1.2, h)); AIR.append((b, 0.3, None))
-    for n in rooms: b = bmesh.new(); box(b, (n["x"], n["y"], n["z"] + n["h"] / 2), (n["w"], n["d"], n["h"])); AIR.append((b, 0.3, None))
+    for n in rooms:
+        b = bmesh.new(); box(b, (n["x"], n["y"], n["z"] + n["h"] / 2), (n["w"], n["d"], n["h"])); rr = random.Random(n["id"])
+        hx, hy, h = n["w"] / 2, n["d"] / 2, n["h"]
+        for cx_, cy_ in ((-hx, -hy), (hx, -hy), (-hx, hy), (hx, hy)):                          # 네 모서리를 둥글게
+            blob(b, (n["x"] + cx_ * 0.8, n["y"] + cy_ * 0.8, n["z"] + h * 0.45), (min(hx, 2.2), min(hy, 2.2), h * 0.5), 2)
+        for _ in range(int((n["w"] + n["d"]) / 4)):                                             # 벽을 따라 불룩한 곳 (파낸 자국)
+            if rr.random() < 0.5: px, py = n["x"] + rr.uniform(-hx, hx), n["y"] + rr.choice((-hy, hy))
+            else: px, py = n["x"] + rr.choice((-hx, hx)), n["y"] + rr.uniform(-hy, hy)
+            blob(b, (px, py, n["z"] + rr.uniform(0.9, h * 0.8)), (rr.uniform(0.8, 1.8), rr.uniform(0.8, 1.8), rr.uniform(0.8, 1.5)), 2)
+        for _ in range(max(1, int(n["w"] * n["d"] / 60))):                                      # 천장도 들쭉날쭉 (올리기만)
+            blob(b, (n["x"] + rr.uniform(-hx, hx) * 0.7, n["y"] + rr.uniform(-hy, hy) * 0.7, n["z"] + h - 0.2), (rr.uniform(1.5, 3.0), rr.uniform(1.5, 3.0), rr.uniform(0.5, 1.0)), 2)
+        AIR.append((b, 0.45, None))
     # 판자 문 칸: 방 안이면 가까운 방 벽, 굴이면 굴 옆벽 (Fab 굴이면 조각 판자가 문을 가려서 가까운 방 벽으로 옮긴다)
     def near_wall(p):
         best = None
@@ -1091,7 +1107,7 @@ def map4():
     lw, n2 = N["LW"], N["N2"]                                                                  # 서쪽 모임터 → 북쪽 막장 줄 6 m 세로 구멍 (사다리 오르기는 아직 없다 — 위에서 뛰어내리는 지름길)
     b = bmesh.new(); box(b, (lw["x"], lw["y"], (lw["z"] + n2["z"] + 3.0) / 2), (2.4, 2.4, n2["z"] - lw["z"] + 3.0)); AIR.append((b, 0.1, None))
     b = bmesh.new(); tp = Vector((lw["x"], lw["y"], n2["z"])); F_, L_ = frame(tp, Vector((n2["x"], n2["y"], 0)), n2["z"]); box(b, (L_ / 2, 0, 1.4), (L_, 2.6, 2.8)); b.transform(F_); AIR.append((b, 0.2, None))
-    ld = N["LD"]; b = bmesh.new(); box(b, (ld["x"], ld["y"], ld["z"] - 4.0), (3.0, 3.0, 8.0)); AIR.append((b, 0.2, None))   # 2편으로 내려가는 사다리 구멍 (2편은 아직 없다)
+    ld = N["LD"]; b = bmesh.new(); box(b, (ld["x"], ld["y"], ld["z"] - 6.0), (3.0, 3.0, 12.0)); AIR.append((b, 0.2, None))   # 2편으로 내려가는 사다리 구멍 (2편은 아직 없다)
     SHELL = unified_shell()
     T2 = zi["z2"]["T"]; c1, c2 = T2 @ Vector((-0.5, -3.5, -1)), T2 @ Vector((21.5, 3.5, 3))
     cen = np.empty(len(SHELL.data.polygons) * 3); SHELL.data.polygons.foreach_get("center", cen); cen = cen.reshape(-1, 3)
@@ -1103,6 +1119,7 @@ def map4():
         for objs in zone_objs.values():
             for o in objs: o.hide_viewport = True
         bpy.context.view_layer.update(); S_ = z["f"]()
+        bpy.context.view_layer.update()                                                 # 새 물체의 matrix_world 를 갱신한 뒤 옮긴다 (안 하면 글씨가 방 원점 바닥에 눕는다)
         for nm in S_.get("shot_only", {}):                                                 # 그림 한 장에만 보이던 것: 연 문은 두고, 괴물 눈 · 무너진 뒤 돌 · 닫힌 뒷문은 뺀다
             if "OPEN" not in nm and nm in bpy.data.objects: bpy.data.objects.remove(bpy.data.objects[nm], do_unlink=True)
         new = [o for o in bpy.data.objects if o not in before]
@@ -1129,6 +1146,18 @@ def map4():
     for s in SEG:                                                                             # 운반갱도 전등 (조각을 다 놓은 뒤 천장을 잰다)
         p, q = s["p"], s["q"]; d = Vector((q.x - p.x, q.y - p.y, 0)); L = d.length; d.normalize()
         if s["kind"] == "haul" and abs(q.z - p.z) <= 0.05 and L - s["ta"] - s["tb"] > 8: ceiling_lamps((p + d * s["ta"]).to_2d(), (q - d * s["tb"]).to_2d(), p.z)
+    bpy.context.view_layer.update(); deps = bpy.context.evaluated_depsgraph_get(); bm = bmesh.new(); bmr = bmesh.new()
+    for s in SEG:
+        p, q = s["p"], s["q"]
+        if abs(q.z - p.z) < 0.5: continue
+        d = (q - p); d.z = 0; L = d.length; d.normalize(); nrm = Vector((-d.y, d.x, 0)); t = 1.0
+        while t < L - 1.0:
+            c = p.lerp(q, t / L); hit, f_, *_ = sc.ray_cast(deps, c + Vector((0, 0, 1.5)), Vector((0, 0, -1)), distance=4.0)
+            if hit: box(bm, f_ + Vector((0, 0, 0.04)), (0.28, 1.6, 0.07), Matrix.Rotation(math.atan2(d.y, d.x), 3, "Z"))   # 발 디딤 판
+            if hit and int(t / 0.45) % 4 == 0: box(bmr, f_ + nrm * 1.0 + Vector((0, 0, 0.5)), (0.08, 0.08, 1.0))            # 난간 기둥
+            t += 0.45
+    if bm.verts: box_uv(obj("STEPS", bm, M_TAR_).data, 0.8)
+    if bmr.verts: box_uv(obj("STEPRAIL", bmr, M_TAR_).data, 0.8)
     # ---- 방마다 알아볼 소품 (설계의 "여기 있는 것")
     def W(n, dx, dy, dz=0.0): return Vector((n["x"] + dx, n["y"] + dy, n["z"] + dz))
     def M_(n, dx, dy, yaw=0.0, dz=0.0): return Matrix.Translation(W(n, dx, dy, dz)) @ R(yaw)
@@ -1147,7 +1176,7 @@ def map4():
             F = M_(n, dx, dy, yaw); boxes("TARP", M_CLOTH, [(F @ Vector((0, 0, 1.12)), (2.2, 1.15, 0.04), F.to_3x3()), (F @ Vector((0, 0.6, 0.7)), (2.2, 0.03, 0.8), F.to_3x3()), (F @ Vector((0, -0.6, 0.7)), (2.2, 0.03, 0.8), F.to_3x3())])
     def logs(n, dx, dy, yaw=0.0, count=6):                                                     # 통나무 더미 (Fab 나무 기둥을 눕혀 쌓는다)
         for i in range(count):
-            row, col = divmod(i, 3); put("tgmrafyfa", M_(n, dx, dy, yaw) @ Matrix.Translation((-1.2, (col - 1) * 0.26 + row * 0.13, 0.12 + row * 0.22)) @ Matrix.Rotation(math.radians(90), 4, "Y"))
+            row, col = divmod(i, 3); put("tgmrafyfa", M_(n, dx, dy, yaw) @ Matrix.Translation((-1.2, (col - 1) * 0.26 + (row % 2) * 0.13, 0.12 + row * 0.22)) @ Matrix.Rotation(math.radians(90), 4, "Y"))
     def pile(n, dx, dy, key, rx, ry, h, cnt, s0, s1):
         for (x, y, zz, yaw, s_) in rock_pile(n["x"] + dx, n["y"] + dy, rx, ry, h, cnt, s0, s1, clamp=None): put(key, Matrix.Translation((x, y, n["z"] + zz)) @ R(yaw) @ Matrix.Diagonal((s_, s_, s_, 1)))
     def bench(n, dx, dy, yaw=0.0, L=3.0):
@@ -1157,11 +1186,13 @@ def map4():
         i = n["id"]; w, dd = n["w"], n["d"]
         if i == "P":                                                                          # 펌프실: 물웅덩이(가장 낮은 곳) + 배수 펌프 + 관
             boxes("NOCOL_SUMP", M_WATER, [(W(n, -1, 0, 0.03), (5, 5, 0.02))])
-            boxes("PUMP", M_MACH, [(W(n, 3.5, 3.5, 0.5), (1.4, 0.9, 1.0))]); cyl("PUMPMOTOR", M_METAL, W(n, 3.5, 2.7, 0.6), 0.3, 0.8, "Y")
+            boxes("PUMP", M_MACH, [(W(n, 3.5, 3.5, 0.5), (1.4, 0.9, 1.0)), (W(n, 3.5, 3.5, 0.04), (1.8, 1.3, 0.08))]); cyl("PUMPMOTOR", M_METAL, W(n, 3.5, 2.7, 0.6), 0.3, 0.8, "Y")
+            cyl("PIPE_SUMP", M_RUST, W(n, 1.0, 3.5, 0.35), 0.09, 5.0, "X")                     # 웅덩이에서 펌프로 가는 관
             cyl("PIPE_UP", paint("pipe2", (0.5, 0.07, 0.04), 0.55, 0.4), W(n, 3.5, 4.3, 2.0), 0.1, 4.0, "Z")
         elif i == "R0":                                                                       # 대기소 겸 신호소: 긴 의자 줄 · 게시판 · 전화
             for k in range(3): bench(n, -6 + k * 5, dd / 2 - 1.0)
-            boxes("BOARD", M_WHITE, [(W(n, 0, -dd / 2 + 0.3, 1.5), (2.4, 0.05, 1.2))]); boxes("PHONE", M_RED, [(W(n, 3, -dd / 2 + 0.3, 1.4), (0.3, 0.15, 0.4))])
+            boxes("BOARD", M_TAR_, [(W(n, 0, -dd / 2 + 0.3, 1.5), (2.4, 0.05, 1.2))]); boxes("PAPERS", M_PAPER, [(W(n, -0.8 + k * 0.55, -dd / 2 + 0.34, 1.55 + (k % 2) * 0.15), (0.35, 0.02, 0.45)) for k in range(4)])
+            boxes("PHONE", M_RED, [(W(n, 3, -dd / 2 + 0.3, 1.4), (0.3, 0.15, 0.4))])
         elif i == "L":                                                                        # 램프실: 선반 + 안전모 줄
             boxes("SHELF", M_TIMB, [(W(n, 0, dd / 2 - 0.4, z_), (w - 2, 0.5, 0.05)) for z_ in (0.8, 1.4)] + [(W(n, x_, dd / 2 - 0.4, 0.75), (0.08, 0.5, 1.5)) for x_ in (-(w - 2) / 2, 0, (w - 2) / 2)])
             for k in range(8): put("udklcbuiw", M_(n, -3.5 + k, dd / 2 - 0.4, random.uniform(0, 360), 0.83 + (k % 2) * 0.6))
@@ -1170,7 +1201,7 @@ def map4():
             for k, (x_, y_) in enumerate([(-8, -1.8), (-5.5, -1.8), (-3, -1.8), (4, 1.8), (6.5, 1.8), (9, 1.8)]): cart(n, x_, y_, 0, tarp=(k == 4))
             boxes("TOOLBOX", M_RED, [(W(n, -10, dd / 2 - 1.0, 0.35), (1.2, 0.6, 0.7))])
         elif i == "W2":                                                                       # 갱목 쌓는 곳: 통나무 더미 셋 + 톱질 받침
-            for dx_, dy_ in ((-4, 2.5), (0, 2.5), (4, -2.5)): logs(n, dx_, dy_, 0, 9)
+            for dx_, dy_ in ((-4, 2.5), (0, 2.5), (4, -2.5)): logs(n, dx_, dy_, 0, 15)
             boxes("SAWHORSE", M_TIMB, [(W(n, 3, 1, 0.7), (1.6, 0.12, 0.12))] + [(W(n, 3 + s_ * 0.6, 1, 0.35), (0.1, 0.6, 0.7)) for s_ in (-1, 1)])
         elif i == "F":                                                                        # 막장 앞 방: 물통 · 석탄 자루 · 공기 호스 감개
             cyl("BARREL", M_METAL, W(n, 2.5, 2.5, 0.45), 0.3, 0.9); boxes("SACKS", M_CLOTH, [(W(n, -2.5 + k * 0.7, -2.8, 0.25), (0.6, 0.45, 0.5)) for k in range(4)])
@@ -1179,11 +1210,11 @@ def map4():
             bm = bmesh.new(); column(bm, n["x"] + 7, n["y"] + 5, 1.6, n["z"] - 0.5, n["z"] + 6); column(bm, n["x"] - 6, n["y"] - 6, 1.3, n["z"] - 0.5, n["z"] + 6)
             box_uv(obj("COALPILLAR", bm, bpy.data.materials.get("coal_wall") or M_ROCK).data, 0.5)
         elif i == "K":                                                                        # 붕락 방: 가운데 큰 돌 더미 + 쓰러진 동발 + 여럿이 같이 세울 새 동발 자리 (카드 14)
-            pile(n, 0, 0, "stone", 5.0, 3.5, 3.0, 140, 3, 10)
+            pile(n, 0, 0, "stone", 5.0, 3.5, 3.6, 200, 3, 12)
             for k in range(4): put("tgmrafyfa", M_(n, -8 + k * 5, random.uniform(-6, 6), random.uniform(0, 180), 0.15) @ Matrix.Rotation(math.radians(90), 4, "Y"))
             for x_ in (8, 10): put("tgmsdc0fa", M_(n, x_, 5.5, random.uniform(0, 360)) @ Matrix.Diagonal((1, 1, (n["h"] - 0.3) / 2.5, 1)))
         elif i == "K2":                                                                       # 갱목 창고: 통나무 더미 둘 + 판자
-            logs(n, -3, 2, 0, 9); logs(n, 3, -2, 90, 6)
+            logs(n, -3, 2, 0, 15); logs(n, 3, -2, 90, 12); logs(n, 0, 3.5, 0, 15)
             for k in range(3): put("uebpbetfa", M_(n, 4, 2.5 - k * 0.3, 5 * k, 0.02 + 0.1 * k))
         elif i == "MAG":                                                                      # 화약고: 붉은 상자 (쇠문은 판자 문 칸 자리에)
             boxes("EXPLOSIVE", M_RED, [(W(n, x_, 0.8, 0.25 + 0.4 * (k // 2)), (0.7, 0.45, 0.4)) for k, x_ in enumerate((-0.6, 0.4, -0.2, 0.6))])
@@ -1193,33 +1224,51 @@ def map4():
             boxes("PHONE", M_RED, [(W(n, w / 2 - 0.3, 0, 1.4), (0.15, 0.3, 0.4))])
         elif i == "H":                                                                        # 갱내 대피소: 구급함 · 물통 · 긴 의자
             boxes("FIRSTAID", M_WHITE, [(W(n, -w / 2 + 0.3, 0, 1.4), (0.08, 0.7, 0.5))]); text("+", tuple(W(n, -w / 2 + 0.36, 0, 1.3)), 0.4, M_RED, (math.radians(90), 0, math.radians(-90)))
-            cyl("BARREL", M_METAL, W(n, 3, 3, 0.45), 0.3, 0.9); cyl("BARREL", M_METAL, W(n, 3.7, 3, 0.45), 0.3, 0.9); bench(n, 0, -dd / 2 + 1.0)
+            cyl("BARREL", M_RUST, W(n, 3, 3, 0.45), 0.3, 0.9); cyl("BARREL", M_RUST, W(n, 3.7, 3, 0.45), 0.3, 0.9); bench(n, 0, -dd / 2 + 1.0)
         elif i == "R2":                                                                       # 선로 끝 방: 레일 멈춤 받침 + 거적 덮인 광차
-            rail_line(n, -w / 2 + 0.5, 0, w / 2 - 1.5, 0); boxes("BUFFER", M_TAR_, [(W(n, w / 2 - 1.2, 0, 0.4), (0.5, 1.4, 0.8))]); cart(n, 1, 0, 0, "ufmodhpfa", tarp=True)
+            rail_line(n, -w / 2 + 0.5, 0, w / 2 - 1.5, 0); boxes("BUFFER", M_TAR_, [(W(n, w / 2 - 1.2, 0, 0.4), (0.5, 1.4, 0.8))]); cart(n, 1, 0, 0, tarp=True)
+            pile(n, w / 2 - 0.6, 0, "stone", 0.8, 1.2, 0.8, 25, 2, 6)                              # 선로 끝 흙 · 돌 둔덕
         elif i == "R1":                                                                       # 물 고인 옛 펌프장: 발목 물 + 멈춘 펌프
             boxes("NOCOL_WATER", M_WATER, [(W(n, 0, 0, 0.18), (w - 0.6, dd - 0.6, 0.02))]); boxes("OLDPUMP", M_RUST, [(W(n, 3, 3, 0.6), (1.6, 1.0, 1.2))])
         elif i == "E1":                                                                       # 선풍기 방: 큰 국부선풍기 + 찢어진 바람 관
-            cyl("FAN", M_MACH, W(n, 0, 3, 1.3), 0.9, 1.4, "X"); cyl("DUCT", M_CLOTH, W(n, -4.5, 3, 1.3), 0.5, 7.0, "X")
-            boxes("FANBLADE", M_METAL, [(W(n, 0.75, 3, 1.3), (0.04, 1.5, 0.2), Matrix.Rotation(math.radians(a_), 3, "X")) for a_ in (0, 60, 120)])
+            fy = dd / 2 - 1.6                                                                    # 선풍기: 짧은 원통 틀 + 날개 넷 + 받침 다리 (검수: 초록 캡슐이 공중에 떠 있었다)
+            bm = bmesh.new()
+            for side in (-1, 1):
+                g = bmesh.ops.create_circle(bm, cap_ends=False, segments=24, radius=0.95)
+                for v in g["verts"]: v.co = Matrix.Rotation(math.radians(90), 3, "Y") @ v.co + W(n, side * 0.25, fy, 1.3)
+            for a_ in range(0, 360, 30):
+                g = bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.03, radius2=0.03, depth=0.5)
+                for v in g["verts"]: v.co = Matrix.Rotation(math.radians(90), 3, "Y") @ v.co + W(n, 0, fy + 0.95 * math.cos(math.radians(a_)), 1.3 + 0.95 * math.sin(math.radians(a_)))
+            for s_ in (-1, 1): box(bm, W(n, 0, fy + s_ * 0.6, 0.45), (0.5, 0.1, 0.9))
+            o = obj("FAN", bm, M_METAL); o.data.polygons.foreach_set("use_smooth", np.ones(len(o.data.polygons), dtype=bool))
+            boxes("FANBLADE", M_MACH, [(W(n, 0, fy, 1.3), (0.05, 0.85, 0.22), Matrix.Rotation(math.radians(a_), 3, "X")) for a_ in (20, 65, 110, 155)])
+            cyl("DUCT", M_CLOTH, W(n, -4.3, fy, 1.3), 0.55, 7.5, "X"); cyl("DUCTTORN", M_CLOTH, W(n, 4.0, fy - 0.3, 0.3), 0.5, 2.5, "X")
         elif i == "E2":                                                                       # 막아 둔 옛 채굴적 입구: 가스 눈금판 (울타리 · 붉은 등은 아래)
-            boxes("GASBOARD", M_WHITE, [(W(n, 0, -dd / 2 + 0.3, 1.5), (1.2, 0.05, 0.8))])
+            boxes("GASBOARD", M_IRONDOOR_, [(W(n, 0, -dd / 2 + 0.3, 1.5), (1.2, 0.05, 0.8))]); boxes("GASDIAL", M_PAPER, [(W(n, x_, -dd / 2 + 0.33, 1.6), (0.25, 0.02, 0.25)) for x_ in (-0.3, 0.3)])
         elif i == "E4":                                                                       # 옛 권양기 방: 녹슨 감개 + 끊어진 쇠줄
-            cyl("WINCH", M_RUST, W(n, 0, 0, 1.0), 0.8, 2.2, "Y"); boxes("WINCHFRAME", M_METAL, [(W(n, 0, s_ * 1.2, 0.7), (1.8, 0.15, 1.4)) for s_ in (-1, 1)])
+            cyl("WINCH", M_RUST, W(n, 0, 0, 1.0), 0.8, 2.2, "Y"); cyl("WINCHROPE", paint("rope", (0.05, 0.045, 0.04), 0.9, 0.3), W(n, 0, 0, 1.0), 0.84, 1.6, "Y", 32)   # 감긴 쇠줄 (번쩍이는 은색 통으로 보였다)
+            boxes("WINCHFRAME", M_TAR_, [(W(n, 0, s_ * 1.2, 0.7), (1.8, 0.2, 1.4)) for s_ in (-1, 1)] + [(W(n, 0, 0, 0.05), (2.2, 3.0, 0.1))])
+            boxes("ROPE", M_METAL, [(W(n, 2.5, 0.3, 1.8), (5.0, 0.04, 0.04), Matrix.Rotation(math.radians(-20), 3, "Y"))])   # 끊어진 쇠줄
         elif i == "E3":                                                                       # 쓰러진 광차 굽이: 넘어진 광차 + 걸린 거적
-            put("ueujednfa", M_(n, 0, 1.5, 30) @ Matrix.Translation((0, 0, 0.5)) @ Matrix.Rotation(math.radians(100), 4, "X")); boxes("TARP", M_CLOTH, [(W(n, 0.8, 0.5, 0.6), (1.8, 0.04, 1.2), Matrix.Rotation(math.radians(20), 3, "Z"))])
+            put("ueujednfa", M_(n, 0, 1.5, 30) @ Matrix.Translation((0, 0, 0.5)) @ Matrix.Rotation(math.radians(100), 4, "X")); pile(n, 1.5, -0.5, "coal", 1.5, 1.0, 0.5, 30, 2, 5)   # 쏟아진 석탄
         elif i == "V":                                                                        # 옛 창고 칸 줄: 판자 칸막이 여섯 칸 (마구간 흔적을 창고로)
             boxes("STALLS", M_FENCE, [(W(n, -w / 2 + 2 + k * 4, -dd / 2 + 1.5, 1.1), (0.08, 3.0, 2.2)) for k in range(7)] + [(W(n, 0, -dd / 2 + 3.0, 1.1), (w - 4, 0.06, 1.2))])
         elif i == "X":                                                                        # 옛 배전실: 배전반 + 케이블
             boxes("SWITCHBOARD", M_METAL, [(W(n, 0, dd / 2 - 0.3, 1.1), (3.0, 0.3, 2.0))]); boxes("CABLES", paint("cable", (0.02, 0.02, 0.02), 0.6), [(W(n, 0, dd / 2 - 0.2, 2.6), (w - 1, 0.1, 0.1))])
+            boxes("DIALS", M_PAPER, [(W(n, -1.0 + k * 0.5, dd / 2 - 0.47, 1.6), (0.18, 0.02, 0.18)) for k in range(5)]); boxes("LEVERS", M_RED, [(W(n, -1.0 + k * 0.5, dd / 2 - 0.5, 1.0), (0.05, 0.12, 0.3)) for k in range(5)])
         elif i == "N1":                                                                       # 윗 탄층 저탄장: 석탄 더미 + 거적 덮인 광차
             pile(n, -3, 0, "coal", 5.0, 3.5, 2.0, 120, 2, 7); cart(n, 7, -3, 0, tarp=True)
+        elif i == "N3":                                                                       # 단층 방: 벽의 석탄 띠가 계단처럼 2 m 어긋난다
+            cw = bpy.data.materials.get("coal_wall") or M_ROCK
+            boxes("COALBAND", cw, [(W(n, -w / 4, dd / 2 - 0.05, 1.0), (w / 2, 0.15, 0.7)), (W(n, w / 4, dd / 2 - 0.05, 3.0), (w / 2, 0.15, 0.7)), (W(n, 0, dd / 2 - 0.05, 2.0), (0.2, 0.16, 2.8), Matrix.Rotation(math.radians(20), 3, "Y"))])
         elif i == "N2":                                                                       # 북쪽 막장 줄: 막장 셋마다 석탄 덩이
             for wall, dx_ in FACES: pile(dict(x=wall.x, y=wall.y + 3.5, z=n["z"]), 0, 0, "coal", 1.2, 1.0, 0.6, 20, 2, 5)
     for wall, f, z0 in FENCES:                                                                # 막아 둔 채굴적 울타리 + 붉은 등 + 출입 금지 (1964 광산보안규칙 제156 · 158조)
         F = Matrix.Translation(wall + f * 1.5) @ Matrix.Rotation(math.atan2(f.y, f.x), 4, "Z")
         boxes("FENCE", M_FENCE, [(F @ Vector((0, -1.6 + k * 0.4, 1.2)), (0.05, 0.28, 2.4), F.to_3x3()) for k in range(9)] + [(F @ Vector((-0.06, 0, z_)), (0.05, 3.6, 0.12), F.to_3x3()) for z_ in (0.6, 1.8)])
         text("출입 금지", tuple(F @ Vector((-0.12, 0, 1.3))), 0.3, M_RED, (math.radians(90), 0, math.atan2(-f.x, f.y)))
-        lamp_at((wall - f * 0.3).x, (wall - f * 0.3).y, z0, 3.0, "ZL_ff1a0d_%d", 40, (1.0, 0.1, 0.05))
+        red = (wall - Vector((N["E2"]["x"], N["E2"]["y"], 0))).to_2d().length < 20
+        lamp_at((wall - f * 0.3).x, (wall - f * 0.3).y, z0, 3.0, "ZL_ff1a0d_%d" if red else "ZL_ff7a1a_%d", 40, (1.0, 0.1, 0.05) if red else (1.0, 0.48, 0.1))
     for nm, c, f, iron in ALC: plank_door(c, f, nm, iron)
     # ---- 빛: 불 켜진 방(7 m 칸마다) · 구역 입구 색 등 (카드 15) · 장면 입구 색 등
     bpy.context.view_layer.update()
@@ -1228,6 +1277,9 @@ def map4():
             nx, ny = max(1, round(n["w"] / 7)), max(1, round(n["d"] / 7))
             for ix in range(nx):
                 for iy in range(ny): lamp_at(n["x"] - n["w"] / 2 + (ix + 0.5) * n["w"] / nx, n["y"] - n["d"] / 2 + (iy + 0.5) * n["d"] / ny, n["z"], n["h"], "L%d")
+    WORK = ("W2", "F", "K", "K2", "E1", "E4", "V", "X", "N0", "N2", "N3", "R2", "LD", "W1", "N1", "M")   # 안 켜진 방 = 작업등 하나 (R1 · E3 · E2 · MAG 는 어둡게 둔다 — 괴물 굴 쪽)
+    for rid in WORK:
+        n = N[rid]; lamp_at(n["x"] + n["w"] * 0.2, n["y"] + n["d"] * 0.15, n["z"], n["h"], "ZL_ffb070_%d", 50, (1.0, 0.69, 0.44))
     for rid, zone in (("W1", "west"), ("E1", "east"), ("S1", "south"), ("N1", "north")):
         col = plan["zone_color"][zone]; n = N[rid]; lamp_at(n["x"], n["y"], n["z"], n["h"], "ZL_%s_%%d" % col, 120, tuple(int(col[i:i + 2], 16) / 255 for i in (0, 2, 4)))
     for zn, p, col in (("z1", (-20, 0, 0), "cfe0ff"), ("z2", (1.5, 0, 0), "ff3319"), ("z8", (1.0, 0, 0), "ff8c1a"), ("z9", (-30, 4, 3), "8c0d0d")):
@@ -1240,9 +1292,9 @@ def map4():
         for k in range(int((z1 - z0) / 0.8)):
             g = bmesh.ops.create_circle(bm, cap_ends=False, segments=16, radius=0.45)
             for v in g["verts"]: v.co += Vector((x, y + yoff - 0.35, z0 + 0.4 + k * 0.8))
-        obj("LADDER", bm, paint("ladder", (0.6, 0.45, 0.08), 0.5, 0.6))
-    lx, ly, lz = ld["x"], ld["y"], ld["z"]; ladder(lx, ly, lz - 7.6, lz + 1.0, 1.3)
-    boxes("RAILING", paint("ladder", (0.6, 0.45, 0.08), 0.5, 0.6), [(Vector((lx + sx, ly + sy, lz + 0.55)), (0.08, 0.08, 1.1)) for sx in (-1.6, 1.6) for sy in (-1.6, 1.6)] +
+        obj("LADDER", bm, M_LADDER)
+    lx, ly, lz = ld["x"], ld["y"], ld["z"]; ladder(lx, ly, lz - 11.6, lz + 1.0, 1.3)
+    boxes("RAILING", M_LADDER, [(Vector((lx + sx, ly + sy, lz + 0.55)), (0.08, 0.08, 1.1)) for sx in (-1.6, 1.6) for sy in (-1.6, 1.6)] +
           [(Vector((lx, ly + sy, lz + 1.05)), (3.2, 0.06, 0.06)) for sy in (-1.6, 1.6)] + [(Vector((lx + sx, ly, lz + 1.05)), (0.06, 3.2, 0.06)) for sx in (-1.6, 1.6)])
     ladder(lw["x"], lw["y"], lw["z"], n2["z"] + 0.9, 1.0)
     # ---- 표지: 방마다 이름 + 승강장 쪽 화살표 (넓이 우선으로 승강장까지 다음 곳)
@@ -1270,11 +1322,17 @@ def map4():
             if best is None or s_ > best[0]: best = (s_, loc, nh, r)
         if best is None: continue
         _, loc, nh, r = best; arrow = ("승강장 →" if h.dot(r) > 0 else "← 승강장") if h is not None else ""
-        paint_sign(loc, nh, [(n["name"][:10], 0.3)] + ([(arrow, 0.2)] if arrow else [])); signs += 1
+        paint_sign(loc + Vector((0, 0, 0.1)), nh, [(n["name"][:10], 0.36)] + ([(arrow, 0.24)] if arrow else [])); signs += 1
     # ---- 방 자리 (판정용 [ ] 키 · 사진 맞히기): 방 한쪽에서 건너편을 본다
+    LOOK = {"N2": (0, 1), "X": (0, 1), "V": (0, -1), "E1": (0, 1), "E2": None, "R0": (0, -1), "L": (0, 1), "N3": (0, 1)}   # 주인공 소품이 있는 벽 쪽
     for n in rooms:
         if n["id"] in ("LW",): continue
-        a_ = n["w"] >= n["d"]; e_ = W(n, -n["w"] * 0.3 if a_ else 0, 0 if a_ else -n["d"] * 0.3, EYE); t_ = W(n, n["w"] * 0.3 if a_ else 0, 0 if a_ else n["d"] * 0.3, 1.2)
+        lk = LOOK.get(n["id"], "long")
+        if n["id"] == "N0": lk = tuple((P("N1") - W(n, 0, 0)).to_2d().normalized())
+        if n["id"] == "E2": lk = tuple((Vector((N["GOAF_E"]["x"], N["GOAF_E"]["y"])) - Vector((n["x"], n["y"]))).normalized())
+        if lk == "long": lk = (1, 0) if n["w"] >= n["d"] else (0, 1)
+        ext = abs(lk[0]) * n["w"] / 2 + abs(lk[1]) * n["d"] / 2
+        e_ = W(n, -lk[0] * ext * 0.55, -lk[1] * ext * 0.55, EYE); t_ = W(n, lk[0] * ext, lk[1] * ext, 1.3)
         SHOTS.append(("room_%s" % n["id"], tuple(e_), tuple(t_)))
     SHOTS.insert(0, ("start", (0, 2.0, EYE), (0, -12, 1.5)))                                  # 시작 = 승강장, 남쪽 굴을 본다
     # ---- 잰 값: 바닥 넓이 · 선 채로 못 지나는 낮은 곳 (사용자 10-01 "높낮이를 낮게 구성하지 말아라")

@@ -4689,6 +4689,17 @@ public class M1Check : MonoBehaviour
         stalker.gameObject.SetActive(false);
         lamp.lampOn = true;
         Check("map4_loaded", m.spots.Length > 1, $"{m.spots.Length} spots, {m.GetComponentsInChildren<MeshFilter>().Length} meshes, {m.GetComponentsInChildren<Light>().Length} lights");
+        // 재질이 빠진 것(분홍) — 셰이더가 없거나 오류 셰이더이거나 이 그래픽카드에서 안 도는 것 (검수 10-01: 첫 화면 천장이 분홍)
+        var bad = m.GetComponentsInChildren<Renderer>().SelectMany(r => r.sharedMaterials.Select(mt => (r, mt)))
+            .Where(x => x.mt == null || x.mt.shader == null || x.mt.shader.name.Contains("Error") || !x.mt.shader.isSupported)
+            .Select(x => $"{x.r.name}[{(x.mt == null ? "null" : x.mt.name + "/" + (x.mt.shader == null ? "no shader" : x.mt.shader.name))}]").Distinct().ToList();
+        Physics.SyncTransforms();
+        if (Physics.Raycast(m.spots[0].position, Vector3.up, out var up, 10f))
+        {
+            var ur = up.collider.GetComponent<Renderer>();
+            Debug.Log($"MAP4 above start: {up.collider.name} at {up.distance:0.0} m, materials {(ur == null ? "-" : string.Join(", ", ur.sharedMaterials.Select(mt => mt == null ? "null" : mt.name + "/" + mt.shader.name)))}");
+        }
+        Check("map4_no_missing_material", bad.Count == 0, bad.Count == 0 ? "all materials have a working shader" : $"{bad.Count}: " + string.Join(", ", bad.Take(12)));
         yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 1.0f);
         int f0 = Time.frameCount; float t0 = Time.realtimeSinceStartup;
         yield return new WaitForSecondsRealtime(3f);

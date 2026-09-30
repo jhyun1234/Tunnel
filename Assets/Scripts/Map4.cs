@@ -25,7 +25,8 @@ public class Map4 : MonoBehaviour
         {
             var l = t.gameObject.AddComponent<Light>();
             l.type = LightType.Point; ColorUtility.TryParseHtmlString("#" + t.name.Substring(3, 6), out var c); l.color = c;
-            l.intensity = Tuning.FAB_LIGHT_ENERGY; l.range = Tuning.FAB_LIGHT_RANGE + 1f; l.shadows = LightShadows.None;
+            bool warmWhite = c.r > 0.9f && c.g > 0.4f && c.b < 0.5f;   // 작업등 · 주황 = 따뜻한 흰빛 계열
+            l.intensity = Tuning.FAB_LIGHT_ENERGY * (warmWhite ? 0.8f : 0.4f); l.range = Tuning.FAB_LIGHT_RANGE + 1f; l.shadows = LightShadows.None;   // 구역 색 등(파랑 · 초록 · 빨강 · 흰색)은 약하게 (검수 10-01: 방 전체가 파랗게 번지고 판자 문이 새빨갛게 물들었다)
             l.GetUniversalAdditionalLightData().renderingLayers = Pickaxe.DefaultRenderingLayer;
         }
         if (Tuning.FAB_COLOR_GRADE) FabTest.Grade();
