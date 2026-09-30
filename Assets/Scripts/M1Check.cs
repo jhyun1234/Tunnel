@@ -2982,7 +2982,10 @@ public class M1Check : MonoBehaviour
             $"hp {hp0:0} → {hp1:0}, stun {stunT:F2} s (STALKER_STUN_S {Tuning.STALKER_STUN_S}), knocked {back:F2} m, then {st.state}");
         Check("hits_during_stun_ignored", st.hp == hp1 && taken == 1 && st.hitsTaken == 1 && st.hitsSeen == 2, $"hp {st.hp:0} after a 2nd swing during stun, swings landed {st.hitsSeen}, taken {st.hitsTaken}");
 
-        // ② 2대째·3대째: 체력 50 → 25, 세 번째는 멈춤 없이 그 자리에서 철수
+        // ② 철수선을 넘는 한 대: 철수선 바로 위(철수선 + 두 대)에서 두 대 — 첫 대는 스턴, 철수선에 닿는 대는 멈춤 없이 그 자리에서 철수.
+        //    곡괭이 한 대 5(09-30, 옛 25) — 열네 대를 다 치지 않고 규칙만 본다
+        st.hp = Tuning.STALKER_RETREAT_HP + 2f * Tuning.STALKER_HIT_DMG;
+        float hpLine0 = st.hp;
         for (int i = 0; i < 2; i++)
         {
             st.Teleport(S, 180f);                                        // 자리만 되돌린다 — 체력은 그대로 (Teleport 는 hp 를 안 건드린다)
@@ -3000,8 +3003,8 @@ public class M1Check : MonoBehaviour
         bool noStun = st.state != Stalker.State.Stun;
         while (st.state == Stalker.State.Stun) yield return null;
         yield return null;
-        Check("third_hit_retreats_at_once", hp3 == Tuning.STALKER_HP - 3f * Tuning.STALKER_HIT_DMG && hp3 <= Tuning.STALKER_RETREAT_HP && noStun && st.state == Stalker.State.Retreat,
-            $"hp after 3 hits {hp3:0} (retreat line {Tuning.STALKER_RETREAT_HP}), stunned first {!noStun}, state {st.state}");
+        Check("retreat_line_hit_retreats_at_once", hp3 == hpLine0 - 2f * Tuning.STALKER_HIT_DMG && hp3 <= Tuning.STALKER_RETREAT_HP && noStun && st.state == Stalker.State.Retreat,
+            $"hp {hpLine0:0} → 2 hits → {hp3:0} (retreat line {Tuning.STALKER_RETREAT_HP}, hit {Tuning.STALKER_HIT_DMG:0} — {Mathf.CeilToInt((Tuning.STALKER_HP - Tuning.STALKER_RETREAT_HP) / Tuning.STALKER_HIT_DMG)} hits from full), stunned first {!noStun}, state {st.state}");
 
         // ③ 철수 중 무적: 길 앞 1.5 m 에 서서 쳐도 곡괭이가 안 닿고(hitsSeen 그대로) 멈추지 않고 체력 그대로, 철수 계속. 0.6 s 뒤 비킨다(1 s 막히면 그 자리를 도착으로 친다)
         Vector3 dir = Flat3(st.retreatSpot - st.transform.position).normalized;

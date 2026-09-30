@@ -457,8 +457,8 @@ public static class Tuning
     public const float CATCH_RESTART_S = 3.0f;          // s, 잡힌 뒤 재시작까지
     public const float CATCH_FADE_OUT_S = 0.5f;         // s, 재시작 뒤 밝아지는 시간
     // ---- M5 (②c) 체력·스턴·철수. 설계서 v2 Step 4·6 (교차 검토 반영) ----
-    public const float STALKER_HP = 100.0f;             // 제안값. 곡괭이 3대(75)면 철수선 밑
-    public const float STALKER_HIT_DMG = 25.0f;         // 제안값, 곡괭이 한 대
+    public const float STALKER_HP = 100.0f;             // 제안값. 곡괭이 열네 대(70)면 철수선에 닿는다
+    public const float STALKER_HIT_DMG = 5.0f;          // 곡괭이 한 대. 사용자 09-15 M5 2차 판정 "세 번은 너무 쉽다 — 밸런스 때 25 → 5" → 09-30 적용(허점: 파인 벽 안에서 쳐서 철수시킴). 정확한 값은 밸런스 계산 때
     // 제안값. 이하가 되는 순간 철수. 철수 중에는 못 친다(무적) — 사용자 판정(09-15 M6 F5): "스턴만"이던 규칙은 타이밍 연타로 벽에 못 가게 막혔다
     public const float STALKER_RETREAT_HP = 30.0f;
     // s, 곡괭이 스턴. Godot 1.5(결정 사항) → 사용자 판정(09-15 M6 F5) "1.5 s 는 길다" → 0.5. 밀림 0.2 s 뒤 0.3 s 서서 본다
