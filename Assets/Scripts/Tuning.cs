@@ -19,8 +19,8 @@ public static class Tuning
 
     // 몸
     public const float BODY_RADIUS = 0.4f;
-    public const float BODY_HEIGHT = 1.8f;
-    public const float EYE_HEIGHT = 1.7f;
+    public const float BODY_HEIGHT = 1.8f;               // 캡슐. 판정 키가 눈을 바꾸면 캡슐도 같이 (눈 + 10 cm)
+    public const float EYE_HEIGHT = 1.7f;                // 1인칭 눈 = 세운 몸의 눈 — 몸 모델은 PLAYER_SCALE 배 (사용자 09-30 "모델 1.72 와 시점 1.78 의 차이가 크다", 키 하나로 같이 → 판정 키 Shift+− =)
     public const float CROUCH_EYE = 1.0f;
     public const float CROUCH_TIME = 0.15f;
     public const float STAMINA_MAX = 100.0f;
@@ -254,6 +254,10 @@ public static class Tuning
     // 쉴 때 1인칭 몸의 머리 뼈 자리(카메라 기준). 0 이면 머리 뼈 = 눈인데 쉬는 곡괭이 손잡이가 어깨에서 69 cm — 팔(56 cm)이 못 닿는다(09-29 잼).
     // 그래서 앞 15 · 아래 10 cm (어깨 → 손잡이 52 cm). 몸은 안 그린다 — 소매가 화면에 얼마나 보이나만 바뀐다. z = 판정 키 Shift+← →
     public static readonly Vector3 PLAYER_FP_OFFSET = new Vector3(0f, -0.10f, 0.15f);
+    // 몸 모델(크기 1) 서 있기의 눈 = 방독면 눈 유리(Mask_LensL · R) 가운데 · 안전모 꼭대기, 바닥에서 (09-30 실행 파일 -only sizes 잼). 몸 크기 = 1인칭 눈 ÷ 모델 눈 — 두 눈이 늘 같다
+    public const float PLAYER_MODEL_EYE = 1.519f;
+    public const float PLAYER_MODEL_TOP = 1.722f;
+    public const float PLAYER_SCALE = EYE_HEIGHT / PLAYER_MODEL_EYE;
     // 캐는 동안(동작 표) 몸 뿌리는 표 틀(원점 = 내려친 순간 눈)의 −이 자리에 — Kevin 캐기 동작을 이 몸에 입혀 잰 내려친 순간 눈(몸 뿌리 기준, PlayerRigTest.MeasureMineBatch).
     // 그러면 몸이 Kevin 과 같은 자리에서 표의 곡괭이를 쥔다(오른손 어깨 → 손잡이 가장 멀 때 52.7 cm)
     public static readonly Vector3 PLAYER_MINE_EYE = new Vector3(0.009f, 1.513f, 0.313f);

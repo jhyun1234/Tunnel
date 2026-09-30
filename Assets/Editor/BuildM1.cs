@@ -286,7 +286,7 @@ public static class BuildM1
         var scc = stalkerGo.AddComponent<CharacterController>();
         scc.radius = Tuning.STALKER_R;
         scc.height = stalkerH;
-        scc.center = new Vector3(0f, stalkerH * 0.5f, 0f);
+        scc.center = new Vector3(0f, stalkerH * 0.5f + scc.skinWidth, 0f);   // 캡슐 밑이 바닥에서 skinWidth 위에 멈추니 가운데를 그만큼 올려 뿌리(발밑) = 바닥 — 안 올리면 발이 10 cm 떴다(09-30 잼)
         // Body = 캡슐 가운데 높이의 빈 축, 크기 1. 캡슐 크기(비균등)였던 것은 3D-③ 에서 1 로 — 납작해지기를 지웠고(사용자 09-18),
         // 비균등 부모 밑에서 모델을 벽타기로 90° 세우면 몸이 비스듬히 찌그러진다. 캡슐 렌더러(회갈색 자리표시)는 3D-① 에서 뗐다
         var body = new GameObject("Body");

@@ -52,6 +52,8 @@ public class Player : MonoBehaviour
     float pitch;
     public float Pitch { get => pitch; set => pitch = value; }   // 검사 캡처가 내려다보게 (ART-1 광차 석탄)
     float eye = Tuning.EYE_HEIGHT;
+    [System.NonSerialized] public float standEye = Tuning.EYE_HEIGHT;   // 서 있는 눈 — 판정 키 Shift+− = 가 몸 모델 크기와 같이 바꾼다 (DevHud)
+    public static bool floatRoot;                                       // 사보타주 floatroot: 캡슐 가운데 = 키 ÷ 2 (09-30 전 — 몸이 바닥에서 skinWidth 8 cm 떴다)
     float shakeLeft, shakeAmount, shakeSpan;
     [System.NonSerialized] public float gait;   // 걸음 위상(라디안). π 마다 한 발이 땅에 닿는다 — 발소리와 곡괭이 흔들림이 이 하나를 같이 본다. 멈추면 0
     bool wasMoving;
@@ -322,11 +324,11 @@ public class Player : MonoBehaviour
     // 숙이기: 눈이 CROUCH_EYE 로 내려가고 캡슐이 그만큼 줄어든다. 탈진(UI-1b)이면 EXHAUST_EYE 로 — "무릎 짚고 헐떡임", 숙이기가 우선
     void UpdateCrouch(float dt)
     {
-        float target = stance == "crouch" ? Tuning.CROUCH_EYE : exhausted && stagger ? Tuning.EXHAUST_EYE : Tuning.EYE_HEIGHT;
+        float target = stance == "crouch" ? Tuning.CROUCH_EYE : exhausted && stagger ? Tuning.EXHAUST_EYE : standEye;
         if (Mathf.Approximately(eye, target))
             return;
         bool crouching = target == Tuning.CROUCH_EYE || eye <= Tuning.CROUCH_EYE + 0.01f;   // 숙이기 길은 빠르고(0.15 s), 탈진 길은 느리다(0.3 s)
-        float rate = crouching ? (Tuning.EYE_HEIGHT - Tuning.CROUCH_EYE) / Tuning.CROUCH_TIME : (Tuning.EYE_HEIGHT - Tuning.EXHAUST_EYE) / Tuning.EXHAUST_TIME;
+        float rate = crouching ? (standEye - Tuning.CROUCH_EYE) / Tuning.CROUCH_TIME : (standEye - Tuning.EXHAUST_EYE) / Tuning.EXHAUST_TIME;
         eye = Mathf.MoveTowards(eye, target, rate * dt);
         SetHeight(Tuning.BODY_HEIGHT - (Tuning.EYE_HEIGHT - eye));
     }
@@ -334,6 +336,7 @@ public class Player : MonoBehaviour
     void SetHeight(float h)
     {
         cc.height = h;
-        cc.center = new Vector3(0f, h * 0.5f, 0f);
+        // 캡슐 밑은 바닥에서 skinWidth 위에 멈춘다 — 가운데를 그만큼 올려 몸 뿌리(발밑) = 바닥. 안 올리면 눈이 8 cm 높았다(09-30 잼 1.78)
+        cc.center = new Vector3(0f, h * 0.5f + (floatRoot ? 0f : cc.skinWidth), 0f);
     }
 }

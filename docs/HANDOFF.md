@@ -19,6 +19,13 @@
 | `M1Check` | 검사가 전부 혼자 기준이다 |
 | `NoiseBus` | **위치만 봐서 그대로 쓸 수 있다** |
 
+**09-30 (64차 이어서) — 사용자 답 "키 하나로 같이" · "8 cm 뜸 같이 고침"(둘 다 추천) → 구현 → 전체 build.sh ALL PASS 199 → 실행 파일 판정 ⑦(몸 키) 대기.** 크레딧 0 · 푸시 안 함.
+- **몸이 바닥에서 뜸 고침**: 캡슐 밑은 바닥에서 skinWidth(0.08) 위에 멈춘다 → 가운데를 그만큼 올려 뿌리(발밑) = 바닥. 나(`Player.SetHeight`) · 괴물(`BuildM1` 캡슐 → 씬 둘 다시 `MakeScene -force` · `MakeBooth -force`, 씬에서 바뀐 값은 괴물 캡슐 가운데 1.40→1.48 · 1.05→1.13 뿐 — 나머지는 물체 번호). 내 눈 1.78 → **1.70** · 괴물 발 10 → 2 cm.
+- **몸 키 하나로 같이**: 1인칭 눈 = 세운 몸의 눈(방독면 유리). `Tuning.PLAYER_MODEL_EYE` 1.519 · `PLAYER_MODEL_TOP` 1.722(크기 1, 잰 값) · `PLAYER_SCALE = EYE_HEIGHT ÷ PLAYER_MODEL_EYE`(지금 1.119 → 세운 몸 안전모 꼭대기 **1.93 m**, 전보다 크다). `PlayerBody.scale`(내 몸 · 세운 몸 같이, 1인칭 몸 자리 · 캐기 틀 · 팔 길이도 배율, 손에 든 곡괭이는 제 크기) · `Player.standEye`(캡슐 = 눈 + 10 cm 도 같이). 숙이기 1.00 · 탈진 1.20 · `PLAYER_FP_OFFSET` 은 그대로.
+- **판정 ⑦ 방법**: `build/Tunnel/Tunnel.exe` → 인트로 "시작" → 부스 맵 · **Shift+7** 세운 몸 · **0** 괴물 끄기 · F1 첫 줄 `player height` — **Shift+− / Shift+=** 로 1 cm 씩(내 눈 · 몸 크기 같이, 1.40~2.00). 램프 − = 는 Shift 없을 때만. 받은 눈 → `Tuning.EYE_HEIGHT`(몸 크기는 따라감) → 전체 build.sh → 커밋. 판정 중엔 봇 안 돌림.
+- 검사: 새 `player_eye_matches_body`(`-only player`: 내 눈 1.700 vs 세운 몸 눈 1.712 · 뿌리 0 cm · 괴물 캡슐) · 사보타주 `floatroot`(1.780 · 8 cm) · `bigbody`(몸 눈 1.883) FAIL 확인. `devhud_text_fits_booth` 는 `player height` 줄도 본다.
+- 알게 된 것: **`SkinnedMeshRenderer.BakeMesh` 짝** — `BakeMesh(true)` 는 크기를 뺀 점 → `localToWorldMatrix`, `BakeMesh(false)` 는 크기가 든 점 → 자리 · 회전만. 옛 `BakeMesh(true)` + 자리 · 회전은 크기 1 에서만 맞았다(몸 ×1.119 에서 줄 끝이 2.8 cm 떨어진 것처럼, 괴물 ×1.5 꼭대기 2.59 vs 그림 2.86). `PlayerBody.WorldVerts` 하나로 모음(`SoleLocal` · 램프 줄 검사 · `-only sizes`).
+
 **09-30 (64차) — 크기 · 눈높이를 실행 파일에서 다시 잼 → 한 장 `build/player/P16_크기_눈높이.png` → 사용자 말 대기(값은 안 바꿈).** 새 측정 구간 `bash tools/quick.sh sizes`(부스 광장 첫 자리, 전체 실행엔 안 넣음) → `python docs/그림/크기_눈높이.py`. 잰 값(바닥에서):
   | 무엇 | 잰 값 | 어디 |
   |---|---|---|

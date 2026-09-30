@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 // 판정용 화면 표시와 손잡이. 사람이 실행 파일에서 안개·램프 값을 고를 때 쓴다.
 // 시작할 때 꺼져 있다(UI-1d) — F1 로 켠다. 손잡이 키는 꺼져 있어도 먹는다.
-// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · 9 괴물을 내 앞에 세움 · N 선 괴물의 동작 차례로 · U 배회 걸음 A/B/C (3D-③) · I M 목 붉기 −/+ · Q R 목 밝기 ÷× 1.15 · Z X 세운 괴물 목 길이 −/+ · C B 목 빼는 시간 −/+ (3D-③b M1e) · F1 표시 끄기
+// V 부피 안개 켜기/끄기 · [ ] 안개 밀도 ÷1.5 ×1.5 · - = 램프 세기 ÷1.25 ×1.25 (Shift+− = 는 몸 키: 1인칭 눈 · 몸 크기 같이 1 cm) · 1 2 어둠 적응 환경광 ÷1.25 ×1.25 · 3 4 곡괭이 내구도 −10/+10 · 5 6 스태미나 −20/+20 · 0 괴물 끄기/켜기 (Godot DebugHud 의 0) · 9 괴물을 내 앞에 세움 · N 선 괴물의 동작 차례로 · U 배회 걸음 A/B/C (3D-③) · I M 목 붉기 −/+ · Q R 목 밝기 ÷× 1.15 · Z X 세운 괴물 목 길이 −/+ · C B 목 빼는 시간 −/+ (3D-③b M1e) · F1 표시 끄기
 // 부스 맵: 숫자패드 − + 켜진 전등 밝기 ÷×1.25 · F5 F6 막힘 묶음 서쪽·동쪽 켜기/끄기 · F7 F8 바위 틈 비집는 시간 −/+ 0.25 s · F9 F10 틈 속 몸 돌리는 각 −/+ 10° (누르면 표시가 켜진다)
 // REP-1 고칠 곳: F2 가장 가까운 멀쩡한 고칠 곳을 망가뜨림 · F3 F4 고치는 시간 ÷×1.25 (모든 종류) · F11 F12 판 중 망가지는 간격 −/+ 30 s
 // ART-1 현실감: Insert 옛/새 · Home/End 젖음 · PageDown/PageUp 튀는 빛 · ← → 바위 밝기 — 키는 ArtLook 이 받는다 (여기는 줄만)
@@ -61,8 +61,8 @@ public class DevHud : MonoBehaviour
         if (kb.vKey.wasPressedThisFrame) fog.enabled.value = !fog.enabled.value;
         if (kb.rightBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed) fog.density.value *= 1.5f;   // Shift+[ ] 는 콱 크기 (SND-P)
         if (kb.leftBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed) fog.density.value /= 1.5f;
-        if (kb.equalsKey.wasPressedThisFrame) lamp.energy *= 1.25f;
-        if (kb.minusKey.wasPressedThisFrame) lamp.energy /= 1.25f;
+        if (kb.equalsKey.wasPressedThisFrame && !kb.shiftKey.isPressed) lamp.energy *= 1.25f;   // Shift+− = 는 몸 키 (BodyKeys)
+        if (kb.minusKey.wasPressedThisFrame && !kb.shiftKey.isPressed) lamp.energy /= 1.25f;
         if (kb.f1Key.wasPressedThisFrame) show = !show;
         BoothKeys(kb);
         if ((kb.digit0Key.wasPressedThisFrame && !kb.shiftKey.isPressed || kb.numpad0Key.wasPressedThisFrame) && stalker != null) stalker.enabled = !stalker.enabled;   // Shift+9 · 0 은 광질 가루 양 (DUST-1)
@@ -215,6 +215,13 @@ public class DevHud : MonoBehaviour
             show = true;
         }
         if (kb.digit8Key.wasPressedThisFrame && stood != null && stood.GetComponent<PlayerBody>() is PlayerBody sb) { sb.NextAction(); show = true; }
+        // 몸 키 (사용자 09-30 "모델 1.72 와 시점 1.78 의 차이가 크다" → 키 하나로 같이): 1인칭 눈과 몸 모델 크기를 같이 1 cm. 받은 눈 → Tuning.EYE_HEIGHT
+        if (kb.minusKey.wasPressedThisFrame || kb.equalsKey.wasPressedThisFrame)
+        {
+            player.standEye = Mathf.Clamp(Mathf.Round(player.standEye * 100f + (kb.equalsKey.wasPressedThisFrame ? 1f : -1f)) / 100f, 1.40f, 2.00f);
+            PlayerBody.scale = player.standEye / Tuning.PLAYER_MODEL_EYE;
+            show = true;
+        }
         if (kb.leftArrowKey.wasPressedThisFrame) { body.fpForward = Mathf.Round(body.fpForward * 100f - 2f) / 100f; show = true; }
         if (kb.rightArrowKey.wasPressedThisFrame) { body.fpForward = Mathf.Round(body.fpForward * 100f + 2f) / 100f; show = true; }
         // 3D-P2 재질 — 받은 값을 Tuning.PLAYER_CLOTH_DETAIL · PLAYER_SMOOTH_MUL · PLAYER_DIRT_LEVEL 에
@@ -230,6 +237,7 @@ public class DevHud : MonoBehaviour
     }
 
     string BodyLine() => body == null ? "" :
+        $"\nplayer height: my eye {player.standEye:0.00} m = stood body eye · body x{PlayerBody.scale:0.000} · helmet top {Tuning.PLAYER_MODEL_TOP * PlayerBody.scale:0.00} m (EYE_HEIGHT {Tuning.EYE_HEIGHT:0.00}) [Shift+- Shift+=]" +
         $"\nplayer arms: shoulder fwd {body.fpForward * 100f:0} cm (PLAYER_FP_OFFSET.z {Tuning.PLAYER_FP_OFFSET.z * 100f:0}) [Shift+← Shift+→]  grip R {(body.RightOn ? $"{Vector3.Distance(body.RightGripPoint, pickaxe.gripRear.position) * 100f:0.0} cm" : "-")}" +
         $"   stood body {(stood == null ? "off" : stood.GetComponent<PlayerBody>() is PlayerBody sb ? sb.action.ToUpper() : "?")} [Shift+7] next action [Shift+8]{(PlayerBody.noKevin || body.Anim.runtimeAnimatorController == null ? "  (no Kevin motion)" : "")}" +
         $"\nplayer look {(PlayerBody.clayLook ? "OLD (clay)" : "NEW")} [Shift+6]  cloth weave x{PlayerBody.clothDetail:0.00} (PLAYER_CLOTH_DETAIL {Tuning.PLAYER_CLOTH_DETAIL:0.00}) [Shift+1 2]  cloth sheen x{PlayerBody.smoothMul:0.00} (PLAYER_SMOOTH_MUL {Tuning.PLAYER_SMOOTH_MUL:0.00}) [Shift+3 4]  coal dust {new[] { "light", "normal", "heavy" }[PlayerBody.dirtLevel]} (PLAYER_DIRT_LEVEL {Tuning.PLAYER_DIRT_LEVEL}) [Shift+5]";

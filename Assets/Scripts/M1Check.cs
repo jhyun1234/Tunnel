@@ -147,6 +147,10 @@ public class M1Check : MonoBehaviour
         PlayerBody.twoHands = sabotage == "twohands";       // 판정 ④ 전: 캘 때 왼손도 자루로 (사용자 09-30 "한 손으로 캐는 걸로")
         PlayerBody.forceClay = sabotage == "claybody";      // 3D-P2 전: 찰흙 재질
         PlayerBody.noDetail = sabotage == "nodetail";       // 천 결(세부 노멀) 없음
+        Player.floatRoot = sabotage == "floatroot";         // 09-30 전: 캡슐 가운데 = 키 ÷ 2 — 나와 괴물이 바닥에서 skinWidth(8 cm) 떴다
+        if (Player.floatRoot)
+            foreach (var c in new[] { player.GetComponent<CharacterController>(), stalker.GetComponent<CharacterController>() }) c.center = Vector3.up * c.height * 0.5f;
+        PlayerBody.scale = Tuning.PLAYER_SCALE * (sabotage == "bigbody" ? 1.1f : 1f);   // bigbody: 몸 모델만 크고 1인칭 눈은 그대로 — 두 눈이 어긋난 상태
         if (sabotage == "farhit")               // SND-P 전: 콱이 25 m 까지 들린다 (괴물은 6 m 밖에서 못 듣는데)
             MiningFx.I.hitDistance = Tuning.NOISE_PICK;
         if (sabotage == "deaf")                 // 귀 ×0.4 = 곡괭이 소음 10 m — 20 m 에서 못 듣는다
@@ -932,7 +936,7 @@ public class M1Check : MonoBehaviour
         }
         if (sabotageName == "blockleak") { blocks[0].GetComponent<Collider>().enabled = false; blocks[0].GetComponent<NavMeshObstacle>().enabled = false; }
         if (sabotageName == "nonav") NavMesh.RemoveAllNavMeshData();
-        if (sabotageName == "tallcap") { scc.height = Tuning.STALKER_H; scc.center = Vector3.up * Tuning.STALKER_H * 0.5f; }
+        if (sabotageName == "tallcap") { scc.height = Tuning.STALKER_H; scc.center = Vector3.up * (Tuning.STALKER_H * 0.5f + scc.skinWidth); }
         if (sabotageName == "bigmonster") model.GetComponent<StalkerAnim>().stoop = false;   // 숙이기 끔 = 선 키 그대로 (천장 밑 머리 검사가 잡는지)
         if (sabotageName == "nocol" && Physics.Raycast(player.transform.position + Vector3.up, Vector3.down, out RaycastHit under, 3f, ~(1 << 2), QueryTriggerInteraction.Ignore))
             under.collider.enabled = false;                                // 케이지 칸 충돌 끔
@@ -2739,6 +2743,17 @@ public class M1Check : MonoBehaviour
             $"other: all drawn {oOn} · default layer {oLayer} · headlamp layer {oLit} · on its own {oFree} · sole {soleGap * 100f:F1} cm above ground (±3) | " +
             $"self again: arms only {sArms} ({string.Join(" ", sOn.Take(4))}) · view-model layer {sLayer} · on camera {sCam} | stood body (Shift+7): PlayerBody {(sb != null ? sb.mode.ToString() : "none")} · same avatar · controller · mesh {same}");
 
+        // ⑤b 눈 맞춤 (사용자 09-30 "모델 1.72 와 시점 1.78 의 차이가 크다 — Shift+7 로 보면 내려다본다"): 서 있는 내 눈(1인칭 카메라) = 세운 몸의 눈(방독면 눈 유리 가운데),
+        //    둘 다 바닥에서. 몸 뿌리 = 바닥(캡슐 가운데를 skinWidth 만큼 올림) · 괴물 캡슐도 같이. 사보타주 floatroot(옛 캡슐) · bigbody(몸만 큼) → FAIL
+        float myFloor = PlayerBody.Ground(player.transform.position).y, myEye = pickaxe.cam.position.y - myFloor, rootGap = player.transform.position.y - myFloor;
+        var lensR = sRends.Where(r => r.name == "Mask_LensL" || r.name == "Mask_LensR").ToArray();
+        float bodyEye = lensR.Length == 2 ? lensR.Average(r => r.bounds.center.y) - PlayerBody.Ground(stoodGo.transform.position).y : float.NaN;
+        var monCc = stalker.GetComponent<CharacterController>();
+        float monGap = monCc.center.y - monCc.height * 0.5f - monCc.skinWidth;
+        Check("player_eye_matches_body", Mathf.Abs(myEye - bodyEye) <= 0.02f && Mathf.Abs(rootGap) <= 0.01f && Mathf.Abs(monGap) <= 0.001f,
+            $"my eye {myEye:F3} m above floor (first-person camera) vs stood body eye {bodyEye:F3} m (gas-mask lenses, body x{PlayerBody.scale:F3}) — want ≤ 2 cm apart · " +
+            $"my body root {rootGap * 100f:F1} cm above floor (want 0 ±1) · monster capsule bottom sits {monGap * 100f:F1} cm off skinWidth above its root (want 0 — root on the floor)");
+
         // ⑥ 세운 몸: 앞 · 옆 · 뒤 캡처 → 서 있기 2 s → 서서 캐기 3.5 s → 한 바퀴 — 소품이 뼈를 따라가나
         var sAnim = stoodGo.GetComponent<Animator>();
         Transform Find(string n) => stoodGo.GetComponentsInChildren<Transform>(true).First(x => x.name == n);
@@ -2746,7 +2761,7 @@ public class M1Check : MonoBehaviour
         Transform helmet = Find("Helmet_Shell"), battery = Find("Battery_Body"), clip = Find("Helmet_CordClip");
         var cord = sRends.OfType<SkinnedMeshRenderer>().First(r => r.name == "Lamp_Cord");
         var cm = new Mesh();
-        Vector3[] CordWorld() { cord.BakeMesh(cm, true); return cm.vertices.Select(v => cord.transform.position + cord.transform.rotation * v).ToArray(); }
+        Vector3[] CordWorld() => PlayerBody.WorldVerts(cord, cm);
         foreach (var (name, yaw) in new[] { ("front", 180f), ("side", 90f), ("back", 0f) })
         {
             stoodGo.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
@@ -4491,7 +4506,7 @@ public class M1Check : MonoBehaviour
         var stood = PlayerBody.Stand(body, at, yaw + 180f);
         var sb = stood.GetComponent<PlayerBody>();
         var scc = stalker.GetComponent<CharacterController>();
-        Vector3 Grounded(Vector3 p) => PlayerBody.Ground(p) + Vector3.up * scc.skinWidth;   // 게임처럼 — 중력으로 떨어진 괴물 뿌리는 바닥 + skinWidth (길찾기 점에 놓으면 발이 13 cm 떴다, 09-30)
+        Vector3 Grounded(Vector3 p) => PlayerBody.Ground(p) + Vector3.up * (scc.skinWidth - (scc.center.y - scc.height * 0.5f));   // 게임처럼 — 중력으로 떨어진 괴물은 캡슐 밑이 바닥 + skinWidth (길찾기 점에 놓으면 발이 13 cm 떴다, 09-30)
         stalker.Teleport(Grounded(at), yaw + 180f);
         var sa = stalker.GetComponentInChildren<StalkerAnim>();
         var lk = stalker.GetComponentInChildren<StalkerLook>();
@@ -4520,11 +4535,10 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         float mFloor = PlayerBody.Ground(stalker.transform.position).y, bFloor = PlayerBody.Ground(stood.transform.position).y, ceilMon = Up(stalker.transform.position) - mFloor;
 
-        // 세운 몸 뼈 · 몸 그물만 꼭대기 (크기 1 이라 굽기가 맞다 — 괴물은 부품 여럿 · ×1.5 라 굽기가 그림과 안 맞아(2.59 · 4.32 vs 그림 2.86) 그림에서 잰다)
+        // 세운 몸 뼈 · 몸 그물만 꼭대기 (PlayerBody.WorldVerts — 괴물은 부품 여럿 · ×1.5 라 굽기가 그림과 안 맞아(2.59 · 4.32 vs 그림 2.86) 그림에서 잰다)
         var sAnim = stood.GetComponent<Animator>();
         var sBody = stood.GetComponentsInChildren<SkinnedMeshRenderer>().First(r => r.name == "PlayerBody");
-        sBody.BakeMesh(baked, true);
-        float bodyOnlyTop = baked.vertices.Max(v => (sBody.transform.position + sBody.transform.rotation * v).y) - bFloor;
+        float bodyOnlyTop = PlayerBody.WorldVerts(sBody, baked).Max(v => v.y) - bFloor;
         float bodyHead = sAnim.GetBoneTransform(HumanBodyBones.Head).position.y - bFloor;
         var bTopT = stood.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name.EndsWith("HeadTop_End"));
         float bodyHeadTop = bTopT != null ? bTopT.position.y - bFloor : float.NaN;
@@ -4672,7 +4686,7 @@ public class M1Check : MonoBehaviour
             $"\"monTop\":{F(monTop)},\"monHeadTop\":{F(monHeadTop)},\"monHead\":{F(monHead)},\"monEye\":{F(monEye)},\"monEyePx\":{eyeN}," +
             $"\"bodySole\":{F(bodySole)},\"monSole\":{F(monSole)},\"monCapsuleBooth\":{F(Tuning.BOOTH_STALKER_H)},\"monCapsule\":{F(Tuning.STALKER_H)},\"monEyeRay\":{F(Tuning.STALKER_EYE_H)},\"monScale\":{F(Tuning.STALKER_MODEL_SCALE)}," +
             $"\"fov\":{F(mainCam.fieldOfView)},\"orthoHalf\":{F(OrthoHalf)},\"orthoMid\":{F(OrthoMid)},\"poses\":[{string.Join(",", poses)}]}}");
-        Check("sizes_measured", Mathf.Abs(camOnRoot - Tuning.EYE_HEIGHT) < 0.02f && bTopT != null && eyeN > 0 && !float.IsNaN(monTop) && !float.IsNaN(bodyTop),
+        Check("sizes_measured", Mathf.Abs(camOnRoot - player.standEye) < 0.02f && bTopT != null && eyeN > 0 && !float.IsNaN(monTop) && !float.IsNaN(bodyTop),
             $"my eye {eye:F2} m above floor (camera {camOnRoot:F2} above body root, EYE_HEIGHT {Tuning.EYE_HEIGHT} · root {rootGap:F2} above floor) · stood body top {bodyTop:F2} · monster top {monTop:F2} · monster eye glow {monEye:F2} m ({eyeN} px) · captures 60_sizes_fp_body / _monster / 60_sizes_ortho · sizes.json");
     }
 
@@ -4691,7 +4705,7 @@ public class M1Check : MonoBehaviour
         ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"19_devhud_{where}.png"));
         yield return null;
         float th = DevHud.TextHeight, bh = DevHud.BoxHeight;
-        string[] want = { "player arms", "player look", "mine motion" };           // 판정 키 줄 (3D-P · 3D-P2 · MINE-2)
+        string[] want = { "player height", "player arms", "player look", "mine motion" };   // 판정 키 줄 (몸 키 09-30 · 3D-P · 3D-P2 · MINE-2)
         var missing = want.Where(w => !DevHud.LastText.Contains(w)).ToList();
         yield return PressKey(kb, Key.F1);
         hud.enabled = false;

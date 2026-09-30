@@ -25,6 +25,8 @@ public class PlayerBody : MonoBehaviour
     public static float clothDetail = Tuning.PLAYER_CLOTH_DETAIL, smoothMul = Tuning.PLAYER_SMOOTH_MUL;
     public static int dirtLevel = Tuning.PLAYER_DIRT_LEVEL, lookVer;
     public static bool clayLook, forceClay, noDetail;       // forceClay · noDetail = 사보타주 claybody · nodetail
+    // 몸 크기 (사용자 09-30 "모델 1.72 와 시점 1.78 의 차이가 크다" → 키 하나로 같이): 1인칭 눈 = 모델 눈 × 이 값. 판정 키 Shift+− = 가 Player.standEye 와 같이 바꾼다 (DevHud)
+    public static float scale = Tuning.PLAYER_SCALE;
     // 사보타주 (M1Check): 손을 안 붙임 · 1인칭에 몸 전체 · 스위치가 안 먹음 · 세운 몸을 스위치 없이 따로 · Kevin 동작 없이(다른 컴퓨터)
     public static bool noIk, fpBody, noSwitch, standalone, noKevin, twoHands;   // twoHands: 판정 ④ 전 — 캘 때 왼손이 앞 손잡이(GRIP_Front)로
     [System.NonSerialized] public float fpForward = Tuning.PLAYER_FP_OFFSET.z;   // 판정 키 Shift+← →
@@ -193,14 +195,21 @@ public class PlayerBody : MonoBehaviour
     {
         ownPick = R.hand.Find("HeldPick") ?? Instantiate(pickaxe.mesh.gameObject, R.hand).transform;   // 내 몸을 복사한 세운 몸은 이미 들고 있을 수 있다
         ownPick.name = "HeldPick";
-        ownPick.localRotation = R.grip;
-        ownPick.localPosition = R.palm - ownPick.localRotation * Vector3.Scale(ownPick.localScale, Tuning.GRIP_REAR);
+        FitPick();
         foreach (var x in ownPick.GetComponentsInChildren<Transform>(true)) x.gameObject.layer = 0;
         foreach (var r in ownPick.GetComponentsInChildren<Renderer>(true))
         {
             r.renderingLayerMask = Pickaxe.DefaultRenderingLayer;
             r.shadowCastingMode = ShadowCastingMode.On;
         }
+    }
+
+    // 손에 든 곡괭이는 몸이 커져도 제 크기 — 몸 배율만큼 줄여 넣는다
+    void FitPick()
+    {
+        ownPick.localScale = pickaxe.mesh.localScale / scale;
+        ownPick.localRotation = R.grip;
+        ownPick.localPosition = R.palm - ownPick.localRotation * Vector3.Scale(ownPick.localScale, Tuning.GRIP_REAR);
     }
 
     // 남의 램프는 렌즈만 빛난다(빛은 안 낸다 — 남의 머리등 빛은 NET-1). Lit 발광은 빌드에서 변형이 빠져 검게 나왔다(09-15) → 괴물 눈과 같은 Unlit
@@ -267,10 +276,18 @@ public class PlayerBody : MonoBehaviour
     float SoleLocal()                                             // 몸 그물의 가장 낮은 점 높이 (뿌리 기준)
     {
         var m = new Mesh();
-        bodySkin.BakeMesh(m, true);
-        float y = m.vertices.Min(v => transform.InverseTransformPoint(bodySkin.transform.position + bodySkin.transform.rotation * v).y);
+        float y = WorldVerts(bodySkin, m).Min(v => transform.InverseTransformPoint(v).y);
         Destroy(m);
         return y;
+    }
+
+    // 뼈로 굽힌 그물 점의 세계 자리. 짝이 맞아야 한다(09-30 몸 ×1.119 에서 잼): BakeMesh(true) 는 크기를 뺀 점 → localToWorldMatrix,
+    // BakeMesh(false) 는 크기가 든 점 → 자리 · 회전만. 옛 BakeMesh(true) + 자리 · 회전은 크기 1 에서만 맞았다(몸 꼭대기 1.669 = 참 1.868 ÷ 1.119, 줄 끝이 2.8 cm 떨어진 것처럼 잼)
+    public static Vector3[] WorldVerts(SkinnedMeshRenderer s, Mesh m)
+    {
+        s.BakeMesh(m, true);
+        var w = s.transform.localToWorldMatrix;
+        return m.vertices.Select(v => w.MultiplyPoint3x4(v)).ToArray();
     }
 
     void Play(string s)
@@ -308,6 +325,11 @@ public class PlayerBody : MonoBehaviour
         float dt = Time.deltaTime;
         t += dt;
         if (myLookVer != lookVer) ApplyLook();
+        if (transform.localScale.x != scale)
+        {
+            transform.localScale = Vector3.one * scale;
+            if (ownPick != null) FitPick();
+        }
         if (mode == Mode.Self) SelfUpdate(dt); else OtherUpdate(dt);
     }
 
@@ -323,9 +345,9 @@ public class PlayerBody : MonoBehaviour
         if (direct && pickaxe.motion != null) Param("MineT", pickaxe.ClipNow / pickaxe.motion.length);
         Param("IdleT", t / idleLen % 1f);
 
-        // 몸 자리 (카메라 기준): 쉴 때 = 머리 뼈가 눈 + PLAYER_FP_OFFSET, 캘 때 = 동작 표 틀의 Kevin 몸 자리
-        if (direct) { minePos = pickaxe.MotionFramePoint(-Tuning.PLAYER_MINE_EYE); mineRot = pickaxe.MotionFrameRot; }
-        Vector3 rest = -headBind + new Vector3(Tuning.PLAYER_FP_OFFSET.x, Tuning.PLAYER_FP_OFFSET.y, fpForward);
+        // 몸 자리 (카메라 기준): 쉴 때 = 머리 뼈가 눈 + PLAYER_FP_OFFSET, 캘 때 = 동작 표 틀의 Kevin 몸 자리 (몸 크기 배)
+        if (direct) { minePos = pickaxe.MotionFramePoint(-Tuning.PLAYER_MINE_EYE * scale); mineRot = pickaxe.MotionFrameRot; }
+        Vector3 rest = -headBind * scale + new Vector3(Tuning.PLAYER_FP_OFFSET.x, Tuning.PLAYER_FP_OFFSET.y, fpForward);
         transform.localPosition = Vector3.Lerp(rest, minePos, wMine);
         transform.localRotation = Quaternion.Slerp(Quaternion.identity, mineRot, wMine);
 
@@ -341,7 +363,7 @@ public class PlayerBody : MonoBehaviour
             {
                 if (h.w <= 0f) continue;
                 Vector3 d = (h == R ? pickaxe.gripRear.position : pickaxe.gripFront.position) - (transform.TransformPoint(h.shLocal) + shift);
-                float over = d.magnitude - Tuning.PLAYER_ARM_REACH_M;
+                float over = d.magnitude - Tuning.PLAYER_ARM_REACH_M * scale;
                 if (over > 0f) shift += d.normalized * over;
             }
         transform.position += shift;
