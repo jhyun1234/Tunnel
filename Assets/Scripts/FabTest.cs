@@ -17,7 +17,7 @@ public static class FabTest
         var src = Resources.Load<GameObject>(res);
         if (src == null) { Debug.Log($"FABTEST no Assets/Fab/Resources/{res}.glb in this build"); return null; }
         var go = Object.Instantiate(src, at ?? Offset, Quaternion.identity); go.name = res;
-        foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+        foreach (var mf in go.GetComponentsInChildren<MeshFilter>().Where(m => !m.name.StartsWith("NOCOL_")))   // NOCOL_ = 물 · 웅덩이 판 (부딪힘을 달면 물 위를 걷는다)
             mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
         foreach (var t in go.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("LAMP_")))
         {

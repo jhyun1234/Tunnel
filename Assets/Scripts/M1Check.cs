@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|standlow 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|lowroof 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -4681,7 +4681,11 @@ public class M1Check : MonoBehaviour
     {
         var m = Map4.Spawn(player, Camera.main);
         if (m == null) { Check("map4_loaded", false, "no Map4.glb in Resources"); yield break; }
-        if (sabotageName == "standlow") m.enabled = false;      // 사보타주: 머리 위를 안 잰다 → map4_low_face_crouches FAIL
+        if (sabotageName == "lowroof")                          // 사보타주: 시작 자리 머리 위 1.85 m 에 판 → map4_no_forced_crouch FAIL
+        {
+            var roof = GameObject.CreatePrimitive(PrimitiveType.Cube); roof.transform.localScale = new Vector3(3f, 0.2f, 3f);
+            Physics.SyncTransforms(); Physics.Raycast(m.spots[0].position, Vector3.down, out var fl, 4f); roof.transform.position = fl.point + Vector3.up * 1.95f;
+        }
         stalker.gameObject.SetActive(false);
         lamp.lampOn = true;
         Check("map4_loaded", m.spots.Length > 1, $"{m.spots.Length} spots, {m.GetComponentsInChildren<MeshFilter>().Length} meshes, {m.GetComponentsInChildren<Light>().Length} lights");
@@ -4691,17 +4695,17 @@ public class M1Check : MonoBehaviour
         float fps = (Time.frameCount - f0) / (Time.realtimeSinceStartup - t0);
         Check("map4_fps", fps >= 60f, $"{fps:0} fps at start (booth map is also loaded above)");
         var fell = new System.Collections.Generic.List<string>();
-        string low = "no crouch_in spot";
+        var low = new System.Collections.Generic.List<string>();
         for (int i = 0; i < m.spots.Length; i++)
         {
             m.Go(i); float y0 = player.transform.position.y;
             yield return new WaitForSeconds(1.5f);
             float dy = player.transform.position.y - y0;
             if (Mathf.Abs(dy) > 0.3f) fell.Add($"{m.spots[i].name.Substring(4)} {dy:+0.0;-0.0} m");
-            if (m.spots[i].name.EndsWith("crouch_in")) low = $"stance {player.stance}, eye {Camera.main.transform.position.y - player.transform.position.y:0.00} m";
+            if (player.stance == "crouch") low.Add(m.spots[i].name.Substring(4));
             yield return Capture("64_map4_" + m.spots[i].name.Substring(4), x => { });
         }
-        Check("map4_low_face_crouches", low.StartsWith("stance crouch"), low + " (낮은 막장 ② 천장 1.2~1.45 m — Ctrl 을 안 눌러도 숙는다)");
+        Check("map4_no_forced_crouch", low.Count == 0, low.Count == 0 ? $"stood up at all {m.spots.Length} spots (사용자 10-01: 낮은 곳을 만들지 않는다)" : "forced to crouch at: " + string.Join(", ", low));
         Check("map4_spots_on_floor", fell.Count == 0, fell.Count == 0 ? $"all {m.spots.Length} spots stand on the floor" : "moved: " + string.Join(", ", fell));
     }
 
