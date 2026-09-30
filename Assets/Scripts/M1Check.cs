@@ -4528,6 +4528,8 @@ public class M1Check : MonoBehaviour
         float bodyHead = sAnim.GetBoneTransform(HumanBodyBones.Head).position.y - bFloor;
         var bTopT = stood.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name.EndsWith("HeadTop_End"));
         float bodyHeadTop = bTopT != null ? bTopT.position.y - bFloor : float.NaN;
+        var lens = stood.GetComponentsInChildren<Renderer>().Where(r => r.name == "Mask_LensL" || r.name == "Mask_LensR").ToArray();   // 방독면 눈 유리 가운데 = 세운 몸의 눈
+        float bodyEye = lens.Length == 2 ? lens.Average(r => r.bounds.center.y) - bFloor : float.NaN;
 
         // ② 같은 자리 정사영 — 바닥 −0.1 ~ 3.9 m, 1 m = 270 px. 팔 · 곡괭이(겹친 카메라)는 끈다
         const float OrthoHalf = 2.0f, OrthoMid = 1.9f;
@@ -4662,11 +4664,11 @@ public class M1Check : MonoBehaviour
 
         Debug.Log($"SIZES me: eye {eye:F3} above floor = body root {rootGap:F3} above floor (skinWidth {cc.skinWidth:F3}) + camera {camOnRoot:F3} above root (EYE_HEIGHT {Tuning.EYE_HEIGHT}) · crouch eye {crouchEye:F3} (CROUCH_EYE {Tuning.CROUCH_EYE}) · capsule {capsule:F2} · ceiling {ceilMe:F2} m");
         Debug.Log($"SIZES floors: me {ground:F3} · stood body {bFloor:F3} · monster {mFloor:F3} m (world) · soles in picture: stood body {bodySole:F3} · monster {monSole:F3} m above their floor");
-        Debug.Log($"SIZES stood body: top in picture (helmet) {bodyTop:F3} · body mesh top {bodyOnlyTop:F3} · HeadTop_End {bodyHeadTop:F3} · Head bone {bodyHead:F3} m above floor");
+        Debug.Log($"SIZES stood body: top in picture (helmet) {bodyTop:F3} · eye (mask lenses) {bodyEye:F3} · body mesh top {bodyOnlyTop:F3} · HeadTop_End {bodyHeadTop:F3} · Head bone {bodyHead:F3} m above floor");
         Debug.Log($"SIZES monster up_stand: top in picture {monTop:F3} · HeadTop_End {monHeadTop:F3} · Head bone {monHead:F3} · eye glow {monEye:F3} ({eyeN} px) · capsule {Tuning.BOOTH_STALKER_H} (booth) / {Tuning.STALKER_H} (corridor) · STALKER_EYE_H {Tuning.STALKER_EYE_H} · ceiling {ceilMon:F2} m");
         File.WriteAllText(Path.Combine(outDir, "sizes.json"),
             $"{{\"eye\":{F(eye)},\"rootGap\":{F(rootGap)},\"crouchEye\":{F(crouchEye)},\"capsule\":{F(capsule)},\"ceilMe\":{F(ceilMe)},\"ceilMon\":{F(ceilMon)},\"dist\":{F(D)},\"bodyX\":{F(bodyX)},\"monX\":{F(monX)}," +
-            $"\"bodyTop\":{F(bodyTop)},\"bodyOnlyTop\":{F(bodyOnlyTop)},\"bodyHeadTop\":{F(bodyHeadTop)},\"bodyHead\":{F(bodyHead)}," +
+            $"\"bodyTop\":{F(bodyTop)},\"bodyOnlyTop\":{F(bodyOnlyTop)},\"bodyHeadTop\":{F(bodyHeadTop)},\"bodyHead\":{F(bodyHead)},\"bodyEye\":{F(bodyEye)}," +
             $"\"monTop\":{F(monTop)},\"monHeadTop\":{F(monHeadTop)},\"monHead\":{F(monHead)},\"monEye\":{F(monEye)},\"monEyePx\":{eyeN}," +
             $"\"bodySole\":{F(bodySole)},\"monSole\":{F(monSole)},\"monCapsuleBooth\":{F(Tuning.BOOTH_STALKER_H)},\"monCapsule\":{F(Tuning.STALKER_H)},\"monEyeRay\":{F(Tuning.STALKER_EYE_H)},\"monScale\":{F(Tuning.STALKER_MODEL_SCALE)}," +
             $"\"fov\":{F(mainCam.fieldOfView)},\"orthoHalf\":{F(OrthoHalf)},\"orthoMid\":{F(OrthoMid)},\"poses\":[{string.Join(",", poses)}]}}");
