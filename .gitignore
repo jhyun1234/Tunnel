@@ -50,3 +50,6 @@ __pycache__/
 /Assets/Resources/Generated/
 /Assets/Resources/Generated.meta
 /Assets/Resources.meta
+# MAP4 규칙 6: Fab(Megascans) 광산 묶음 — 표준 라이선스(원본 재배포 금지), 저장소가 공개라 올리지 않는다. 받는 법 docs/기획서/조사/11_현실적인_텍스처_수단.md (사용자 09-30)
+/Assets/Fab/
+/Assets/Fab.meta

@@ -39,6 +39,24 @@ public class DevHud : MonoBehaviour
     void Start()
     {
         volume.profile.TryGet(out fog);    // .profile 은 실행 중 사본 — 에셋을 안 바꾼다
+        // 촬영 모드(영상용): exe 를 -film 으로 띄우면 괴물을 통째로 없앤다 — 0 키는 행동만 끄고 몸·눈빛은 갱도에 남아 걷다 보면 보인다 (09-22 롱폼 엔진전환 훅 촬영, Godot DevBot --film 과 같은 뜻)
+        if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-film") >= 0 && stalker != null)
+            stalker.gameObject.SetActive(false);
+        // 엔진 확인(09-30): exe 를 -fabtest 로 띄우면 부스 맵 아래 Fab 갱도에서 시작 (괴물 없음). 검사(-check)는 M1Check 가 따로 한다
+        if (FabTest.Requested && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0 && FabTest.Spawn() is GameObject fab)
+        {
+            if (stalker != null) stalker.gameObject.SetActive(false);
+            var cam = fab.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("CAM_")).OrderBy(t => t.name).FirstOrDefault();
+            if (cam != null) FabTest.StandAt(player, cam, FabTest.Node(fab, "AT_" + cam.name.Substring(4)));
+        }
+        // 영상 재현 판정(09-30): -fabvideo — FabVideo.glb 에서 시작, 키로 빛 · 화각 (FabVideoTuner). 이 모드에선 DevHud 를 끈다 (판정 키가 부딪힌다)
+        if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-fabvideo") >= 0 && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
+            && FabTest.Spawn("FabVideo", new Vector3(0f, -160f, 0f)) is GameObject vid)
+        {
+            if (stalker != null) stalker.gameObject.SetActive(false);
+            var t = vid.AddComponent<FabVideoTuner>(); t.player = player; t.cam = pickaxe.cam.GetComponent<Camera>();
+            enabled = false;
+        }
     }
 
     void OnDisable() => Visible = false;

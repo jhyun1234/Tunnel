@@ -63,7 +63,7 @@ NECK_OUT, NECK_S = float(E("UP_NECK", "0.25")), 1.0    # 목 내밀기 (모델 m
 DIP = float(E("UP_DIP", "0.05"))           # 발 디딜 때 엉덩이가 내려앉는 깊이 (모델 m)
 JAW_FREEZE, JAW_RUN = 22.0, 40.0
 
-bpy.ops.wm.open_mainfile(filepath=os.path.join(MT, "blender", "miner_v4_stage16_neck.blend"))
+bpy.ops.wm.open_mainfile(filepath=E("UP_BLEND", os.path.join(MT, "blender", "miner_v4_stage16_neck.blend")))   # UP_BLEND: 다른 몸(새 몸 m3 = miner_v5_stage22_m3_props.blend)으로 같은 동작을 굽는다 — 쇼츠 비교용(09-22)
 scene = bpy.context.scene; scene.render.fps = FPS
 arm = bpy.data.objects["Miner_Rig"]; ad = arm.animation_data
 for tr in ad.nla_tracks:

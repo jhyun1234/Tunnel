@@ -21,7 +21,7 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 - 최소 사양 목표(잠정): GTX 1650 / 1080p / 60fps
 - 명령어는 `game-engine` 스킬에 있다. 경로를 추측하지 말고 그 스킬을 읽는다.
 - 빌드·배포물 검사: `bash tools/build.sh` (사보타주: `-sabotage floor|lamp|fog|thickfog`)
-- 개발 중 빠른 검사: `bash tools/quick.sh <구간>` (바뀐 구간만, 사보타주 여럿은 `-sab a,b <구간>`). 전체 build.sh 는 커밋 전 한 번
+- 개발 중 빠른 검사: `bash tools/quick.sh <구간>` (바뀐 구간만, 사보타주 여럿은 `-sab a,b <구간>`). **전체 build.sh 는 main 에 합친 뒤 다음 개발 전에 한 번**(아래 병렬 세션 · 완료의 정의, 사용자 09-29)
 - 산출물: `build/`
 
 ## Godot판 참조 (읽기 전용)
@@ -50,7 +50,8 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 - **배포물 검사는 한 번에 하나** — `tools/quick.sh` · `tools/build.sh` 가 `tools/gpu_lock.sh`(잠금 = `Tunnel/.gpu_check_lock`)로 다른 폴더의 검사가 끝날 때까지 기다린다. 그래픽카드가 하나라 fps·밝기 검사가 서로를 떨어뜨린다. 자기 검사 `bash tools/test_gpu_lock.sh`. 사용자가 판정 중이면 어느 폴더도 검사를 안 돌린다(그대로).
 - **옆 가지는 되도록 안 고치는 파일**: `BuildM1.cs` · `M1Check.cs` · `Tuning.cs` · `DevHud.cs` · 씬 — Unity 에 붙이는 일은 합칠 때 main 에서. 고쳐야 하면 고친 곳을 옆 가지 HANDOFF 절에 적는다(합칠 때 부딪힘 줄이기).
 - **HANDOFF**: 옆 가지는 자기 절 `## 0. 옆 가지 <가지>`에만 쓴다(09-20 m2-body 전례). 맨 위 요약·다음 세션 프롬프트는 main 세션만.
-- **합치기**: 사용자가 옆 가지 결과를 통과시키면 main 세션이 `git merge <가지>` → 전체 build.sh → 커밋. 작업 폴더 지우기(`git worktree remove`)는 사용자 확인 뒤 — 에디터·탐색기가 잡고 있으면 안 지워진다(09-20 unity-m2).
+- **검사 (사용자 09-29)**: 옆 가지 안에서는 **개발한 기능의 구간만** 돌린다(`quick.sh <구간>` + 새 검사의 사보타주 FAIL 확인). 전체 build.sh 는 옆 가지에서 돌리지 않는다 — 09-29 인트로 가지가 커밋마다 전체(15 분)를 4 번 돌렸다.
+- **합치기**: 사용자가 옆 가지 결과를 통과시키면 main 세션이 `git merge <가지>` → **전체 build.sh 한 번**(다음 개발을 시작하기 전) → 커밋. 작업 폴더 지우기(`git worktree remove`)는 사용자 확인 뒤 — 에디터·탐색기가 잡고 있으면 안 지워진다(09-20 unity-m2).
 - 제안서는 가지마다 하나씩(사용자 규칙 그대로). 푸시는 사용자 지시 때만.
 
 ## 하지 말 것
@@ -58,12 +59,13 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 - Godot 저장소·`new-game` 폴더를 지우거나 고치지 않는다.
 - Godot판 `tools/minetunnel/export.sh`를 돌리지 않는다 — `build_piece.py`에 #26 B단계 값이 없어 조각이 옛 형상으로 바뀐다.
 - `Assets/`의 기존 파일을 덮어쓰기 전에 물어본다.
+- Fab(Megascans) 파일은 `Assets/Fab/`(git 에서 뺌) · `build/tex_test/fab/` 에만 둔다 — 저장소가 공개라 올리면 재배포 금지를 어긴다(사용자 09-30). Meshy · Gemini · GPT 에 넣지 않는다(목록마다 "AI 사용 허용: 아니요").
 
 ## 완료의 정의
 
 기능 하나가 끝났다고 말하려면 다음이 전부 참이어야 한다.
 
-1. `bash tools/build.sh` 가 통과한다 (소스 검사 + **배포물 검사**).
+1. 배포물 검사가 통과한다 — 옆 가지: 개발한 기능의 구간(`quick.sh <구간>`) · main: 합친 뒤 전체 `bash tools/build.sh` 한 번 (소스 검사 + **배포물 검사**).
 2. 새로 넣은 검사를 일부러 실패시켜 FAIL이 뜨는 것을 확인했다.
 3. `docs/HANDOFF.md` 를 갱신했다.
 4. 커밋했다.

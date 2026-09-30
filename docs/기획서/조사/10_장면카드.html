@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>광산 장면 카드</title>
+<style>
+:root { --bg:#f6f3ee; --card:#fff; --ink:#1f1c18; --sub:#6b645a; --line:#ddd6cb; --kr:#b4532a; --fx:#2f6f8f; --gm:#6a4c93; --pick:#e9b949; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#16140f; --card:#221f19; --ink:#eee8dd; --sub:#a59d90; --line:#3a352c; } }
+:root[data-theme="dark"] { --bg:#16140f; --card:#221f19; --ink:#eee8dd; --sub:#a59d90; --line:#3a352c; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 "Malgun Gothic","Apple SD Gothic Neo",sans-serif; }
+header { padding:24px 16px 8px; max-width:1300px; margin:auto; }
+h1 { margin:0 0 6px; font-size:24px; }
+header p { margin:4px 0; color:var(--sub); }
+#picked { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line); padding:10px 16px; font-weight:bold; max-width:1300px; margin:auto; }
+main { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; padding:16px; max-width:1300px; margin:auto; }
+.card { background:var(--card); border:2px solid var(--line); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+.card.on { border-color:var(--pick); box-shadow:0 0 0 3px var(--pick); }
+.card img { width:100%; aspect-ratio:16/10; object-fit:cover; background:#000; display:block; }
+.body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:6px; flex:1; }
+.top { display:flex; align-items:center; gap:8px; }
+.no { font-weight:bold; font-size:18px; }
+.tag { font-size:12px; color:#fff; padding:1px 8px; border-radius:10px; }
+.kr { background:var(--kr); } .fx { background:var(--fx); } .gm { background:var(--gm); }
+h2 { margin:0; font-size:16px; }
+.row b { display:inline-block; min-width:4.5em; color:var(--sub); font-weight:normal; }
+.ours { margin-top:auto; padding-top:8px; border-top:1px dashed var(--line); }
+label { cursor:pointer; user-select:none; margin-left:auto; font-size:14px; }
+.src { font-size:12px; color:var(--sub); word-break:break-all; }
+.src a { color:inherit; }
+footer { max-width:1300px; margin:auto; padding:8px 16px 40px; color:var(--sub); font-size:13px; }
+footer a { color:inherit; }
+</style>
+</head>
+<body>
+<header>
+<h1>광산 장면 카드 — 끌리는 장면을 고른다</h1>
+<p>65차(09-30). 사진 맞히기(MAP2 눈높이 사진 12장 중 0장)의 다음 단계다. 평면도 대신 <b>눈높이 장면 + 거기서 일어나는 일</b>로 새 맵의 뼈대를 고른다.</p>
+<p>색 구분: <span class="tag kr">국내 탄광</span> <span class="tag fx">해외 광산</span> <span class="tag gm">공포 게임</span>. 광산 카드의 "일어날 일"은 우리가 만든 <b>게임 아이디어</b>다. 게임 카드의 "일어나는 일"은 그 게임에 <b>실제로 있는 규칙</b>이다(출처 링크).</p>
+<p>사진은 링크로만 걸었다(내려받지 않음). 게임 안에 그림으로 넣지 않는다.</p>
+</header>
+<div id="picked">고른 카드: 없음 — 카드 오른쪽 위 "고르기"를 누른다</div>
+<main id="cards"></main>
+<footer>
+<p><b>예비 사진</b>(열리는지 확인함):
+<a href="https://store.steampowered.com/app/1622910/">Still Wakes the Deep 물 찬 기관실</a> ·
+<a href="https://outlast.fandom.com/wiki/Sewer">Outlast 하수도 밸브</a> ·
+<a href="https://deadbydaylight.fandom.com/wiki/Lockers">Dead by Daylight 사물함(빨리 들어가면 큰 소리 알림 · 천천히 들어가도 문이 삐걱)</a> ·
+<a href="https://commons.wikimedia.org/wiki/File:Inside_an_Adit_of_the_abandoned_Sharkham_Point_Iron_Mine,_Brixham.jpg">물 찬 굴</a> ·
+<a href="https://commons.wikimedia.org/wiki/File:Rake_of_tubs_(14053956105).jpg">줄 선 광차</a> ·
+<a href="https://commons.wikimedia.org/wiki/File:Wettertuer_anagoria.JPG">노란 쇠 풍문(독일 광산박물관)</a> ·
+<a href="https://commons.wikimedia.org/wiki/File:Pacific_Coast_Coal_Co,_Newcastle_vicinity,_underground_pump_room_(CURTIS_1646).jpeg">갱내 배수 펌프실(1909)</a> ·
+<a href="https://commons.wikimedia.org/wiki/File:Underground_stables_in_the_Bell_Island_Ore_Mine.jpg">지하 마구간 칸막이</a> ·
+<a href="https://ncms.nculture.org/coalmine/story/3817">굴 속 쉬는 자리(벽돌 아치)</a> ·
+<a href="https://ncms.nculture.org/coalmine/story/3650">쇠기둥 세우는 두 광부</a> ·
+<a href="https://ncms.nculture.org/coalmine/story/3763">나무동발 갱도</a></p>
+<p>국내 사진은 지역N문화 "사라져 가는 기억, 한국의 탄광"(원 출처 한국광물자원공사 · 국가기록원)에서 골랐다. 이용 허락 유형이 적혀 있지 않은 것이 많아 참고로만 쓴다. 해외 사진은 Wikimedia Commons(저작자 · 라이선스는 카드 아래). 국내에서 못 찾은 장면: 수갱 케이지 안 · 풍문 · 사다리길 · 화약고 문.</p>
+</footer>
+<script>
+const K = [
+ ["kr","쇠동발 숲 막장","https://minio.nculture.org/amsweb-opt/multimedia_assets/160/10524/325/c/10524-full-size.jpg","https://ncms.nculture.org/coalmine/story/3763","© 한국광물자원공사",
+  "천장이 낮은 좁은 통로 양쪽에 은색 쇠기둥이 빽빽하게 서 있고 바닥엔 널빤지.",
+  "기둥 사이로 괴물이 언뜻 보였다가 사라진다. 몸을 옆으로 틀어야 지나간다.",
+  "구역마다 다른 모습 — 여기는 '은색 숲'. 기둥 틈이 시야를 끊는다."],
+ ["kr","낮은 채탄 막장","https://minio.nculture.org/amsweb-opt/multimedia_assets/160/10458/259/c/10458-full-size.jpg","https://ncms.nculture.org/coalmine/story/3683","© 한국광물자원공사",
+  "천장이 낮아 광부 둘이 무릎을 꿇고 캔다. 통나무 기둥이 촘촘하고 바닥은 석탄 부스러기.",
+  "기어서만 들어가는 막다른 곳이라, 캐는 동안 괴물이 입구에 오면 빠져나갈 길이 없다.",
+  "광석이 가장 많은 곳이 가장 위험한 곳 — 욕심과 위험을 고르게 한다."],
+ ["kr","슈트 아래 광차 싣는 곳","https://minio.nculture.org/amsweb-opt/multimedia_assets/160/10489/290/c/10489-full-size.jpg","https://ncms.nculture.org/coalmine/story/3613","© 한국광물자원공사",
+  "위에 달린 쇠 깔때기에서 석탄이 쏟아져 줄지어 선 광차에 담긴다.",
+  "석탄 쏟아지는 소리가 커서 그동안은 괴물 발소리가 안 들린다.",
+  "캔 석탄을 모아 내는 곳(돈). 줄 선 광차는 ③ 광차 + 거적 숨기와 이어진다."],
+ ["kr","동발 점검 자리 — 벽에 페인트 글씨","https://minio.nculture.org/amsweb-opt/multimedia_assets/160/10464/265/c/10464-full-size.jpg","https://ncms.nculture.org/coalmine/story/3684","© 한국광물자원공사",
+  "검은 바위벽에 주황색 페인트 글씨가 쓰여 있고 통나무 들보가 비스듬히 걸려 있다.",
+  "보갱부가 갱도를 살피고 고치는 자리.",
+  "벽의 페인트 번호 · 화살표 = 눈높이에서 '여기가 어디'를 아는 표지. 사진 맞히기 0/12 를 푸는 가장 싼 방법."],
+ ["kr","갱구 인차 타는 곳","https://minio.nculture.org/amsweb-opt/multimedia_assets/107/10275/179/c/10275-full-size.jpg","https://ncms.nculture.org/coalmine/story/3725","© 국가기록원(CET0030660)",
+  "돌로 쌓은 둥근 굴 입구 앞 선로에 사람을 태우는 작은 차가 길게 서 있다.",
+  "모두 타야 출발한다. 한 명이 돌아오지 않으면 기다릴지 떠날지 골라야 한다.",
+  "협동 판의 시작 · 탈출 지점."],
+ ["fx","갱저 승강장 (폴란드 Guido 탄광)","https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Zabrze_kopalnia_Guido_15.jpg/1280px-Zabrze_kopalnia_Guido_15.jpg","https://commons.wikimedia.org/wiki/File:Zabrze_kopalnia_Guido_15.jpg","Andrzej Otrębski · CC BY-SA 4.0",
+  "흰 둥근 천장 아래 승강기 칸 앞을 빨간 철문과 노란 철문이 두 겹으로 막는다.",
+  "승강기를 불러 놓고 문이 열릴 때까지, 등 뒤 어둠에서 오는 괴물을 버틴다.",
+  "수갱 케이지 광장(MAP3 에 있는 수갱). 부르는 벨 소리 = 괴물을 부르는 소리."],
+ ["fx","바람문 (영국 Smallcleugh 광산)","https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Smallcleugh_door.jpg/1280px-Smallcleugh_door.jpg","https://commons.wikimedia.org/wiki/File:Smallcleugh_door.jpg","Simon Challands · CC BY 2.5",
+  "돌로 쌓은 둥근 굴 끝을 낡은 나무문이 막고 있다.",
+  "문을 열어 두면 바람이 끊겨 가스가 찬다 — 닫고 지나가야 하는데, 문 너머가 안 보인다.",
+  "REP-4 가스. 옛 광산보안규칙에도 '풍문 두 짝은 늘 닫아 둔다'가 있다(조사 09)."],
+ ["fx","무너진 나무 기둥 (영국 Sharkham Point)","https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Adit_2_Timbering_%282%29.jpg/1280px-Adit_2_Timbering_%282%29.jpg","https://commons.wikimedia.org/wiki/File:Adit_2_Timbering_(2).jpg","Partonez · CC BY-SA 4.0",
+  "붉은 바위 굴에서 썩은 나무 기둥들이 기울고, 무너진 돌 더미가 길을 좁힌다.",
+  "기둥을 고치지 않으면 천장이 무너져 도망칠 길 하나가 사라진다.",
+  "REP-2 무너짐 = 판 도중에 맵이 바뀐다(새로운 형식 후보)."],
+ ["fx","거대한 채굴 빈 공간 (영국 Alderley Edge)","https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Engine_Vein%2C_Alderley_Edge_Mines_2016_037.jpg/1280px-Engine_Vein%2C_Alderley_Edge_Mines_2016_037.jpg","https://commons.wikimedia.org/wiki/File:Engine_Vein,_Alderley_Edge_Mines_2016_037.jpg","Mike Peel · CC BY-SA 4.0",
+  "불빛이 끝까지 닿지 않는 넓은 바위 동굴 벽을 따라 계단이 내려간다.",
+  "너무 넓고 어두워 괴물이 어디서 올지 모른다 — 가운데를 가로지를까, 벽을 따라 돌까.",
+  "지금 채굴적(괴물이 사는 곳, 사진 11)은 굴처럼 보였다 → 이런 큰 빈 곳으로."],
+ ["fx","사다리 굴 (독일 광산)","https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Eisenfahrt_mit_Schutzkorb.JPG/1280px-Eisenfahrt_mit_Schutzkorb.JPG","https://commons.wikimedia.org/wiki/File:Eisenfahrt_mit_Schutzkorb.JPG","Markscheider · CC BY 3.0",
+  "거친 바위 구멍 위로 둥근 보호 철망 달린 쇠사다리가 어둠 속으로 올라간다.",
+  "오르는 동안 두 손이 묶여 램프도 곡괭이도 못 쓴다.",
+  "층 이동. 괴물은 사다리를 못 오른다(사용자 09-26)."],
+ ["fx","막아 둔 옛 갱도 (폴란드 Guido 탄광)","https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Guido_mine_079.JPG/1280px-Guido_mine_079.JPG","https://commons.wikimedia.org/wiki/File:Guido_mine_079.JPG","Piotrus · CC BY-SA 3.0",
+  "쇠 아치 굴을 흰 벽이 통째로 막고, 벽에 가스 눈금판과 점검표가 걸려 있다.",
+  "점검표의 가스 숫자가 날마다 오르다가 어느 날 벽에 금이 간다.",
+  "'갱도의 괴물은 갇혀 있던 괴물'(사용자) — 괴물이 풀려난 자리."],
+ ["gm","Amnesia: The Bunker — 발전기 전등 복도","https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1944430/ss_aefa02b00622834d9dc4dc63e63c34f60fcb8521.1920x1080.jpg","https://amnesia.fandom.com/wiki/Generator","Steam 스크린샷 · 규칙 출처 Amnesia 위키(Generator · Beast)",
+  "좁은 흙벽 복도 천장에 전선으로 이은 전구가 줄지어 달려 있다.",
+  "발전기에 기름을 넣어야 전등이 켜지고, 떨어지면 괴물이 더 사나워진다. 괴물은 벽 속 굴로 다니다 소리 난 쪽 구멍에서 기다린다.",
+  "REP-5 어둠 · 괴물이 바위 속 틈으로 다닌다(MAP3 계획과 같음)."],
+ ["gm","Alien: Isolation — 사물함 · 환풍구","https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/214490/ss_90419f0e549d54138abfeb3c7b78e4b5427afdb0.1920x1080.jpg","https://avp.fandom.com/wiki/Drone_(Sevastopol)","Steam 스크린샷(탐지기 장면) · 규칙 출처 AvP 위키",
+  "불빛이 도는 문 앞, 손에 든 초록 화면 탐지기가 움직임을 보여 준다.",
+  "사물함 · 책상 밑에 숨는다. 같은 곳에 자주 숨으면 괴물이 그곳을 더 자주 확인한다. 괴물은 환풍구로 다닌다.",
+  "옷장 숨기(판자 문 칸) — '같은 칸에 자꾸 숨으면 먼저 열어 본다'를 더할 수 있다."],
+ ["gm","Dead by Daylight — 발전기 같이 고치기","https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/381210/7a898338890f6e0aabf1c8c424a4f33c56c4e1e1/ss_7a898338890f6e0aabf1c8c424a4f33c56c4e1e1.1920x1080.jpg","https://deadbydaylight.fandom.com/wiki/Generators","Steam 스크린샷 · 규칙 출처 DbD 위키",
+  "조명등이 달린 발전기 앞에서 두 사람이 쪼그려 앉아 함께 고친다.",
+  "여럿이 같이 고칠 수 있다. 실수하면 펑 터지며 살인마에게 소리 알림. 다 고치면 불이 켜져 멀리서도 보인다.",
+  "REP 협동 수리. 고친 설비에 불이 켜지면 그것도 눈높이 표지가 된다."],
+ ["gm","Lethal Company — 광산 입구 승강기","https://static.wikitide.net/lethalwiki/c/cb/MinesEntrance.png","https://lethal.miraheze.org/wiki/Mineshaft","Lethal Company 위키 그림",
+  "바위 천장 아래 레일, 위로 가는 철계단, 천장 등 두 개가 있는 큰 방.",
+  "승강기로 아래층에 내려간다. 괴물은 승강기를 타지만 버튼은 못 누른다. 동굴 입구엔 파란 등.",
+  "수갱 케이지 · 구역 입구마다 색이 다른 등(표지)."],
+ ["gm","Amnesia: The Dark Descent — 물 찬 저수조","https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/57300/ss_2bf5b6775bbc3857f0b607cb298885c5f3651556.1920x1080.jpg","https://amnesia.fandom.com/wiki/Kaernk","Steam 스크린샷(저수조로 보이는 장면) · 규칙 출처 Amnesia 위키",
+  "벽돌 방 바닥이 물에 잠기고, 굵은 배수관과 사슬에 매달린 나무 다리가 있다.",
+  "눈에 안 보이는 물속 괴물이 물이 움직이는 것에 반응한다. 상자 위로 건너다닌다.",
+  "REP-3 물 — 펌프가 멈춘 갱도에 들어가면 첨벙 소리."]
+];
+const box = document.getElementById("cards"), picked = document.getElementById("picked"), on = new Set();
+const T = {kr:"국내 탄광", fx:"해외 광산", gm:"공포 게임"};
+K.forEach((c, i) => {
+  const [t, name, img, src, credit, look, what, ours] = c, n = i + 1;
+  const d = document.createElement("article");
+  d.className = "card";
+  d.innerHTML = `<img loading="lazy" src="${img}" alt="${name}">
+  <div class="body"><div class="top"><span class="no">${n}</span><span class="tag ${t}">${T[t]}</span>
+  <label><input type="checkbox"> 고르기</label></div>
+  <h2>${name}</h2>
+  <div class="row"><b>모습</b>${look}</div>
+  <div class="row"><b>${t === "gm" ? "일어나는 일" : "일어날 일"}</b>${what}</div>
+  <div class="row ours"><b>우리 게임</b>${ours}</div>
+  <div class="src"><a href="${src}" target="_blank" rel="noopener">출처</a> · ${credit}</div></div>`;
+  d.querySelector("input").addEventListener("change", e => {
+    e.target.checked ? on.add(n) : on.delete(n);
+    d.classList.toggle("on", e.target.checked);
+    const s = [...on].sort((a, b) => a - b);
+    picked.textContent = "고른 카드: " + (s.length ? s.join(", ") : "없음 — 카드 오른쪽 위 \"고르기\"를 누른다");
+  });
+  box.appendChild(d);
+});
+</script>
+</body>
+</html>

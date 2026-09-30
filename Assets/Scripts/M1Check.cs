@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -367,8 +367,16 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner")
             yield return BoothStage(cc);
+        if (only == "fabtuner")                                 // -fabvideo 판정 키가 도는가 (가상 키보드로 V · B)
+            yield return FabTunerStage();
+        if (only == "fabvideo")                                 // Fab 소개 영상 재현 (09-30) — 차이를 하나씩 켜 가며 같은 자리에서 찍는다
+            yield return FabVideoStage();
+        if (only == "fabtest")                                  // 엔진 확인 (09-30) — Fab 갱도를 게임에 넣어 Blender 시안과 같은 자리에서 찍고 fps 를 잰다
+            yield return FabTestStage(cc);
+        if (only == "tour")                                     // 사진 맞히기 (09-30) — 전체 실행엔 안 넣는다 (판정 아닌 사람용 캡처)
+            yield return TourStage(cc);
         if (only == "" || only == "art")
             yield return ArtStage(cc);
         if (only == "" || only == "ore")
@@ -4573,6 +4581,177 @@ public class M1Check : MonoBehaviour
             $"signs 1 m in front, burnt share on the board: {string.Join(" · ", signB.Select(k => $"{k.Key} {k.Value.burnt * 100f:F0} % (lamp x{k.Value.dim:F2})"))} — want ≤ 15 % (before 09-30: 84~89 %, text unreadable) · board x{(ArtLook.SabBrightBoard ? 1f : ArtLook.SignBright):F2} · captures 61_glare_sign*_now");
         Check("lamp_sees_near_body", openB.Value.burnt <= 0.06f,
             $"stood body 0.6 m in front, open space behind ({openB.Key}): burnt {openB.Value.burnt * 100f:F1} % — want ≤ 6 % (before 09-30: 14 %) · lamp near-dim x{openB.Value.dim:F2} · sees bodies x{Headlamp.probeDim:F1} · capture 61_glare_{openB.Key}_now");
+    }
+
+    // ================= 사진 맞히기 (사용자 09-30 "맵이 너무 단순한 구조 같다"). -only tour — 판정이 아니라 사람에게 보일 캡처를 남긴다
+    // 길찾기 바닥에서 넓이만큼 고르게 뽑은 자리 12곳(서로 15 m 넘게, 씨앗 고정)에 서서, 가장 멀리 트인 쪽(16 방향 중)을 고개 수평으로 본다. 램프 켬 · 괴물 끔.
+    // 캡처 61_tour_NN, 자리는 로그 "TOUR NN x z yaw" 줄과 61_tour_spots.csv (정답 — 사용자에게는 사진을 먼저 보이고 나중에 평면도로).
+    IEnumerator TourStage(CharacterController cc)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        stalker.gameObject.SetActive(false);
+        lamp.lampOn = true;
+        var tri = NavMesh.CalculateTriangulation();
+        var cum = new List<float>();
+        float total = 0f;
+        for (int i = 0; i < tri.indices.Length; i += 3)
+        {
+            Vector3 a = tri.vertices[tri.indices[i]], b = tri.vertices[tri.indices[i + 1]], c = tri.vertices[tri.indices[i + 2]];
+            total += Vector3.Cross(b - a, c - a).magnitude * 0.5f;
+            cum.Add(total);
+        }
+        var rng = new System.Random(930);
+        var spots = new List<Vector3>();
+        for (int tries = 0; spots.Count < 12 && tries < 5000; tries++)
+        {
+            float pick = (float)rng.NextDouble() * total;
+            int t = cum.BinarySearch(pick); if (t < 0) t = ~t;
+            Vector3 a = tri.vertices[tri.indices[t * 3]], b = tri.vertices[tri.indices[t * 3 + 1]], c = tri.vertices[tri.indices[t * 3 + 2]];
+            float u = (float)rng.NextDouble(), v = (float)rng.NextDouble();
+            if (u + v > 1f) { u = 1f - u; v = 1f - v; }
+            Vector3 p = a + (b - a) * u + (c - a) * v;
+            if (spots.All(s => Flat(s - p) > 15f)) spots.Add(p);
+        }
+        var csv = new List<string> { "n,x,z,yaw" };
+        for (int i = 0; i < spots.Count; i++)
+        {
+            Vector3 eye = spots[i] + Vector3.up * Tuning.EYE_HEIGHT;
+            float bestYaw = 0f, bestD = -1f;
+            for (int k = 0; k < 16; k++)
+            {
+                float y = k * 22.5f;
+                Vector3 d = Quaternion.Euler(0f, y, 0f) * Vector3.forward;
+                float dist = Physics.Raycast(eye, d, out RaycastHit h, 60f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ? h.distance : 60f;
+                if (dist > bestD) { bestD = dist; bestYaw = y; }
+            }
+            Teleport(cc, spots[i] + Vector3.up * 0.1f, bestYaw);
+            player.Pitch = 0f;
+            yield return new WaitForSeconds(1.0f);
+            yield return Capture($"61_tour_{i + 1:00}", x => { });
+            Debug.Log($"TOUR {i + 1:00} x {spots[i].x.ToString("0.0", inv)} z {spots[i].z.ToString("0.0", inv)} yaw {bestYaw:0} open {bestD:0.0} m");
+            csv.Add($"{i + 1},{spots[i].x.ToString("0.0", inv)},{spots[i].z.ToString("0.0", inv)},{bestYaw:0}");
+        }
+        File.WriteAllLines(Path.Combine(outDir, "61_tour_spots.csv"), csv);
+        Check("tour_twelve_spots", spots.Count == 12, $"{spots.Count} spots, navmesh {total:0} m2");
+    }
+
+    // ================= 엔진 확인 (사용자 09-30 "엔진의 한계인가? 게임은 찰흙처럼 보인다"). -only fabtest — 판정 아닌 사람용 캡처 + fps
+    // Blender 시안 ③(Fab 강철 아치 운반갱도)을 FabTest.glb 로 게임에 넣고(파일은 git 에 없다), 시안의 카메라 자리 CAM_* 에서 AT_* 쪽을 본다 → 62_fab_<이름>.png.
+    // 같은 자리 Blender 그림은 build/check_map4/scene3/<이름>_lamp.png. fps = 첫 자리에서 3 초 평균 (최소 사양 목표 60).
+    IEnumerator FabTestStage(CharacterController cc)
+    {
+        var go = FabTest.Spawn();
+        if (go == null) { Check("fabtest_loaded", false, "no FabTest.glb in Resources"); yield break; }
+        stalker.gameObject.SetActive(false);
+        lamp.lampOn = true;
+        var cams = go.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("CAM_")).OrderBy(t => t.name).ToList();
+        Check("fabtest_loaded", cams.Count > 0, $"{cams.Count} camera spots, {go.GetComponentsInChildren<MeshFilter>().Sum(m => m.sharedMesh.triangles.Length / 3)} tris");
+        bool first = true;
+        foreach (var cam in cams)
+        {
+            string nm = cam.name.Substring(4);
+            FabTest.StandAt(player, cam, FabTest.Node(go, "AT_" + nm));
+            yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + 1.0f);
+            if (first)
+            {
+                first = false;
+                int f0 = Time.frameCount; float t0 = Time.realtimeSinceStartup;
+                yield return new WaitForSecondsRealtime(3f);
+                float fps = (Time.frameCount - f0) / (Time.realtimeSinceStartup - t0);
+                Check("fabtest_fps", fps >= 60f, $"{fps:0} fps at {nm} (booth map is also loaded above)");
+            }
+            yield return Capture("62_fab_" + nm, x => { });
+        }
+        // 사용자 캡처(09-30)의 파란 그늘: 머리등을 끄고 눈이 어둠에 익은 뒤(환경광이 AMBIENT_COLOR × DARK_ADAPT_AMBIENT 까지) 같은 자리를 찍는다
+        var c1 = cams[Mathf.Min(1, cams.Count - 1)]; string n1 = c1.name.Substring(4);
+        FabTest.StandAt(player, c1, FabTest.Node(go, "AT_" + n1));
+        lamp.lampOn = false;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME + Tuning.DARK_ADAPT_TIME + 1.0f);
+        Vector3 v = default;
+        yield return Capture("62_fab_dark_" + n1, x => v = x);
+        Debug.Log($"FABTEST dark adapted {lamp.adapt:0.00} ambient {RenderSettings.ambientLight} screen mean {v}");
+        lamp.lampOn = true;
+    }
+
+    // ================= Fab 소개 영상 재현 (사용자 09-30 "영상은 같은 모델인데 우리는 왜 이렇게 못 나오나"). -only fabvideo — 사람용 캡처
+    // FabVideo.glb(영상 5 초 컷 구도, git 에 없음)를 놓고 CAM_fp_1_video5 자리에서 한 가지씩 더해 찍는다 → 63_video_<단계>.png:
+    // v0 지금 그대로(채움 끔 · 먼 빛 끔 · 색보정 없음 · 화각 80 · 머리등 켬) → v1 + 채움(DRESS_*) → v2 + 먼 곳 차가운 빛(BLUE_*) → v3 + 색보정(그늘 푸르게 · 밝은 곳 따뜻하게)
+    // → v4 + 화각 60 → v5 화각 45 → v6 머리등 끔(영상엔 머리등이 없다, 어둠 적응도 끔)
+    IEnumerator FabVideoStage()
+    {
+        var go = FabTest.Spawn("FabVideo", new Vector3(0f, -160f, 0f));
+        if (go == null) { Check("fabvideo_loaded", false, "no FabVideo.glb in Resources"); yield break; }
+        stalker.gameObject.SetActive(false);
+        lamp.lampOn = true;
+        var cam = FabTest.Node(go, "CAM_fp_1_video5"); var at = FabTest.Node(go, "AT_fp_1_video5");
+        var dress = go.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("DRESS_")).Select(t => t.gameObject).ToList();
+        var blues = go.GetComponentsInChildren<Light>(true).Where(l => l.name.StartsWith("BLUE_")).ToList();
+        Check("fabvideo_loaded", cam != null && dress.Count > 0, $"{dress.Count} dressing objects, {blues.Count} blue lights");
+        var camera = pickaxe.cam.GetComponent<Camera>();
+        var gradeGo = new GameObject("VideoGrade"); var vol = gradeGo.AddComponent<Volume>(); vol.isGlobal = true; vol.priority = 100; vol.enabled = false;
+        vol.profile = ScriptableObject.CreateInstance<VolumeProfile>();
+        var smh = vol.profile.Add<ShadowsMidtonesHighlights>(true);
+        smh.shadows.Override(new Vector4(0.85f, 0.95f, 1.2f, 0f)); smh.highlights.Override(new Vector4(1.12f, 1.0f, 0.85f, 0f));
+        foreach (var d in dress) d.SetActive(false);
+        IEnumerator Shot(string n)
+        {
+            FabTest.StandAt(player, cam, at);
+            yield return new WaitForSeconds(1.2f);
+            yield return Capture("63_video_" + n, x => { });
+        }
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME);
+        yield return Shot("v0_now");
+        foreach (var d in dress) d.SetActive(true);
+        yield return Shot("v1_dress");
+        foreach (var l in blues) l.enabled = true;
+        yield return Shot("v2_bluefar");
+        vol.enabled = true;
+        yield return Shot("v3_grade");
+        camera.fieldOfView = 60f;
+        yield return Shot("v4_fov60");
+        camera.fieldOfView = 45f;
+        yield return Shot("v5_fov45");
+        lamp.darkAdaptAmbient = Tuning.AMBIENT_ENERGY; lamp.lampOn = false;
+        yield return new WaitForSeconds(Tuning.LAMP_TOGGLE_TIME);
+        yield return Shot("v6_nolamp");
+        // 게임이 영상보다 훨씬 밝고 주황으로 탄다 — 부스 전등 세기 60.5 · 주황(1, .72, .42)은 어두운 바위에 맞춘 판정값. 밝은 Fab 통나무에 맞춰 줄여 본다
+        var warm = go.GetComponentsInChildren<Light>(true).Where(l => l.name.StartsWith("LAMP_")).ToList();
+        foreach (var l in warm) { l.intensity = 12f; l.color = new Color(1f, 0.86f, 0.68f); }
+        yield return Shot("v7_lamps12");
+        var nearest = warm.OrderBy(l => Vector3.Distance(l.transform.position, cam.position)).ToList();
+        for (int i = 0; i < nearest.Count; i++) nearest[i].enabled = i == 0;
+        yield return Shot("v8_onelamp");
+        // v9 지금 할 수 있는 것을 다 합침: 전등 넷 다 · 세기 28 · 반경 9 m · 덜 주황 + 그늘을 채우는 은은한 빛(튀는 빛 흉내 — 환경광) + 화각 50 + 채움 · 먼 빛 · 색보정
+        foreach (var l in warm) { l.enabled = true; l.intensity = 28f; l.range = 9f; l.color = new Color(1f, 0.82f, 0.62f); }
+        var amb0 = RenderSettings.ambientLight; lamp.enabled = false;               // Headlamp 가 매 프레임 환경광을 덮어쓴다 — 이 한 장 동안 멈춘다
+        RenderSettings.ambientLight = new Color(0.16f, 0.13f, 0.11f);
+        camera.fieldOfView = 50f;
+        yield return Shot("v9_best");
+        RenderSettings.ambientLight = amb0; lamp.enabled = true;
+        lamp.darkAdaptAmbient = Tuning.DARK_ADAPT_AMBIENT; lamp.lampOn = true; camera.fieldOfView = Tuning.CAMERA_FOV;
+    }
+
+    // -fabvideo 판정 모드의 키(FabVideoTuner): V = 추천값(세기 28 · 화각 50) · B = 지금 게임 값(60.5 · 80) 이 실제로 바뀌나. 캡처 64_tuner_V · 64_tuner_B
+    IEnumerator FabTunerStage()
+    {
+        var go = FabTest.Spawn("FabVideo", new Vector3(0f, -160f, 0f));
+        if (go == null) { Check("fabtuner_keys", false, "no FabVideo.glb in Resources"); yield break; }
+        stalker.gameObject.SetActive(false);
+        var t = go.AddComponent<FabVideoTuner>(); t.player = player; t.cam = pickaxe.cam.GetComponent<Camera>();
+        if (sabotageName == "deadkeys") t.enabled = false;         // 사보타주: 키를 안 읽는다 → fabtuner_keys FAIL
+        var kb = InputSystem.AddDevice<Keyboard>("TunerKeyboard");
+        IEnumerator Press(Key k) { InputSystem.QueueStateEvent(kb, new KeyboardState(k)); yield return null; yield return null; InputSystem.QueueStateEvent(kb, new KeyboardState()); yield return null; }
+        yield return new WaitForSeconds(1.0f);
+        var l0 = go.GetComponentsInChildren<Light>(true).First(l => l.name.StartsWith("LAMP_"));
+        yield return Press(Key.V); yield return new WaitForSeconds(0.8f);
+        float pV = l0.intensity, fV = t.cam.fieldOfView;
+        yield return Capture("64_tuner_V", x => { });
+        yield return Press(Key.B); yield return new WaitForSeconds(0.8f);
+        float pB = l0.intensity, fB = t.cam.fieldOfView;
+        yield return Capture("64_tuner_B", x => { });
+        Check("fabtuner_keys", Mathf.Approximately(pV, 28f) && Mathf.Approximately(fV, 50f) && Mathf.Approximately(pB, Tuning.BOOTH_LIGHT_ENERGY) && Mathf.Approximately(fB, Tuning.CAMERA_FOV),
+            $"V → lamp {pV:0.#} fov {fV:0}, B → lamp {pB:0.#} fov {fB:0}");
+        InputSystem.RemoveDevice(kb);
     }
 
     // ================= 크기 · 눈높이 재기 (사용자 09-30 "플레이어 모델 크기 · 괴물 모델 크기 · 1인칭 눈높이가 안 맞는다"). -only sizes — 판정이 아니라 잰 값 · 캡처를 남긴다
