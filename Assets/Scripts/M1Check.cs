@@ -18,7 +18,7 @@ using UnityEngine.SceneManagement;
 // -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|lowroof|slowspot|oneface|notint|seamshift 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
-public class M1Check : MonoBehaviour
+public partial class M1Check : MonoBehaviour
 {
     // 걸음 클립마다 모으는 표본 (anim 구간의 Sample 이 채운다)
     class GaitAcc
@@ -367,8 +367,12 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4" && only != "map4human")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4" && only != "map4human" && only != "map4shots" && only != "map4geo")
             yield return BoothStage(cc);
+        if (only == "map4geo")                                  // MAP4 모양 검사 (10-02): 찢어진 바위 · 떠 있는 물체 · 홀로 선 문 · 광차와 레일 · 저절로 숙임 · 굴마다 걸어 지나기 (M1CheckMap4Geo.cs)
+            yield return Map4GeoStage();
+        if (only == "map4shots")                                // 적어 준 자리(build/map4_shots.txt, Blender 좌표)마다 서서 찍는다 — 사용자가 지적한 자리 재현 · 넘기기 전 맵 걷기
+            yield return Map4ShotsStage();
         if (only == "fabtuner")                                 // -fabvideo 판정 키가 도는가 (가상 키보드로 V · B)
             yield return FabTunerStage();
         if (only == "fabvideo")                                 // Fab 소개 영상 재현 (09-30) — 차이를 하나씩 켜 가며 같은 자리에서 찍는다
@@ -4689,7 +4693,7 @@ public class M1Check : MonoBehaviour
         if (sabotageName == "lowroof")                          // 사보타주: 시작 자리 머리 위 1.85 m 에 판 → map4_no_forced_crouch FAIL
         {
             var roof = GameObject.CreatePrimitive(PrimitiveType.Cube); roof.transform.localScale = new Vector3(3f, 0.2f, 3f);
-            Physics.SyncTransforms(); Physics.Raycast(m.spots[0].position, Vector3.down, out var fl, 4f); roof.transform.position = fl.point + Vector3.up * 1.95f;
+            Physics.SyncTransforms(); Physics.Raycast(m.spots[0].position, Vector3.down, out var fl, 4f); roof.transform.position = fl.point + Vector3.up * 1.9f;
         }
         stalker.gameObject.SetActive(false);
         lamp.lampOn = true;
@@ -4772,6 +4776,58 @@ public class M1Check : MonoBehaviour
         float py = player.transform.position.y;
         Check("map4_human_path", m != null && m.rocks.Count > 0 && hudOff && lastMagenta == 0 && v.x > 0.01f && py < Map4.Offset.y + 100f,
             $"intro → start with -map4 (no direct spawn): map placed {m != null} · rock materials {(m != null ? m.rocks.Count : 0)} · DevHud off {hudOff} · player y {py:0} (new map is at {Map4.Offset.y:0}) · screen mean {v.x:0.000} · magenta px {lastMagenta}");
+    }
+
+    // ================= 적어 준 자리마다 찍기 (10-02 판정 ① "지적마다 내가 본 자리를 봇 캡처로 먼저 재현" · 넘기기 전 맵 걷기). -only map4shots [-shots <파일>]
+    // 파일(기본 build/map4_shots.txt) 한 줄 = "이름 눈x 눈y 눈z 보는곳x y z [fly]" — Blender 좌표(scene_mock.py · map4_plan.json 과 같은 숫자).
+    // 기본 = 플레이어를 그 눈 밑 바닥에 세운다(사람 눈높이 · 저절로 숙임도 그대로). fly = 카메라만 그 자리에(위 · 옆에서 물체를 짚을 때).
+    // 로그 "MAP4SHOT 이름 …" = 발 자리 · 숙였나 · 화면 가운데와 둘레 여덟 방향 광선이 맞은 물체 이름과 거리 · 머리 위 물체와 높이 → 어느 물체인지 이름으로 짚는다. 그림 68_shot_<이름>.png
+    IEnumerator Map4ShotsStage()
+    {
+        var m = Map4.Spawn(player, Camera.main);
+        if (m == null) { Check("map4shots_loaded", false, "no Map4.glb in Resources"); yield break; }
+        stalker.gameObject.SetActive(false); lamp.lampOn = true;
+        string[] args = Environment.GetCommandLineArgs(); int si = Array.IndexOf(args, "-shots");
+        string file = si >= 0 && si + 1 < args.Length ? args[si + 1] : Path.Combine(Path.GetDirectoryName(Application.dataPath), "..", "map4_shots.txt");
+        if (!File.Exists(file)) { Check("map4shots_loaded", false, "no shots file " + file); yield break; }
+        // Blender (x, y, z) → 게임 자리: glTF 를 읽는 쪽이 x 나 z 를 뒤집는다 — 아는 빈 노드 둘(펌프실 TEX_P_ = (-14, -3) · CAM_start = (0, 2))로 부호를 맞춘다
+        var tp = m.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name.StartsWith("TEX_P_")); var cs = FabTest.Node(m.gameObject, "CAM_start");
+        if (tp == null || cs == null) { Check("map4shots_loaded", false, "no TEX_P_ / CAM_start node to fix the axes"); yield break; }
+        Vector3 lp = m.transform.InverseTransformPoint(tp.position), lc = m.transform.InverseTransformPoint(cs.position);
+        float sx = Mathf.Sign(lp.x) * -1f, sz = Mathf.Sign(lc.z);   // 펌프실 x = −14 · 시작 y = +2
+        Vector3 W(float x, float y, float z) => m.transform.TransformPoint(new Vector3(sx * x, z, sz * y));
+        Vector3 B(Vector3 w) { var l = m.transform.InverseTransformPoint(w); return new Vector3(sx * l.x, sz * l.z, l.y); }
+        Debug.Log($"MAP4SHOT axes: game x = {sx:+0;-0} · Blender x, game z = {sz:+0;-0} · Blender y (pump room node at {B(tp.position)}, start at {B(cs.position)})");
+        var cam = Camera.main; var eyeT = new GameObject("shot_eye").transform; var atT = new GameObject("shot_at").transform;
+        int done = 0, bad = 0; var ci = System.Globalization.CultureInfo.InvariantCulture;
+        string Hit(Vector3 o, Vector3 d, float max)                        // 내 몸 캡슐은 건너뛴다
+        {
+            foreach (var h in Physics.RaycastAll(o, d, max, ~0, QueryTriggerInteraction.Ignore).OrderBy(h => h.distance))
+                if (!h.collider.transform.IsChildOf(player.transform)) return $"{h.collider.name}@{h.distance:0.0}";
+            return "-";
+        }
+        foreach (var raw in File.ReadAllLines(file))
+        {
+            var p = raw.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length < 7 || p[0].StartsWith("#")) continue;
+            float[] f; try { f = p.Skip(1).Take(6).Select(s => float.Parse(s, ci)).ToArray(); } catch { bad++; Debug.Log("MAP4SHOT bad line: " + raw); continue; }
+            bool fly = p.Length > 7 && p[7] == "fly";
+            eyeT.position = W(f[0], f[1], f[2]); atT.position = W(f[3], f[4], f[5]);
+            player.enabled = true; FabTest.StandAt(player, eyeT, atT);
+            yield return new WaitForSeconds(0.4f);
+            bool crouch = player.stance == "crouch"; Vector3 feet = player.transform.position;
+            Vector3 lp0 = cam.transform.localPosition; Quaternion lr0 = cam.transform.localRotation;
+            if (fly) { player.enabled = false; cam.transform.SetPositionAndRotation(eyeT.position, Quaternion.LookRotation(atT.position - eyeT.position)); }
+            yield return Capture("68_shot_" + p[0], _ => { });
+            var ct = cam.transform; var seen = new List<string> { "c " + Hit(ct.position, ct.forward, 60f) };
+            foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1) })
+                seen.Add(Hit(ct.position, cam.ViewportPointToRay(new Vector3(0.5f + dx * 0.25f, 0.5f + dy * 0.25f, 0f)).direction, 60f));
+            Debug.Log($"MAP4SHOT {p[0]} {(fly ? "fly" : "stand")} feet {B(feet)} eye {B(ct.position)} crouch {crouch} above {Hit(feet + Vector3.up * 0.5f, Vector3.up, 20f)} below {Hit(feet + Vector3.up * 0.5f, Vector3.down, 5f)} sees {string.Join(" | ", seen)}");
+            if (fly) { cam.transform.localPosition = lp0; cam.transform.localRotation = lr0; }   // 카메라를 몸에 되돌린다 (안 되돌리면 다음 '서서 찍기'의 눈 높이가 어긋난다)
+            done++;
+        }
+        player.enabled = true;
+        Check("map4shots_done", done > 0 && bad == 0, $"{done} shots from {Path.GetFileName(file)} · unreadable lines {bad}");
     }
 
     // TEX-1 (제안서 docs/제안서_TEX1_층과_환경에_따라_잇는_벽과_바닥.md 검사 표). 사진 번호 = 비교 그림 번호

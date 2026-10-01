@@ -168,10 +168,15 @@ public class Map4 : MonoBehaviour
         Color d2 = NumberColor(false, 2).linear; Shader.SetGlobalVector(Dbg2Id, new Vector4(d2.r, d2.g, d2.b, zones ? 1f : 0f));
     }
 
+    // 발 자리에서 머리 위 1.95 m 안에 무엇이 있나 (저절로 숙이는 조건). 검사 map4_no_auto_crouch 가 맵 전체 바닥에서 같은 것을 잰다
+    // 여유는 몸 키 + 5 cm (10-02 까지 + 15 cm = 1.95 m: 선 몸 1.8 m 가 들어가는 1.8~1.95 m 틈 — 2.0 m 문틀 밑 침목 위, 아치 굴 벽 발치 — 에서 걷다가 저절로 숙여졌다. 사용자 10-02 "풍문으로 들어갈 때 자동 숙임이 생김")
+    public const float LowAboveM = Tuning.BODY_HEIGHT + 0.05f;
+    public static bool LowAbove(Vector3 feet, out RaycastHit hit) => Physics.SphereCast(feet + Vector3.up * 0.5f, 0.25f, Vector3.up, out hit, LowAboveM - 0.75f, ~0, QueryTriggerInteraction.Ignore);
+
     void Update()
     {
         // 머리 위가 선 몸(BODY_HEIGHT + 15 cm)보다 낮으면 저절로 숙인다 — Ctrl 을 떼도 천장 속으로 서지 않게 (공은 내 몸 캡슐 안 0.5 m 에서 출발해 제 몸은 안 맞는다, 공 꼭대기 0.75 m → 1.95 m)
-        player.forceCrouch = Physics.SphereCast(player.transform.position + Vector3.up * 0.5f, 0.25f, Vector3.up, out _, Tuning.BODY_HEIGHT + 0.15f - 0.75f, ~0, QueryTriggerInteraction.Ignore);
+        player.forceCrouch = LowAbove(player.transform.position, out _);
         var k = UnityEngine.InputSystem.Keyboard.current; if (k == null || k.shiftKey.isPressed) return;
         bool paint = false;
         if (k.rightBracketKey.wasPressedThisFrame) Go(spot + 1);

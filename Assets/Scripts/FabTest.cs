@@ -17,8 +17,12 @@ public static class FabTest
         var src = Resources.Load<GameObject>(res);
         if (src == null) { Debug.Log($"FABTEST no Assets/Fab/Resources/{res}.glb in this build"); return null; }
         var go = Object.Instantiate(src, at ?? Offset, Quaternion.identity); go.name = res;
-        foreach (var mf in go.GetComponentsInChildren<MeshFilter>().Where(m => !m.name.StartsWith("NOCOL_")))   // NOCOL_ = 물 · 웅덩이 판 (부딪힘을 달면 물 위를 걷는다)
+        // NOCOL_ = 물 · 웅덩이 판 · 표지 · 줄 (부딪힘 없음) · 매단 전등(vgyidfpaw)도 뺀다 — 낮은 천장 밑 전등이 머리에 걸려 저절로 숙여졌다(10-02) · COLONLY_ = 부딪힘만 있고 안 보인다 (계단 비탈)
+        foreach (var mf in go.GetComponentsInChildren<MeshFilter>().Where(m => !m.name.StartsWith("NOCOL_") && !m.name.Contains("vgyidfpaw")))
+        {
             mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+            if (mf.name.StartsWith("COLONLY_")) mf.GetComponent<Renderer>().enabled = false;
+        }
         foreach (var t in go.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("LAMP_")))
         {
             var l = t.gameObject.AddComponent<Light>();
