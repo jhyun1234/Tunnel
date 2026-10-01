@@ -76,6 +76,8 @@ public class Intro : MonoBehaviour
         SetVolume(100);                                        // 검사는 늘 100 에서 — 사람이 남긴 설정이 소리 검사(RMS)에 섞이지 않게
         if (only == "" || only == "intro")
             StartCoroutine(CheckIntro());
+        else if (only == "map4human")                          // 사람 길: 로고 → 아무 키 → "시작" (새 맵은 부스 씬의 DevHud 가 놓는다 — M1Check map4_human_path 가 잇는다)
+            StartCoroutine(CheckStartOnly());
         else
             SceneManager.LoadScene(only == "booth" || only == "repair" || only == "art" || only == "ore" || only == "hudfit" || only == "sizes" || only == "glare" || only == "tour" || only == "fabtest" || only == "fabvideo" || only == "fabtuner" || only == "map4" ? Tuning.BOOTH_SCENE : "M1_Tunnel");   // 한 구간만: 부스 검사는 부스 맵, 나머지는 복도
     }
@@ -198,6 +200,15 @@ public class Intro : MonoBehaviour
             $"selected {sel} (want {VolumeItem}), after 5 left {half:F2} (want 0.50), after 5 right {AudioListener.volume:F2} (want 1.00)");
         yield return Press(kb, Key.UpArrow);
         yield return Press(kb, Key.Enter);                     // 시작 → 부스 맵 (사람 길). 부스 검사 뒤 복도로 넘어간다
+    }
+
+    IEnumerator CheckStartOnly()
+    {
+        var kb = InputSystem.AddDevice<Keyboard>("IntroKeyboard");
+        while (t < minLogoS + 0.1f) yield return null;
+        yield return Press(kb, Key.Space);
+        yield return null;
+        yield return Press(kb, Key.Enter);
     }
 
     // 간판 자리(화면에 비친 판 네 귀퉁이의 안쪽 80 %) 평균 밝기 ÷ 그 밖 화면 평균 밝기 — 간판이 읽히게 비춰졌나

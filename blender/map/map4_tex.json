@@ -1,0 +1,45 @@
+{
+  "about": "TEX-1 (docs/제안서_TEX1_층과_환경에_따라_잇는_벽과_바닥.md) — 환경마다 벽 · 바닥 사진. 번호 = 비교 그림 MAP4_질감자료_rock.jpg / _floor.jpg 의 번호. 읽는 곳: tools/pack_rock_tex.py (photos) · blender/map/scene_mock.py (env · room · scene · seg). 2편 이후에는 env 줄만 바꾼다. 사진마다 어둡기 · 한 장 크기는 판정값이라 Assets/Scripts/Tuning.cs MAP4_* 에 있다.",
+  "photos": {
+    "w3": "fab:ueknfaclw", "w4": "fab:uh1nbhzlw", "w5": "fab:uebmddyn", "w6": "fab:ueijag3ew", "w7": "tt:fab_coalground",
+    "w8": "cc0:rock/Rock022", "w9": "cc0:rock/Rock050", "w10": "cc0:rock/dark_rock", "w11": "cc0:rock/dark_rock_02",
+    "f4": "fab:ud0nfezew", "f6": "cc0:floor/Ground110", "f7": "cc0:floor/Rocks006", "f10": "cc0:floor/brown_mud_03", "f12": "cc0:floor/terrain_red_01"
+  },
+  "photo_note": "벽 2 = 벽 3 과 같은 사진을 더 어둡게 · 바닥 2 = 벽 7(석탄)과 같은 사진 — 따로 묶지 않는다.",
+  "env": {
+    "home":      {"wall": 3,  "floor": 6,  "name": "집 (불 켜진 곳)"},
+    "homewater": {"wall": 3,  "floor": 4,  "band": 0.9, "name": "집 물가"},
+    "road":      {"wall": 3,  "dim": 1, "floor": 6,  "name": "큰 길 (벽 ② = ③ 과 같은 사진을 더 어둡게 — dim)"},
+    "rock":      {"wall": 4,  "floor": 12, "name": "바위 굴"},
+    "yard":      {"wall": 4,  "floor": 7,  "name": "레일 마당"},
+    "oldwest":   {"wall": 6,  "floor": 7,  "name": "옛 굴 서쪽"},
+    "oldeast":   {"wall": 6,  "floor": 12, "name": "옛 굴 동쪽"},
+    "oldend":    {"wall": 6,  "floor": 10, "name": "옛 굴 끝 (물가로 가는 길)"},
+    "seam":      {"wall": 11, "floor": 10, "coalband": [0.6, 1.6], "name": "탄층 가까움"},
+    "coalface":  {"wall": 7,  "roof": 8, "floor": 2, "name": "석탄 면"},
+    "fault":     {"wall": 8,  "floor": 7,  "name": "단층"},
+    "fall":      {"wall": 5,  "floor": 7,  "name": "무너짐"},
+    "lair":      {"wall": 9,  "floor": 6,  "name": "그것의 굴 (6 m 아래)"},
+    "lairhigh":  {"wall": 10, "floor": 6,  "name": "그것의 굴 (6 m 위)"},
+    "sump":      {"wall": 9,  "floor": 4,  "band": 0.9, "name": "물 고인 곳"}
+  },
+  "room": {
+    "R0": "home", "L": "home", "H": "home", "P": "homewater",
+    "W1": "road", "LW": "road", "N0": "road",
+    "E1": "rock", "S1": "yard", "LD": "yard",
+    "M": "oldwest", "K2": "oldwest", "MAG": "oldwest",
+    "E2": "oldeast", "E4": "oldeast", "E3": "oldeast", "V": "oldeast", "X": "oldeast", "R2": "oldend",
+    "N1": "seam", "N2": "seam", "W2": "seam", "F": "seam", "N3": "fault", "K": "fall", "R1": "sump"
+  },
+  "scene": {"z6": "home", "z3": "road", "z7": "rock", "z8": "fall", "z1": "seam", "z2": "coalface", "z9": "lair"},
+  "scene_split": {
+    "about": "장면 안에서 환경이 바뀌는 자리 (장면 좌표 x, 그보다 작은 쪽의 환경). 바람문 = 앞문 틀 · 광차 싣는 곳 = 석탄 홈통.",
+    "z7": {"x": "door", "before": "home"},
+    "z3": {"x": "chute", "before": "home"}
+  },
+  "lair_split_m": 6.0,
+  "wet": {"about": "방마다 젖음 배율 (기본 1). 마른 방은 0 — Claude 가 정한 처음 값.", "P": 1.5, "R1": 1.6, "R2": 1.2, "X": 0.0, "MAG": 0.0, "K2": 0.4, "H": 0.6, "R0": 0.7, "L": 0.7, "z6": 1.0, "z9": 1.2},
+  "band_m": 0.35,
+  "seam_bake_m": 20.0,
+  "lean_m": 3.0
+}

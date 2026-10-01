@@ -15,7 +15,7 @@ public class TextureImportRules : AssetPostprocessor
             importer.textureType = TextureImporterType.NormalMap;     // OpenGL(Y+) 노멀 = Unity 규약
         else if (path.Contains("_rough") || path.Contains("_arm"))
             importer.sRGBTexture = false;                              // 데이터 텍스처는 선형
-        if (path.Contains("/tunnel/art/"))
+        if (path.Contains("/tunnel/art/") || path.Contains("/fab/resources/rock/"))   // + TEX-1 새 맵 바위 사진 (tools/pack_rock_tex.py — 같은 재질 MineRock 이 읽는다)
             importer.anisoLevel = 4;                                   // ART-1 바위·바닥: 비스듬히 보는 바닥이 뭉개지지 않게 (8 은 fps 가 무거웠다)
     }
 }

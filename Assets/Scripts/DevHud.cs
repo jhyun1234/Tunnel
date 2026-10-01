@@ -50,7 +50,7 @@ public class DevHud : MonoBehaviour
             if (cam != null) FabTest.StandAt(player, cam, FabTest.Node(fab, "AT_" + cam.name.Substring(4)));
         }
         // MAP4 1편 전체(사용자 10-01): -map4 — 새 맵 승강장에서 시작 (괴물 없음, 구조 · 텍스처 판정). [ ] = 장면 자리 옮기기
-        if (Map4.Requested && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
+        if (Map4.Requested && (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0 || Map4.HumanCheck)
             && Map4.Spawn(player, pickaxe.cam.GetComponent<Camera>()) != null)
         {
             if (stalker != null) stalker.gameObject.SetActive(false);

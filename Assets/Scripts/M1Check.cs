@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|lowroof|slowspot 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|lowroof|slowspot|oneface|notint|seamshift 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -83,7 +83,7 @@ public class M1Check : MonoBehaviour
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = -1;
         var hud = GetComponent<DevHud>();
-        if (hud != null) hud.enabled = false;   // 글자가 밝기·구조 값에 섞이지 않게
+        if (hud != null && only != "map4human") hud.enabled = false;   // 글자가 밝기·구조 값에 섞이지 않게 (map4human: 사람 길 — DevHud.Start 가 새 맵을 놓고 스스로 꺼진다)
 
         volume.profile.TryGet(out VolumetricFogVolumeComponent fog);
         if (sabotage == "floor")
@@ -367,7 +367,7 @@ public class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4" && only != "map4human")
             yield return BoothStage(cc);
         if (only == "fabtuner")                                 // -fabvideo 판정 키가 도는가 (가상 키보드로 V · B)
             yield return FabTunerStage();
@@ -375,6 +375,8 @@ public class M1Check : MonoBehaviour
             yield return FabVideoStage();
         if (only == "map4")                                     // MAP4 1편 전체 (10-01) — 장면 자리마다 서서 찍고 바닥에 서 있나 · fps
             yield return Map4Stage();
+        if (only == "map4human")                                // 사람 길 (인트로 → 시작 → DevHud 가 새 맵을 놓음) 으로 들어와 한 장 — 검사 길(Map4Stage 가 직접 놓음)과 다르다
+            yield return Map4HumanStage();
         if (only == "fabtest")                                  // 엔진 확인 (09-30) — Fab 갱도를 게임에 넣어 Blender 시안과 같은 자리에서 찍고 fps 를 잰다
             yield return FabTestStage(cc);
         if (only == "tour")                                     // 사진 맞히기 (09-30) — 전체 실행엔 안 넣는다 (판정 아닌 사람용 캡처)
@@ -4679,6 +4681,9 @@ public class M1Check : MonoBehaviour
     // 판정: 자리마다 1.5 초 뒤에도 바닥에 서 있다(빠지지 않음 — 발 높이가 선 자리 ±0.3 m) · 시작 자리 fps ≥ 60 (최소 사양 목표). 사람은 exe -map4 로 걷는다
     IEnumerator Map4Stage()
     {
+        // TEX-1 사보타주: oneface(구역 끔 = 벽 전부 ③ · 바닥 전부 ②) · notint(어둡게 물들이지 않음) · seamshift(둘째 사진 자리 어긋남 되살림) — 이 셋은 자리 65곳 걷기(3분)를 건너뛴다
+        Map4.SabOneFace = sabotageName == "oneface"; Map4.SabNoTint = sabotageName == "notint"; Map4.SabSeamShift = sabotageName == "seamshift";
+        bool texSab = Map4.SabOneFace || Map4.SabNoTint || Map4.SabSeamShift;
         var m = Map4.Spawn(player, Camera.main);
         if (m == null) { Check("map4_loaded", false, "no Map4.glb in Resources"); yield break; }
         if (sabotageName == "lowroof")                          // 사보타주: 시작 자리 머리 위 1.85 m 에 판 → map4_no_forced_crouch FAIL
@@ -4705,10 +4710,11 @@ public class M1Check : MonoBehaviour
         yield return new WaitForSecondsRealtime(3f);
         float fps = (Time.frameCount - f0) / (Time.realtimeSinceStartup - t0);
         Check("map4_fps", fps >= 60f, $"{fps:0} fps at start (booth map is also loaded above)");
+        yield return Map4Tex(m);
         var fell = new System.Collections.Generic.List<string>();
         var low = new System.Collections.Generic.List<string>();
         float worst = float.MaxValue; string worstAt = "";
-        for (int i = 0; i < m.spots.Length; i++)
+        for (int i = 0; i < (texSab ? 0 : m.spots.Length); i++)
         {
             m.Go(i); float y0 = player.transform.position.y;
             yield return new WaitForSeconds(0.5f);                // 옮긴 직후 끊김은 빼고 그 뒤 1 초를 잰다 (전등이 많은 넓은 방은 시작 자리에서 안 보인다 — 10-01 전등 1.5배)
@@ -4726,9 +4732,12 @@ public class M1Check : MonoBehaviour
             if (player.stance == "crouch") low.Add(m.spots[i].name.Substring(4));
             yield return Capture("64_map4_" + m.spots[i].name.Substring(4), x => { });
         }
-        Check("map4_no_forced_crouch", low.Count == 0, low.Count == 0 ? $"stood up at all {m.spots.Length} spots (사용자 10-01: 낮은 곳을 만들지 않는다)" : "forced to crouch at: " + string.Join(", ", low));
-        Check("map4_spots_on_floor", fell.Count == 0, fell.Count == 0 ? $"all {m.spots.Length} spots stand on the floor" : "moved: " + string.Join(", ", fell));
-        Check("map4_fps_worst_spot", worst >= 60f, $"{worst:0} fps at {worstAt} (slowest of {m.spots.Length} spots)");
+        if (!texSab)
+        {
+            Check("map4_no_forced_crouch", low.Count == 0, low.Count == 0 ? $"stood up at all {m.spots.Length} spots (사용자 10-01: 낮은 곳을 만들지 않는다)" : "forced to crouch at: " + string.Join(", ", low));
+            Check("map4_spots_on_floor", fell.Count == 0, fell.Count == 0 ? $"all {m.spots.Length} spots stand on the floor" : "moved: " + string.Join(", ", fell));
+            Check("map4_fps_worst_spot", worst >= 60f, $"{worst:0} fps at {worstAt} (slowest of {m.spots.Length} spots)");
+        }
         // 밝기 판정 키 (10-01): 2 = 전등 세기 +4 · 4 = 닿는 거리 +1 m · B = 판정값으로. 사보타주 deadkeys(키를 안 읽음) → FAIL
         if (sabotageName == "deadkeys") m.enabled = false;
         var kb = InputSystem.AddDevice<Keyboard>("Map4Keyboard");
@@ -4738,7 +4747,118 @@ public class M1Check : MonoBehaviour
         yield return PressKey(kb, Key.B); yield return null;
         Check("map4_light_keys", Mathf.Approximately(p2, Tuning.FAB_LIGHT_ENERGY + 4f) && Mathf.Approximately(r4, Tuning.FAB_LIGHT_RANGE + 1f) && Mathf.Approximately(l0.intensity, Tuning.FAB_LIGHT_ENERGY) && Mathf.Approximately(l0.range, Tuning.FAB_LIGHT_RANGE),
             $"2 → power {p2:0.#}, 4 → reach {r4:0.#} m, B → {l0.intensity:0.#} / {l0.range:0.#} m");
+        // TEX-1 판정 키: T 구역 끔 · G 번호 색 · Tab 다음 사진(② → ③) 뒤 6 = 그 사진 어둡기 +0.05 · 8 이음 +1 m · − 얼룩 −0.1 · → 밝기 × 1.1 · End 젖음 +0.25 · B 전부 판정값으로
+        yield return PressKey(kb, Key.T); yield return null; bool zOff = !m.zones;
+        yield return PressKey(kb, Key.G); yield return null; bool nOn = m.numbers;
+        yield return PressKey(kb, Key.Tab); yield return null; yield return PressKey(kb, Key.Digit6); yield return null; float d3 = m.wallDark[3], d2 = m.wallDark[2];
+        yield return PressKey(kb, Key.Digit8); yield return null; float s8 = m.seam;
+        yield return PressKey(kb, Key.Minus); yield return null; float bl = m.blotch;
+        yield return PressKey(kb, Key.RightArrow); yield return null; float br = m.bright;
+        yield return PressKey(kb, Key.End); yield return null; float we = m.wet;
+        yield return PressKey(kb, Key.B); yield return null;
+        bool back = m.zones && !m.numbers && Mathf.Approximately(m.wallDark[3], Tuning.MAP4_WALL_DARK[3]) && Mathf.Approximately(m.seam, Tuning.MAP4_SEAM_M) && Mathf.Approximately(m.blotch, Tuning.MAP4_BLOTCH) && Mathf.Approximately(m.bright, Tuning.MAP4_ROCK_BRIGHT) && Mathf.Approximately(m.wet, Tuning.MAP4_WET);
+        Check("map4_tex_keys", zOff && nOn && Mathf.Approximately(d3, Tuning.MAP4_WALL_DARK[3] + 0.05f) && Mathf.Approximately(d2, Tuning.MAP4_WALL_DARK[2]) && Mathf.Approximately(s8, Tuning.MAP4_SEAM_M + 1f) && Mathf.Approximately(bl, Tuning.MAP4_BLOTCH - 0.1f)
+            && Mathf.Approximately(br, Tuning.MAP4_ROCK_BRIGHT * 1.1f) && Mathf.Approximately(we, Tuning.MAP4_WET + 0.25f) && back,
+            $"T → zones off {zOff} · G → numbers {nOn} · Tab 6 → wall 3 dark {d3:0.00} (wall 2 {d2:0.00}) · 8 → join {s8:0} m · − → blotch {bl:0.0} · → bright {br:0.00} · End → wet {we:0.00} · B → judged values {back}");
         InputSystem.RemoveDevice(kb);
+    }
+
+    IEnumerator Map4HumanStage()
+    {
+        yield return new WaitForSeconds(1.0f);
+        var m = FindFirstObjectByType<Map4>(); bool hudOff = !GetComponent<DevHud>().enabled;
+        lamp.lampOn = true;
+        Vector3 v = default; yield return Capture("67_map4_human_start", x => v = x);
+        float py = player.transform.position.y;
+        Check("map4_human_path", m != null && m.rocks.Count > 0 && hudOff && lastMagenta == 0 && v.x > 0.01f && py < Map4.Offset.y + 100f,
+            $"intro → start with -map4 (no direct spawn): map placed {m != null} · rock materials {(m != null ? m.rocks.Count : 0)} · DevHud off {hudOff} · player y {py:0} (new map is at {Map4.Offset.y:0}) · screen mean {v.x:0.000} · magenta px {lastMagenta}");
+    }
+
+    // TEX-1 (제안서 docs/제안서_TEX1_층과_환경에_따라_잇는_벽과_바닥.md 검사 표). 사진 번호 = 비교 그림 번호
+    //   map4_rock_material  굴의 재질 칸(RK_)이 전부 바위 재질 MineRock 사본으로 바뀌었고 사진이 다 있다
+    //   map4_room_photos    방 · 장면마다(Blender 가 적은 TEX_<방>_<벽>_<바닥> 빈 노드) 그 자리에서 쏜 광선이 맞은 벽 · 바닥이 표와 같은 사진인가   (사보타주 oneface)
+    //   map4_no_burn        벽 사진마다 머리등 켜고 1.5 m 앞에서 — 하얗게 탄 화면 몫                                                         (사보타주 notint)
+    //   map4_seam_no_shift  두 칸에 같은 사진을 끼우고 이음을 넓게(20 m) · 좁게(1 m) 찍은 두 장이 같다 = 섞이는 구간에 금 · 겹쳐 흐려짐이 없다       (사보타주 seamshift)
+    IEnumerator Map4Tex(Map4 m)
+    {
+        var left = m.GetComponentsInChildren<MeshRenderer>().SelectMany(r => r.sharedMaterials).Where(mt => mt != null && mt.name.StartsWith("RK_") && (mt.shader.name != "Tunnel/MineRock" || !mt.IsKeywordEnabled("_MAP4"))).Select(mt => mt.name).Distinct().ToList();
+        var noPhoto = m.rocks.Where(k => new[] { "_BaseMap", "_BumpMap", "_BaseMapB", "_BumpMapB", "_MudMap", "_MudNormal", "_MudMapB", "_MudNormalB", "_CoalMap", "_CoalNormal" }.Any(p => k.mat.GetTexture(p) == null)).Select(k => k.mat.name).ToList();
+        var shell = m.GetComponentsInChildren<MeshFilter>().Where(f => f.name.StartsWith("SHELL_")).ToArray();
+        int readable = shell.Count(f => f.sharedMesh.isReadable), uv3 = shell.Count(f => f.sharedMesh.isReadable && f.sharedMesh.uv3.Length == f.sharedMesh.vertexCount);
+        Check("map4_rock_material", m.rocks.Count > 0 && left.Count == 0 && noPhoto.Count == 0 && readable == shell.Length && uv3 == shell.Length,
+            $"{m.rocks.Count} rock materials (photo pairs) on MineRock + _MAP4 · not replaced {left.Count}{(left.Count > 0 ? ": " + string.Join(", ", left.Take(6)) : "")} · photo missing {noPhoto.Count}{(noPhoto.Count > 0 ? ": " + string.Join(", ", noPhoto.Take(6)) : "")} · tunnel pieces {shell.Length}, readable {readable}, with third UV {uv3}");
+
+        // 방마다 번호: TEX_ 자리에서 아래로(바닥) · 옆 여덟 방향으로(벽, 반 넘게 맞아야 — 북쪽 막장은 셋이 석탄 홈으로 들어간다) — 굴 면에 맞은 것만 센다 (소품은 건너뜀)
+        Physics.SyncTransforms();
+        bool RockHit(Vector3 from, Vector3 dir, float max, out RaycastHit hit, out int wall, out int floor)
+        {
+            wall = floor = 0; hit = default;
+            foreach (var h in Physics.RaycastAll(from, dir, max, ~0, QueryTriggerInteraction.Ignore).OrderBy(h => h.distance))
+                if (m.PhotoAt(h, out wall, out floor)) { hit = h; return true; }
+            return false;
+        }
+        var wrong = new List<string>(); int rooms = 0; var wallAt = new Dictionary<int, (Vector3 p, Vector3 n)>();
+        foreach (var t in m.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("TEX_")).OrderBy(t => t.name))
+        {
+            var p = t.name.Split('_'); int wantWall = int.Parse(p[2]), wantFloor = int.Parse(p[3]); rooms++;
+            int gotFloor = 0;                                                                                  // 방 가운데가 구멍이면(사다리 굴) 옆으로 2.5 m 에서
+            bool floorOk = new[] { Vector3.zero, new Vector3(2.5f, 0f, 2.5f), new Vector3(-2.5f, 0f, -2.5f) }.Any(o => RockHit(t.position + o, Vector3.down, 6f, out _, out _, out gotFloor)) && gotFloor == wantFloor;
+            int hits = 0, ok = 0, gotWall = 0;
+            for (int k = 0; k < 8; k++)
+            {
+                if (!RockHit(t.position, Quaternion.Euler(0f, k * 45f, 0f) * Vector3.forward, 40f, out var h, out int w, out _) || Mathf.Abs(h.normal.y) > 0.5f) continue;
+                hits++; gotWall = w;
+                if (w == wantWall) { ok++; if (!wallAt.ContainsKey(w) && h.distance > 2.2f) wallAt[w] = (h.point, new Vector3(h.normal.x, 0f, h.normal.z).normalized); }
+            }
+            if (!floorOk || hits == 0 || ok * 2 <= hits) wrong.Add($"{p[1]} wall {wantWall}: {ok}/{hits}{(ok < hits ? " (saw " + gotWall + ")" : "")} · floor {wantFloor}: {(floorOk ? "ok" : "saw " + gotFloor)}");
+        }
+        Check("map4_room_photos", rooms > 20 && wrong.Count == 0, wrong.Count == 0 ? $"wall and floor photo match the table in all {rooms} rooms and scenes" : $"{wrong.Count} of {rooms} differ: " + string.Join(" | ", wrong.Take(10)));
+
+        // 방 가운데 눈높이 광선이 못 보는 것: 석탄 면 천장 ⑧ · 그것의 굴 6 m 위 ⑩ · 큰 길(셋째 UV y — 벽 ② 의 어둡기를 받는 곳) · 방마다 젖음(셋째 UV x × 2)
+        Transform Tex(string id) => m.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name.StartsWith("TEX_" + id + "_"));
+        int roof = RockHit(Tex("z2").position, Vector3.up, 8f, out _, out int rw, out _) ? rw : 0;
+        int hiOk = 0, hiAll = 0;
+        for (int k = 0; k < 8; k++)
+            if (RockHit(Tex("z9").position + Vector3.up * 7.5f, Quaternion.Euler(0f, k * 45f, 0f) * Vector3.forward, 40f, out var h, out int w, out _) && Mathf.Abs(h.normal.y) <= 0.5f) { hiAll++; if (w == 10) hiOk++; }
+        Vector2 More(string id)                                                                    // 그 방 가운데 바닥의 셋째 UV (벽으로 쏘면 넓은 굴 입구로 빠져 옆 방 값을 읽는다)
+        {
+            foreach (var o in new[] { Vector3.zero, new Vector3(2.5f, 0f, 2.5f), new Vector3(-2.5f, 0f, -2.5f) })
+                foreach (var x in Physics.RaycastAll(Tex(id).position + o, Vector3.down, 6f, ~0, QueryTriggerInteraction.Ignore).OrderBy(x => x.distance))
+                    if (m.PhotoAt(x, out _, out _, out Vector2 mo)) return mo;
+            return new Vector2(-1f, -1f);
+        }
+        Vector2 w1 = More("W1"), r0 = More("R0"), xr = More("X"), pr = More("P");
+        Check("map4_photo_extras", roof == 8 && hiAll >= 4 && hiOk * 10 >= hiAll * 6 && w1.y > 0.6f && r0.y >= 0f && r0.y < 0.4f && xr.x >= 0f && xr.x < 0.15f && pr.x > 0.6f,
+            $"coal face roof (up from z2) wall {roof} (want 8) · lair walls 7.5 m up: {hiOk}/{hiAll} wall 10 · main-road amount: W1 {w1.y:0.00} (> 0.6) R0 {r0.y:0.00} (< 0.4) · wetness x2: dry switch room X {xr.x * 2f:0.00} (< 0.3) pump room P {pr.x * 2f:0.00} (> 1.2)");
+
+        // 하얗게 탐: 벽 사진마다 1.5 m 앞에 서서 머리등으로
+        var burn = new List<string>(); float worstBurn = 0f;
+        foreach (var kv in wallAt.OrderBy(kv => kv.Key))
+        {
+            var c = new GameObject("burn_cam").transform; var a = new GameObject("burn_at").transform;
+            c.position = kv.Value.p + kv.Value.n * 1.5f; a.position = kv.Value.p;
+            FabTest.StandAt(player, c, a); Destroy(c.gameObject); Destroy(a.gameObject);
+            Vector3 v = default; yield return Capture("65_map4_burn_w" + kv.Key, x => v = x);
+            burn.Add($"wall {kv.Key}: {v.z * 100f:0.0} % (mean {v.x:0.000})"); worstBurn = Mathf.Max(worstBurn, v.z);
+        }
+        Check("map4_no_burn", wallAt.Count >= 6 && worstBurn <= MaxBurntMap4, $"burnt share of the screen, headlamp on, 1.5 m from the wall (≤ {MaxBurntMap4 * 100f:0} %): " + string.Join(" · ", burn));
+
+        // 이음새: 이음 자리(CAM_seam…) 다섯 곳에서 두 칸에 같은 사진을 끼운 채 넓게 · 좁게 — 필름 입자는 끈다(장면마다 다르다). 벽이 바뀌는 자리도 바닥만 바뀌는 자리도 있어 가장 큰 값으로 본다
+        var seams = Enumerable.Range(0, m.spots.Length).Where(i => m.spots[i].name.StartsWith("CAM_seam")).Take(5).ToList();
+        if (seams.Count == 0) { Check("map4_seam_no_shift", false, "no CAM_seam spot in Map4.glb"); yield break; }
+        var art = ArtLook.Instance; art.artVolume.enabled = false; m.sameBoth = true; m.Paint();
+        float worstDiff = 0f, noise = 0f; var seamNotes = new List<string>();
+        foreach (int si in seams)
+        {
+            string nm = m.spots[si].name.Substring(4); m.Go(si);
+            m.seam = 20f; m.Apply(); yield return Capture("66_map4_" + nm + "_wide", _ => { });
+            yield return Capture("66_map4_" + nm + "_wide2", _ => { });
+            m.seam = 1f; m.Apply(); yield return Capture("66_map4_" + nm + "_narrow", _ => { });
+            float d = DiffFrac("66_map4_" + nm + "_wide", "66_map4_" + nm + "_narrow", 0.02f);
+            noise = Mathf.Max(noise, DiffFrac("66_map4_" + nm + "_wide", "66_map4_" + nm + "_wide2", 0.02f)); worstDiff = Mathf.Max(worstDiff, d); seamNotes.Add($"{nm} {d * 100f:0.0} %");
+        }
+        m.sameBoth = false; m.seam = Tuning.MAP4_SEAM_M; m.Paint(); m.Apply(); art.artVolume.enabled = true;
+        Check("map4_seam_no_shift", worstDiff <= 0.02f, $"same photo in both slots: pixels that differ > 0.02 between a 20 m and a 1 m join (≤ 2 %): {string.Join(" · ", seamNotes)} · same shot twice ≤ {noise * 100f:0.0} %");
     }
 
     // ================= Fab 소개 영상 재현 (사용자 09-30 "영상은 같은 모델인데 우리는 왜 이렇게 못 나오나"). -only fabvideo — 사람용 캡처
@@ -5314,6 +5434,7 @@ public class M1Check : MonoBehaviour
         return (float)c / Mathf.Max(n, 1);
     }
 
+    const float MaxBurntMap4 = 0.05f;   // TEX-1 map4_no_burn: 벽 1.5 m 앞 화면에서 하얗게 탄 몫 (near_wall_not_burnt 의 MaxBurntNearWall 과 같은 값)
     static float Lum(Color32 c) => (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255f;
 
     static IEnumerator MeasureFps(float seconds, Action<float> result)

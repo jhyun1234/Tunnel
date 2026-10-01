@@ -149,6 +149,17 @@ public static class Tuning
     public const float FAB_AMBIENT_FILL = 0.16f;                // 은은한 빛(튀는 빛 흉내) — 환경광에 (1, .85, .72) × 이 값을 더한다
     public const bool FAB_COLOR_GRADE = true;                   // 색보정(그늘 푸르게 · 밝은 곳 따뜻하게, 판정 키 C) — 사용자 10-01 켬
     public const bool FAB_BLUE_FAR = false;                     // 굴 끝 파란 먼 빛(판정 키 X) — 사용자 10-01: 구역 입구 색 등(카드 15)으로만. 굴 채움(Z)은 넣는다
+    // TEX-1 새 맵 바위 사진 (제안서 docs/제안서_TEX1_층과_환경에_따라_잇는_벽과_바닥.md). 칸 번호 = 비교 그림 번호(MAP4_질감자료_rock · _floor.jpg), 0 = 안 쓰는 번호.
+    // 전부 처음 값(판정 전) — 실행 파일 -map4 의 키(Tab → 5 6 · 7 8 · − = · ← → · Home End)로 받은 숫자를 여기에 넣는다. 어느 방이 몇 번인지는 blender/map/map4_tex.json
+    public static readonly float[] MAP4_WALL_DARK = { 0f, 0f, 0.55f, 0.70f, 0.52f, 0.45f, 0.60f, 1f, 0.50f, 0.55f, 1f, 1f };            // 벽 ②~⑪ 어둡기 = 사진 색에 곱하는 수(빛 계산 눈금). ② = 큰 길(③ 과 같은 사진). 제안서 1절 "처음 곱"
+    public static readonly float[] MAP4_FLOOR_DARK = { 0f, 0f, 1f, 0f, 0.85f, 0f, 0.35f, 0.32f, 0f, 0f, 0.47f, 0f, 0.87f };            // 바닥 ② ④ ⑥ ⑦ ⑩ ⑫ — 같이 쓰이는 벽보다 조금(× 0.8) 어둡게 맞춘 값(Claude)
+    public static readonly float[] MAP4_WALL_TILE_M = { 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2.42f, 2f };                          // 사진 한 장이 덮는 길이 m (Fab · ambientCG 는 모름 → 비교 그림과 같은 2 m)
+    public static readonly float[] MAP4_FLOOR_TILE_M = { 2f, 2f, 2f, 2f, 2f, 2f, 2.1f, 2f, 2f, 2f, 1.3f, 2f, 2f };
+    public static readonly Color MAP4_WARM = new Color(1f, 0.93f, 0.86f);    // 어둡게 물들일 때의 색조 (목표 그림 MAP4_벽잇기_목표모습.jpg 과 같은 값)
+    public const float MAP4_ROCK_BRIGHT = 1.2f;                 // 새 맵 바위 밝기 배율 (부스 ART_BRIGHT 1.25 와 따로). 판정 키 ← → ÷× 1.1
+    public const float MAP4_WET = 1.0f;                         // 새 맵 젖음 세기 (부스 ART_WET 1.5 와 따로 — 방마다 배율은 map4_tex.json wet). 판정 키 Home End ∓ 0.25
+    public const float MAP4_SEAM_M = 10f;                       // 이음 길이 m — 두 사진이 얼룩으로 번지며 바뀌는 거리. 맵에는 20 m 로 구워 두었다(최대). 판정 키 7 8 ∓ 1
+    public const float MAP4_BLOTCH = 1.0f;                      // 얼룩 정도: 0 = 뿌옇게 반반 겹침 ~ 1 = 얼룩으로 번짐. 판정 키 − = ∓ 0.1
     // ---- ART-1 현실감 시험 (제안서 docs/제안서_ART1_현실감_광장_시험.md, 승인 09-27). 부스 씬을 만들 때 박히는 것(범위·높이·화면)은 바꾸면 MakeBooth -force
     public const float ART_WET = 1.5f;                          // 젖음 세기 (MineRock 전역 _ArtWet). 판정 키 Home/End ±0.25 — 사용자 판정 09-27 1.50 (제안값 1.0)
     public const float ART_BRIGHT = 1.25f;                      // 바위·석탄·진흙 밝기 배율 (MineRock 전역 _ArtBright). 판정 키 ← → (숫자패드 4/6) ÷× 1.1 — 사용자 09-27 "조금 어둡다" → 1.25, 판정 ③ "1.25 그대로" 확정

@@ -145,7 +145,7 @@ for eng in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
     except TypeError: pass
 sc.world = bpy.data.worlds.new("W"); sc.world.use_nodes = True; next(n for n in sc.world.node_tree.nodes if n.type == "BACKGROUND").inputs[0].default_value = (0, 0, 0, 1)
 CAMS = {"blend": ((0.2, -0.4, 1.7), (6.0, 0.9, 1.45)), "rock": ((0.2, -0.4, 1.7), (6.0, 0.9, 1.45)), "floor": ((0.2, 0, 1.7), (4.0, 0.2, 0.0)), "wood": ((0.0, 0.25, 1.7), (4.2, -0.3, 1.2)), "metal": ((0.4, 0, 1.7), (3.6, 0, 0.7)), "misc": ((0.4, -0.1, 1.7), (3.8, 0, 0.8))}
-eye, at = CAMS[CAT]; cam = bpy.data.objects.new("CAM", bpy.data.cameras.new("CAM")); sc.collection.objects.link(cam); sc.camera = cam
+eye, at = CAMS.get(CAT, CAMS["rock"]); cam =bpy.data.objects.new("CAM", bpy.data.cameras.new("CAM")); sc.collection.objects.link(cam); sc.camera = cam
 cam.data.sensor_fit = "VERTICAL"; cam.data.angle_y = math.radians(80); cam.location = eye; q = (Vector(at) - Vector(eye)).to_track_quat("-Z", "Y"); cam.rotation_euler = q.to_euler()
 L = bpy.data.objects.new("HEAD", bpy.data.lights.new("HEAD", "SPOT")); sc.collection.objects.link(L); L.location = Vector(eye) + Vector((0, 0, 0.1)); L.rotation_euler = q.to_euler()
 L.data.energy = 900; L.data.spot_size = math.radians(120); L.data.spot_blend = 0.7; L.data.color = (1.0, 0.93, 0.82); L.data.use_custom_distance = True; L.data.cutoff_distance = 14
@@ -167,10 +167,46 @@ if CAT == "blend":
     sc.render.filepath = os.path.join(OUT, "%s_wall.png" % name); bpy.ops.render.render(write_still=True)
     print("CHECK tex_compare blend %s  %d textures  width %.1f m -> %s" % (name, len(seq), width, OUT)); raise SystemExit
 sizes = json.load(open(os.path.join(TT, "cc0", "sizes.json"), encoding="utf-8")) if os.path.exists(os.path.join(TT, "cc0", "sizes.json")) else {}
-cands = list(EXTRA.get(CAT, [])); cd = os.path.join(TT, "cc0", CAT)
-for n in sorted(os.listdir(cd)) if os.path.isdir(cd) else []:
-    d = os.path.join(cd, n)
-    if os.path.isdir(d) and not n.startswith("_") and maps(d)[0]: cands.append((n, d, None, float(sizes.get(n, 2.0)), open(os.path.join(d, "source.txt"), encoding="utf-8", errors="ignore").read()[:400] if os.path.exists(os.path.join(d, "source.txt")) else ""))
+def cand_list(cat):                                                        # 비교 그림의 번호 = 이 목록의 차례 + 1
+    cands = list(EXTRA.get(cat, [])); cd = os.path.join(TT, "cc0", cat)
+    for n in sorted(os.listdir(cd)) if os.path.isdir(cd) else []:
+        d = os.path.join(cd, n)
+        if os.path.isdir(d) and not n.startswith("_") and maps(d)[0]: cands.append((n, d, None, float(sizes.get(n, 2.0)), open(os.path.join(d, "source.txt"), encoding="utf-8", errors="ignore").read()[:400] if os.path.exists(os.path.join(d, "source.txt")) else ""))
+    return cands
+if CAT == "pair":
+    # TEX-1 바닥 고르기 (사용자 10-01 "벽과 바닥이 자연스럽게 이어지는 텍스쳐를 고르면 된다"): 벽마다 바닥 후보를 같은 굴에 나란히.
+    # 벽 = 제안서 TEX-1 의 처음 곱(빛 계산 눈금), 바닥 곱 = 벽보다 조금 어둡게(× FLOOR_DIM) 맞춘다 — 밝기는 곱으로 맞출 수 있으니 색 · 결로 고른다.
+    #   WALLS="3*0.70,4*0.52,..." (비교 그림 번호*곱) · FLOORS="2,3,..." · 출력 build/tex_test/compare/pair/w<벽>_f<바닥>.png + mask.png + index.json → tools/tex_pair_sheet.py
+    import numpy as np
+    WARM = (1.0, 0.93, 0.86); DIM = float(os.environ.get("FLOOR_DIM", "0.9"))
+    walls = [(int(a), float(b or 1)) for a, _, b in (t.partition("*") for t in os.environ.get("WALLS", "3*0.70,4*0.52,5*0.45,6*0.60,7,8*0.50,9*0.55,10,11").split(","))]
+    floors = [int(t) for t in os.environ.get("FLOORS", "2,3,4,5,6,7,8,9,10,11,12").split(",")]
+    rc, fc = cand_list("rock"), cand_list("floor")
+    MUL = json.load(open(os.path.join(OUT, "pair_mul.json"))) if os.path.exists(os.path.join(OUT, "pair_mul.json")) else {}   # 둘째 바퀴: 찍힌 그림에서 잰 밝기로 다시 맞춘 바닥 곱 (tools/tex_pair_sheet.py 가 적는다)
+    def lum(d, prefix):                                                    # 사진의 평균 밝기 (빛 계산 눈금)
+        im = bpy.data.images.load(maps(d, prefix)[0]); im.scale(64, 64); p = np.array(im.pixels[:], dtype=np.float64).reshape(-1, 4)[:, :3]; bpy.data.images.remove(im)
+        p = np.where(p <= 0.04045, p / 12.92, ((p + 0.055) / 1.055) ** 2.4); return float((p @ np.array([0.2126, 0.7152, 0.0722])).mean())
+    eye, at = (0.6, -0.5, 1.7), (4.2, 1.35, 0.2)                          # 오른쪽 벽이 바닥과 만나는 선을 본다
+    cam.location = eye; q = (Vector(at) - Vector(eye)).to_track_quat("-Z", "Y"); cam.rotation_euler = q.to_euler(); L.location = Vector(eye) + Vector((0, 0, 0.1)); L.rotation_euler = q.to_euler()
+    sc.render.resolution_x, sc.render.resolution_y = 640, 360
+    def flat(name, c):
+        m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; [nt.nodes.remove(n) for n in list(nt.nodes) if n.type == "BSDF_PRINCIPLED"]
+        e = nt.nodes.new("ShaderNodeEmission"); e.inputs["Color"].default_value = (*c, 1); nt.links.new(e.outputs[0], next(n for n in nt.nodes if n.type == "OUTPUT_MATERIAL").inputs["Surface"]); return m
+    WALL.data.materials[0] = flat("MASK_W", (1, 0, 0)); FLOOR.data.materials[0] = flat("MASK_F", (0, 1, 0))   # 벽 · 바닥 자리 (묶음 그림 쪽에서 이음 선 둘레를 잰다)
+    vt = sc.view_settings.view_transform; sc.view_settings.view_transform = "Standard"
+    sc.render.filepath = os.path.join(OUT, "mask.png"); bpy.ops.render.render(write_still=True); sc.view_settings.view_transform = vt
+    index = []
+    for wn, wk in walls:
+        name, d, prefix, tile, *_ = rc[wn - 1]; wl = lum(d, prefix) * wk
+        WALL.data.materials[0] = mat("W%d" % wn, d, prefix, tile, mul=tuple(wk * c for c in WARM))
+        for fn_ in floors:
+            fname, fd, fprefix, ftile, *_ = fc[fn_ - 1]; fk = MUL.get("%d_%d" % (wn, fn_), min(1.0, DIM * wl / lum(fd, fprefix)))
+            FLOOR.data.materials[0] = mat("F%d_%d" % (wn, fn_), fd, fprefix, ftile, mul=tuple(fk * c for c in WARM))
+            f = "w%02d_f%02d.png" % (wn, fn_); sc.render.filepath = os.path.join(OUT, f); bpy.ops.render.render(write_still=True)
+            index.append(dict(file=f, wall=wn, wall_name=name, wall_mul=wk, floor=fn_, floor_name=fname, floor_mul=round(fk, 3))); print("CHECK tex pair wall %d floor %d x%.2f" % (wn, fn_, fk))
+    json.dump(index, open(os.path.join(OUT, "index.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    print("CHECK tex_compare pair  %d walls x %d floors -> %s" % (len(walls), len(floors), OUT)); raise SystemExit
+cands = cand_list(CAT)
 index = []
 for k, (name, d, prefix, tile, src, *mul) in enumerate(cands):
     m = mat("C%d" % k, d, prefix, tile, mul=mul[0] if mul else None)

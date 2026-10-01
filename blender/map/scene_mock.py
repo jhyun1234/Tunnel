@@ -444,7 +444,12 @@ def arch_run(fids, x=0.0, objs_out=None):
     return x
 
 def coal_floor(x0, x1):
-    bm = bmesh.new(); box(bm, ((x0 + x1) / 2, 0, -0.02), (x1 - x0 + 2, 7, 0.04)); fl = obj("FLOOR", bm, M_FLOOR); box_uv(fl.data, 0.35)
+    bm = bmesh.new()
+    if MAP:                                                           # 맵: 1 m 칸 한 겹 (윗면 z = 0) — TEX-1 이 점마다 사진 · 이음 자리를 적는다 (상자 모서리 여덟 점으로는 판 가운데의 경계를 못 적는다)
+        g = bmesh.ops.create_grid(bm, x_segments=int(x1 - x0 + 2), y_segments=7, size=0.5)
+        for v in g["verts"]: v.co = Vector(((x0 + x1) / 2 + v.co.x * (x1 - x0 + 2), v.co.y * 7, 0.0))
+    else: box(bm, ((x0 + x1) / 2, 0, -0.02), (x1 - x0 + 2, 7, 0.04))
+    fl = obj("FLOOR", bm, M_FLOOR); box_uv(fl.data, 0.35)
     if os.path.isdir(CG): fl.data.materials[0] = tex_mat(CG, 2.0)
 
 def rail_run(x0, x1, y=0.0):
@@ -988,16 +993,6 @@ def hang_sign(c, d, front, back, floor):
     return C, w, hb
 SIGN_Z = 2.15                                                            # 표지 판 밑 높이 (m) — 저절로 숙이는 높이 1.95 m 위
 
-def box_uv_fast(me, per_m):
-    """box_uv 와 같은 UV 를 numpy 로 (맵 바위는 면이 수백만)"""
-    if not me.uv_layers: me.uv_layers.new()
-    vi = np.empty(len(me.loops), np.int32); me.loops.foreach_get("vertex_index", vi)
-    co = np.empty(len(me.vertices) * 3); me.vertices.foreach_get("co", co); c = co.reshape(-1, 3)[vi]
-    pn = np.empty(len(me.polygons) * 3); me.polygons.foreach_get("normal", pn); lt = np.empty(len(me.polygons), np.int32); me.polygons.foreach_get("loop_total", lt)
-    ax = np.repeat(np.abs(pn.reshape(-1, 3)).argmax(1), lt)
-    u = np.where(ax == 0, c[:, 1], c[:, 0]); v = np.where(ax == 2, c[:, 1], c[:, 2])
-    me.uv_layers.active.data.foreach_set("uv", (np.stack([u, v], 1) * per_m).ravel())
-
 def unified_shell():
     """모은 공기 전부 → 바위 굴 한 덩어리 (shell() 과 같은 법: 복셀 → 면 뒤집기 → 바위 쪽으로만 파는 잡음). 파는 깊이는 공기마다 (가장 깊은 것)"""
     ball = bmesh.new()
@@ -1028,11 +1023,8 @@ def unified_shell():
         tex2 = bpy.data.textures.new("bignoise", type="CLOUDS"); tex2.noise_scale = 5.0; tex2.noise_depth = 2
         dm2 = cave.modifiers.new("carve_big", "DISPLACE"); dm2.texture = tex2; dm2.texture_coords = "GLOBAL"; dm2.strength = bm_; dm2.mid_level = 1.0; dm2.direction = "NORMAL"; dm2.vertex_group = "big"
     me = bpy.data.meshes.new_from_object(cave.evaluated_get(bpy.context.evaluated_depsgraph_get())); bpy.data.objects.remove(cave, do_unlink=True)
-    me.materials.append(tint(tex_mat(os.path.join(FABDIR, "ueknfaclw"), 2.0), (0.55, 0.5, 0.45), "rock_fab")); me.materials.append(tex_mat(CG, 2.0))
-    pn = np.empty(len(me.polygons) * 3); me.polygons.foreach_get("normal", pn)
-    me.polygons.foreach_set("material_index", (pn.reshape(-1, 3)[:, 2] > 0.55).astype(np.int32))
+    me.materials.clear()                                                               # 재질 칸 · UV 는 tex1_paint() 가 적는다 (TEX-1). 여기서 옛 부스 바위가 0번 칸에 남아 벽에 들어가던 것(재질 칸 밀림)도 같이 없어진다
     me.polygons.foreach_set("use_smooth", np.ones(len(me.polygons), dtype=bool))
-    box_uv_fast(me, 0.35)
     o = bpy.data.objects.new("SHELL", me); sc.collection.objects.link(o); return o
 
 def split_tiles(o, size=24.0):
@@ -1041,7 +1033,9 @@ def split_tiles(o, size=24.0):
     ls = np.empty(P_, np.int32); me.polygons.foreach_get("loop_start", ls); lt = np.empty(P_, np.int32); me.polygons.foreach_get("loop_total", lt)
     vi = np.empty(len(me.loops), np.int32); me.loops.foreach_get("vertex_index", vi)
     co = np.empty(len(me.vertices) * 3); me.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
-    uv = np.empty(len(me.loops) * 2); me.uv_layers.active.data.foreach_get("uv", uv); uv = uv.reshape(-1, 2)
+    uvs = []
+    for lay in me.uv_layers: u_ = np.empty(len(me.loops) * 2); lay.data.foreach_get("uv", u_); uvs.append((lay.name, u_.reshape(-1, 2)))   # 첫 겹 = 이음 자리 · 둘째 겹 "art" (TEX-1) — 만든 차례가 TEXCOORD 번호
+    nr = np.empty(len(me.vertices) * 3); me.vertices.foreach_get("normal", nr); nr = nr.reshape(-1, 3)
     mi = np.empty(P_, np.int32); me.polygons.foreach_get("material_index", mi)
     cen = np.empty(P_ * 3); me.polygons.foreach_get("center", cen); cen = cen.reshape(-1, 3)
     key = np.floor(cen[:, 0] / size).astype(np.int64) * 100000 + np.floor(cen[:, 1] / size).astype(np.int64)
@@ -1052,11 +1046,164 @@ def split_tiles(o, size=24.0):
         m2 = bpy.data.meshes.new("SHELL_T"); m2.vertices.add(len(used)); m2.vertices.foreach_set("co", co[used].ravel())
         m2.loops.add(len(L)); m2.loops.foreach_set("vertex_index", remap.astype(np.int32))
         m2.polygons.add(len(F)); m2.polygons.foreach_set("loop_start", np.concatenate([[0], np.cumsum(lt[F])[:-1]]).astype(np.int32)); m2.polygons.foreach_set("loop_total", lt[F])
-        m2.update(); m2.uv_layers.new(); m2.uv_layers.active.data.foreach_set("uv", uv[L].ravel())
-        m2.polygons.foreach_set("material_index", mi[F]); m2.polygons.foreach_set("use_smooth", np.ones(len(F), dtype=bool))
-        for mt in me.materials: m2.materials.append(mt)
+        m2.update()
+        for k_, (nm_, u_) in enumerate(uvs): m2.uv_layers.new(name=nm_); m2.uv_layers[k_].data.foreach_set("uv", u_[L].ravel())
+        um, inv = np.unique(mi[F], return_inverse=True)                                    # 그 칸이 쓰는 재질 칸만 (사진 짝이 맵 전체로는 수십 개)
+        m2.polygons.foreach_set("material_index", inv.astype(np.int32)); m2.polygons.foreach_set("use_smooth", np.ones(len(F), dtype=bool))
+        for k_ in um: m2.materials.append(me.materials[k_])
+        m2.normals_split_custom_set_from_vertices(nr[used].tolist())                       # 칸 경계의 점 노멀을 한 덩어리일 때 값으로 — 안 옮기면 24 m 선에서 빛이 어긋난다
         t = bpy.data.objects.new("SHELL_%d" % len(out), m2); sc.collection.objects.link(t); out.append(t)
     bpy.data.objects.remove(o, do_unlink=True); return out
+
+# ================= TEX-1 — 환경마다 벽 · 바닥 사진, 경계는 얼룩으로 잇기 (제안서 docs/제안서_TEX1_층과_환경에_따라_잇는_벽과_바닥.md, 사용자 10-01 승인)
+# 표 = map4_tex.json (환경 → 사진 · 방 → 환경). 여기서는 굴 그물의 점마다 "어느 사진의 자리가 몇 m 에 있나"를 재서 UV 세 겹을 적고 (부스 맵 art_uv 와 같은 길), 면마다 재질 칸 이름 RK_<벽A>_<벽B>_<바닥A>_<바닥B> 를 붙인다.
+#   첫 겹 = (벽 이음 자리, 바닥 이음 자리): 0 = 사진 A 만 · 1 = B 만 · 0.5 = 두 사진의 경계, 1 m = 0.05 (TEX_SEAM 20 m 로 넓게 굽고 게임이 키로 좁힌다). 벽과 바닥은 따로 잇는다 — 승강장 둘레처럼 벽은 같고 바닥만 다른 환경이 붙은 곳이 많다
+#   둘째 겹 "art" = (탄층 띠, 바닥 — 벽 아래 띠 포함) · 셋째 겹 "more" = (젖음 ÷ 2, 큰 길 = 벽 ② 의 어둡기를 받는 정도). 사진은 게임(Map4.cs)이 칸 이름을 읽어 바위 재질 MineRock 사본에 끼운다 — glb 에는 바위 사진이 안 들어간다.
+TEX = json.load(open(os.path.join(HERE, "map4_tex.json"), encoding="utf-8")) if MAP else None
+TEX_SEAM, TEX_TRI = 20.0, 4.0                                          # 구운 이음 길이 m · 세 사진이 만나는 곳에서 둘째 사진을 걷어 내는 거리 m (셋째가 둘째만큼 가까우면 섞지 않는다 — 재질 칸이 갈리는 선에서 한 사진 100 %)
+def vnoise3(p):
+    """값 잡음 0..1 (make_booth.py 와 같은 것)"""
+    i = np.floor(p); f = p - i; u = f * f * (3 - 2 * f); i = i.astype(np.int64)
+    def h(dx, dy, dz):
+        n = ((i[:, 0] + dx) * 73856093) ^ ((i[:, 1] + dy) * 19349663) ^ ((i[:, 2] + dz) * 83492791)
+        n = n.astype(np.uint64); n = (n ^ (n >> np.uint64(13))) * np.uint64(1274126177)
+        return ((n ^ (n >> np.uint64(16))) & np.uint64(0xFFFF)).astype(np.float64) / 65535.0
+    x0 = h(0, 0, 0) * (1 - u[:, 0]) + h(1, 0, 0) * u[:, 0]; x1 = h(0, 1, 0) * (1 - u[:, 0]) + h(1, 1, 0) * u[:, 0]
+    x2 = h(0, 0, 1) * (1 - u[:, 0]) + h(1, 0, 1) * u[:, 0]; x3 = h(0, 1, 1) * (1 - u[:, 0]) + h(1, 1, 1) * u[:, 0]
+    return (x0 * (1 - u[:, 1]) + x1 * u[:, 1]) * (1 - u[:, 2]) + (x2 * (1 - u[:, 1]) + x3 * u[:, 1]) * u[:, 2]
+def fbm3(p, octaves=3): return sum(vnoise3(p * 2 ** k) * 0.5 ** k for k in range(octaves)) / sum(0.5 ** k for k in range(octaves))
+
+def tex1_sites(rooms, N, SEG, zi, scene_air, face_air, shell):
+    """환경 자리(굴 안 공기 속 점)들: 방은 2 m 칸 · 굴은 1.5 m 마다(가운데에서 가까운 끝 방의 환경으로 갈린다) · 장면은 공기 상자 안 2 m 칸.
+    자리마다 [x, y, z, 벽 사진, 천장 사진, 바닥 사진, 바닥 높이, 젖음, 벽 아래 띠 높이, 큰 길, 탄층 띠 아래, 위]"""
+    from mathutils import kdtree
+    from mathutils.bvhtree import BVHTree
+    bvh = BVHTree.FromObject(shell, bpy.context.evaluated_depsgraph_get()); down = Vector((0, 0, -1)); drop = [0]; S = []
+    def inair(p):                                                      # 굴 안의 점인가: 아래로 쏜 광선이 위를 보는 면(바닥)에 맞는다 — 상자 범위로 뽑은 자리 중 바위 속에 든 것을 버린다
+        h = bvh.ray_cast(Vector(p), down, 30.0); return h[0] is not None and h[1].z > 0.3
+    wetof = lambda k: float(TEX["wet"].get(k, 1.0))
+    SPLITX = {"door": L7S - 0.15 - 6.0, "chute": L3 * 0.55}           # scene7 의 앞문 틀 xa · scene3 의 석탄 홈통 cx (장면 좌표)
+    def add(p, env, fz, wet):
+        e = TEX["env"][env]; cb = e.get("coalband", [0.0, 0.0])
+        if not inair(p): drop[0] += 1; return
+        S.append((p[0], p[1], p[2], e["wall"], e.get("roof", e["wall"]), e["floor"], fz, wet, e.get("band", TEX["band_m"]), e.get("dim", 0), cb[0], cb[1]))
+    grid = lambda a, b: (np.arange(a + 1.0, b - 0.99, 2.0) if b - a > 2.0 else np.array([(a + b) / 2]))
+    levels = lambda z0, z1: np.arange(z0 + 1.2, max(z1 - 0.5, z0 + 1.3), 3.0)
+    def scene_env(sn, pl):
+        sp = TEX["scene_split"].get(sn)
+        if sp and pl.x < SPLITX[sp["x"]]: return sp["before"]
+        return "lairhigh" if sn == "z9" and pl.z >= TEX["lair_split_m"] else TEX["scene"][sn]
+    def end_env(k, p):
+        if k in N: return TEX["room"][k], wetof(k)
+        sn = k.split(".")[0]; return scene_env(sn, zi[sn]["T"].inverted() @ p), wetof(sn)
+    for n in rooms:
+        for x in grid(n["x"] - n["w"] / 2, n["x"] + n["w"] / 2):
+            for y in grid(n["y"] - n["d"] / 2, n["y"] + n["d"] / 2):
+                for z in levels(n["z"], n["z"] + n["h"]): add((x, y, z), TEX["room"][n["id"]], n["z"], wetof(n["id"]))
+    for s in SEG:
+        p, q = s["p"], s["q"]; L = (q - p).to_2d().length; a0, a1 = s["ta"], L - s["tb"]
+        if a1 <= a0: continue                                                                 # 방 벽끼리 맞닿은 굴 — 방 자리들이 가른다
+        (ea, wa), (eb, wb) = end_env(s["edge"]["a"], p), end_env(s["edge"]["b"], q)
+        for t in np.arange(a0 + 0.5, a1, 1.5): pt = p.lerp(q, t / L); h_ = t < (a0 + a1) / 2; add((pt.x, pt.y, pt.z + 1.2), ea if h_ else eb, pt.z, wa if h_ else wb)
+    for sn, b in scene_air:
+        vs = np.array([v.co[:] for v in b.verts]); lo, hi = vs.min(0), vs.max(0); T = zi[sn]["T"]; Ti = T.inverted(); fz = T.translation.z
+        for x in grid(lo[0], hi[0]):
+            for y in grid(lo[1], hi[1]):
+                for z in levels(fz, hi[2]):
+                    pl = Ti @ Vector((x, y, z)); up_ = PORT["z9"]["in"][2] if sn == "z9" and pl.x < -19.5 and abs(pl.y - PORT["z9"]["in"][1]) < 2.0 else 0.0   # 그것의 굴로 들어오는 굴은 바닥이 +3 m (0 으로 적으면 그 굴 바닥이 벽 사진이 되고 벽 아래 띠가 없다 — 검토 10-01. 광선 맞은 높이를 두루 쓰면 벽 선반 위 자리가 선반을 바닥으로 만든다)
+                    add((x, y, z), scene_env(sn, pl), fz + up_, wetof(sn))
+    for b, fz in face_air:                                              # 막장 홈(깊이 5 m): 1 m 칸으로 끝 벽 앞까지 — 2 m 칸 둘로는 홈 벽이 석탄 반 · 셰일 반으로 구워졌다 (검토 10-01)
+        vs = np.array([v.co[:] for v in b.verts]); lo, hi = vs.min(0), vs.max(0)
+        for x in np.arange(lo[0] + 0.5, hi[0], 1.0):
+            for y in np.arange(lo[1] + 0.5, hi[1], 1.0): add((x, y, fz + 1.2), "coalface", fz, 1.0)
+    S = np.array(S)
+    def tree(ix):
+        k = kdtree.KDTree(len(ix))
+        for i in ix: k.insert(S[i, :3], int(i))
+        k.balance(); return k
+    by = lambda col: {int(p): tree(np.nonzero(S[:, col] == p)[0]) for p in np.unique(S[:, col])}   # 사진 번호 → 그 사진을 쓰는 자리들
+    return dict(end_env=end_env, splitx=SPLITX, S=S, kd=tree(range(len(S))), wall=by(3), roof=by(4), floor=by(5), seam=tree(np.nonzero(S[:, 11] > S[:, 10])[0]), noseam=tree(np.nonzero(S[:, 11] <= S[:, 10])[0]), bvh=bvh, dropped=drop[0])
+
+def tex1_paint(o, T1, fixed=None, ray=False):
+    """그물 하나에 TEX-1 을 적는다 (위 설명). fixed = 환경 이름이면 그 환경만(석탄 기둥 같은 소품). ray = 바닥에서 높이를 아래로 쏜 광선으로(바위 굴) — 아니면 가까운 자리의 바닥 높이에서. 돌려줌 = 잰 값"""
+    me = o.data; M = np.array(o.matrix_world); R3 = M[:3, :3].T; nv, P_ = len(me.vertices), len(me.polygons); S = T1["S"]
+    co = np.empty(nv * 3); me.vertices.foreach_get("co", co); co = co.reshape(-1, 3) @ R3 + M[:3, 3]
+    nr = np.empty(nv * 3); me.vertices.foreach_get("normal", nr); nr = nr.reshape(-1, 3) @ R3
+    pn = np.empty(P_ * 3); me.polygons.foreach_get("normal", pn); pnz = (pn.reshape(-1, 3) @ R3)[:, 2]; roof = pnz < -0.55
+    ls = np.empty(P_, np.int32); me.polygons.foreach_get("loop_start", ls); lt = np.empty(P_, np.int32); me.polygons.foreach_get("loop_total", lt)
+    vi = np.empty(len(me.loops), np.int32); me.loops.foreach_get("vertex_index", vi); fidx = np.repeat(np.arange(P_), lt); col = co.tolist(); NL = len(vi)
+    wet = np.empty(nv); band = np.empty(nv); dim = np.empty(nv); fz = np.empty(nv); b0 = np.empty(nv); b1 = np.empty(nv)
+    for k, c in enumerate(col):                                                               # 가까운 자리 넷: 젖음 · 띠 높이 · 큰 길은 거리로 고르게 섞고(방 경계에서 딱 끊기지 않게), 바닥 높이 · 탄층 띠는 가장 가까운 것
+        r = T1["kd"].find_n(c, 4); w = np.array([1.0 / (d + 0.5) for _, _, d in r]); ix = [i for _, i, _ in r]; w /= w.sum()
+        wet[k] = S[ix, 7] @ w; band[k] = S[ix, 8] @ w; dim[k] = S[ix, 9] @ w; fz[k] = S[ix[0], 6]; b0[k] = S[ix[0], 10]; b1[k] = S[ix[0], 11]
+    floor = nr[:, 2] > 0.6; up = co[:, 2] - fz
+    if ray:                                                                                   # 공기 쪽으로 5 cm 뜬 뒤 아래로 (부스 art_uv 와 같다) — 벽 점만
+        bvh = T1["bvh"]; down = Vector((0, 0, -1)); hgt = np.full(nv, 9.0)
+        for k in np.nonzero(floor & (up > 1.0))[0]:                                           # 벽 중턱의 불룩한 곳 윗면은 바닥이 아니다 (첫 굽기: 벽 한가운데에 자갈 얼룩이 떴다) — 그 높이(±0.6 m)를 바닥으로 가진 자리가 2.6 m 안에 없으면 턱, 있으면 높은 바닥
+            if not any(abs(S[i, 6] - co[k, 2]) < 0.6 for _, i, _ in T1["kd"].find_range(col[k], 2.6)): floor[k] = False
+        for k in np.nonzero(~floor & (nr[:, 2] > -0.3))[0]:
+            hit = bvh.ray_cast(Vector(co[k] + nr[k] * 0.05), down, 3.0); hgt[k] = hit[3] if hit[0] is not None else 9.0
+        hgt = np.where(floor, 0.0, np.maximum(hgt, up - 0.5))                                 # 턱 바로 위 벽에도 띠가 생기지 않게 — 띠는 그 방 바닥 높이 둘레에만
+    else: hgt = up
+    mud = np.where(floor, 1.0, np.clip(1 - (hgt - band * (0.4 + 0.9 * fbm3(co * np.array([1 / 1.3, 1 / 1.3, 1 / 0.5])))) / 0.25, 0, 1))
+    dist = lambda kd: np.array([kd.find(c)[2] for c in col], np.float32)
+    if fixed is None:                                                                         # 탄층 띠: 그 환경 안쪽 벽에, 바닥에서 b0~b1 m, 흐트러진 또렷한 선 (섞지 않는다)
+        zw = co[:, 2] - fz + 0.5 * (fbm3(co * np.array([1 / 6.0, 1 / 6.0, 1 / 2.0]) + 31.7) - 0.5)
+        coal = np.clip(np.minimum(zw - b0, b1 - zw) / 0.08 + 0.5, 0, 1) * (b1 > b0) * np.clip((dist(T1["noseam"]) - dist(T1["seam"])) / 3.0, 0, 1) * (1 - mud) * (nr[:, 2] > -0.5)
+    else: coal = np.zeros(nv)
+    lean = TEX["lean_m"] * np.clip((co[vi, 2] - fz[vi]) / 3.0, 0, 1)                           # 경계를 눕힌다 — 천장이 바닥보다 lean_m 먼저 바뀐다(지층 면처럼)
+    def chan(Dl, ids, lean_, hard_ids=()):
+        """사진 하나하나까지의 거리(면 모서리마다) → 그 면의 사진 짝(A < B 번호 차례) · 이음 자리 u"""
+        k = len(ids); od = np.argsort(np.add.reduceat(Dl, ls, axis=0) / lt[:, None], axis=1); P1, P2, P3 = od[:, 0], od[:, min(1, k - 1)], od[:, min(2, k - 1)]
+        rows = np.arange(NL); p1, p2, p3 = P1[fidx], P2[fidx], P3[fidx]; d1, d2, d3 = Dl[rows, p1], Dl[rows, p2], Dl[rows, p3]; first = ids[p1] < ids[p2]
+        hard = np.isin(ids[p1], hard_ids) | np.isin(ids[p2], hard_ids)                         # 그것의 굴 6 m 위 ⑩(높이로 바뀌는 경계) · 석탄 면 ⑦(탄층이 딱 갈리는 선): 눕히지 않고, 이음을 2.5 배 좁게
+        c = np.where(first, d1 - d2, d2 - d1) * np.where(hard, 2.5, 1.0) + lean_ * ~hard          # 경계에서 잰 m (자리가 굴을 채우고 있어 제 사진까지 d1 은 거의 그대로이고 d2 만 1 m 에 1 m 바뀐다 — ÷ 2 하면 이음이 숫자의 두 배로 길어진다, 검토 10-01)
+        w3 = np.clip((d3 - d2) / TEX_TRI, 0, 1) if k > 2 else np.ones(NL); pure = np.where(first, -TEX_SEAM / 2, TEX_SEAM / 2)
+        c = pure + (c - pure) * w3
+        u = np.clip(0.5 + c / TEX_SEAM, 0, 1); umin, umax = np.minimum.reduceat(u, ls), np.maximum.reduceat(u, ls)
+        f1 = ids[P1] < ids[P2]; LO, HI = np.where(f1, P1, P2), np.where(f1, P2, P1); A = np.where(umin >= 0.999, HI, LO); B = np.where(umax <= 0.001, LO, HI)
+        same = A == B; u[same[fidx]] = 0.0
+        return ids[A], ids[B], u, same
+    if fixed is None:
+        cache = {}
+        def table(trees):
+            ids = np.array(sorted(trees)); cols = []
+            for p in ids:
+                key = id(trees[p])
+                if key not in cache: cache[key] = dist(trees[p])
+                cols.append(cache[key])
+            return ids, np.stack(cols, 1)
+        wi, Dw = table(T1["wall"]); ri, Dr = table(T1["roof"]); fi, Df = table(T1["floor"])
+        wA, wB, uw, _ = chan(Dw[vi], wi, lean, (7, 10)); split = np.zeros(P_, bool)
+        if roof.any() and (len(ri) != len(wi) or (ri != wi).any() or (Dr != Dw).any()):       # 천장 사진이 따로인 환경(석탄 면: 벽 ⑦ · 천장 ⑧) — 천장 면은 천장 표로 다시
+            rA, rB, ur, _ = chan(Dr[vi], ri, lean, (7, 10)); split = roof & ((rA != wA) | (rB != wB)); wA, wB = np.where(roof, rA, wA), np.where(roof, rB, wB); uw = np.where(roof[fidx], ur, uw)
+        fA, fB, uf, _ = chan(Df[vi], fi, np.zeros(NL))
+        def jumps(A_, B_, u_, sel):
+            """한 점을 나눠 쓰는 면들(sel) 사이에서 어느 사진의 몫이 0.25 넘게 뛰는 점 = 화면에서 사진이 딱 끊겨 보이는 곳"""
+            L = sel[fidx]; v = vi[L]; a_, b_, uu = A_[fidx][L], B_[fidx][L], u_[L]; one = a_ == b_
+            key = np.concatenate([v * 100 + a_, (v * 100 + b_)[~one]]); sh = np.concatenate([np.where(one, 1.0, 1 - uu), uu[~one]])
+            uq, inv = np.unique(key, return_inverse=True); hi_ = np.zeros(len(uq)); lo_ = np.ones(len(uq)); n_ = np.zeros(len(uq))
+            np.maximum.at(hi_, inv, sh); np.minimum.at(lo_, inv, sh); np.add.at(n_, inv, 1)
+            lo_[n_ < np.bincount(v, minlength=nv)[uq // 100]] = 0.0                               # 그 점의 어떤 면에는 이 사진이 아예 없다 = 몫 0
+            return np.unique(uq[(hi_ - lo_) > 0.25] // 100)
+        isfl_ = pnz > 0.55
+        cut = np.unique(np.concatenate([jumps(wA, wB, uw, ~isfl_ & ~split), jumps(wA, wB, uw, split), jumps(fA, fB, uf, isfl_)]))   # 벽 ↔ 천장 사진이 따로인 선(석탄 면)은 일부러 안 섞는 곳이라 따로 센다
+    else:
+        e = TEX["env"][fixed]; wA = wB = np.full(P_, e["wall"]); fA = fB = np.full(P_, e["floor"]); uw = uf = np.zeros(NL); cut = np.zeros(0, int)
+    code = wA * 1000000 + wB * 10000 + fA * 100 + fB; uniq, inv = np.unique(code, return_inverse=True); me.materials.clear()
+    for cd in uniq:
+        nm = "RK_%d_%d_%d_%d" % (cd // 1000000, cd // 10000 % 100, cd // 100 % 100, cd % 100); m = bpy.data.materials.get(nm)
+        if m is None: m = bpy.data.materials.new(nm); m.use_nodes = True; next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].default_value = (0.2, 0.18, 0.16, 1)
+        me.materials.append(m)
+    me.polygons.foreach_set("material_index", inv.astype(np.int32))
+    for k, (nm, a, b) in enumerate((("UVMap", uw, uf), ("art", coal[vi], mud[vi]), ("more", np.clip(wet / 2, 0, 1)[vi], np.clip(dim, 0, 1)[vi]))):   # 만든 차례가 TEXCOORD 번호
+        if len(me.uv_layers) <= k: me.uv_layers.new(name=nm)
+        me.uv_layers[k].data.foreach_set("uv", np.stack([a, b], 1).ravel())
+    me.uv_layers.active = me.uv_layers[0]
+    ar = np.empty(P_); me.polygons.foreach_get("area", ar); cen = np.add.reduceat(co[vi], ls, axis=0) / lt[:, None]; isfl = pnz > 0.55
+    wdom = np.where(np.add.reduceat(uw, ls) / lt < 0.5, wA, wB); fdom = np.where(np.add.reduceat(uf, ls) / lt < 0.5, fA, fB)
+    return dict(names=[m.name for m in me.materials], wall={int(k): float(ar[(wdom == k) & ~isfl].sum()) for k in np.unique(wdom)}, floor={int(k): float(ar[(fdom == k) & isfl].sum()) for k in np.unique(fdom)},
+                blend=float(ar[(wA != wB) | (fA != fB)].sum()), all=float(ar.sum()), tri=co[cut], coal=float(ar[np.maximum.reduceat(coal[vi], ls) > 0.5].sum()))
 
 MAP_PLAN = os.path.join(HERE, "map4_plan.json")                      # 1편 구조 (구조 설계 워크플로 추천안, 사용자 10-01 선택) — 방 · 굴 · 판자 문 칸 좌표
 L3 = 3 * 3.52 + 2 * 4.54; L7S, L7W = 2 * 3.52 + 2 * 4.54, 3.05 + 2.81 + 3.05   # 장면 ③ · ⑦ 길이 (Fab 목록에서 잰 조각 길이)
@@ -1124,13 +1271,14 @@ def map4():
             ta = exit_t(e["a"], d) + (0.6 if e["a"] in N else 0.0) if k == 0 else w / 2 + 0.6; tb = exit_t(e["b"], -d) + (0.6 if e["b"] in N else 0.0) if k == len(pts) - 2 else w / 2 + 0.6
             SEG.append(dict(p=p, q=q, kind=e["kind"], ta=ta, tb=tb, edge=e))
     # ---- 1단계: 바위 공기 모으기
-    PASS = "air"
+    PASS = "air"; scene_air, face_air = [], []                                                # TEX-1: 장면 · 막장 홈의 공기 (환경 자리를 뽑을 범위)
     for z in Z:
-        ZT = z["T"]; random.seed(z["seed"]); before = set(bpy.data.objects)
+        ZT = z["T"]; random.seed(z["seed"]); before = set(bpy.data.objects); i0 = len(AIR)
         for c, sz in z.get("air", []): b = bmesh.new(); box(b, c, sz); b.transform(ZT); AIR.append((b, 0.3, None))
         if "air" not in z:
             try: z["f"]()
             except ZoneAir: pass
+        scene_air += [(z["n"], a[0]) for a in AIR[i0:]]
         for o in [o for o in bpy.data.objects if o not in before]: bpy.data.objects.remove(o, do_unlink=True)
     def tube(p, q, kind):
         w, h = KIND[kind]; F, L = frame(p, q); slope = abs(q.z - p.z) > 0.05; n = max(1, int(L / 1.2)) if slope else 1
@@ -1182,7 +1330,7 @@ def map4():
         AIR.append((b, carve, None)); return wall
     n2 = N["N2"]; FACES = []
     for dx in (-8, 0, 8):                                                                      # 북쪽 막장 줄: 벽에 깊이 5 m 막장 셋 (협동 때 나눠 캔다)
-        r_ = dict(n2); r_["x"] = n2["x"] + dx; FACES.append((side_recess(r_, Vector((0, 1, 0)), 5.0, 3.4, 2.4, 0.3), dx))
+        r_ = dict(n2); r_["x"] = n2["x"] + dx; FACES.append((side_recess(r_, Vector((0, 1, 0)), 5.0, 3.4, 2.4, 0.3), dx)); face_air.append((AIR[-1][0], n2["z"]))
     FENCES = []
     for rid, gid in (("M", "GOAF_W"), ("E2", "GOAF_E")):                                       # 막아 둔 채굴적: 방 벽에서 2 m 파고 판자 울타리 (틈으로 어둠이 보인다, 못 들어감)
         r_, g = N[rid], N[gid]; d = Vector((g["x"] - r_["x"], g["y"] - r_["y"], 0)); f = Vector((1 if d.x > 0 else -1, 0, 0)) if abs(d.x) > abs(d.y) else Vector((0, 1 if d.y > 0 else -1, 0))
@@ -1191,10 +1339,7 @@ def map4():
     b = bmesh.new(); box(b, (lw["x"], lw["y"], (lw["z"] + n2["z"] + 3.0) / 2), (2.4, 2.4, n2["z"] - lw["z"] + 3.0)); AIR.append((b, 0.1, None))
     b = bmesh.new(); tp = Vector((lw["x"], lw["y"], n2["z"])); F_, L_ = frame(tp, Vector((n2["x"], n2["y"], 0)), n2["z"]); box(b, (L_ / 2, 0, 1.4), (L_, 2.6, 2.8)); b.transform(F_); AIR.append((b, 0.2, None))
     ld = N["LD"]; b = bmesh.new(); box(b, (ld["x"], ld["y"], ld["z"] - 6.0), (3.0, 3.0, 12.0)); AIR.append((b, 0.2, None))   # 2편으로 내려가는 사다리 구멍 (2편은 아직 없다)
-    SHELL = unified_shell()
-    T2 = zi["z2"]["T"]; c1, c2 = T2 @ Vector((-0.5, -3.5, -1)), T2 @ Vector((21.5, 3.5, 3))
-    cen = np.empty(len(SHELL.data.polygons) * 3); SHELL.data.polygons.foreach_get("center", cen); cen = cen.reshape(-1, 3)
-    coal_room_mats(SHELL.data, np.all((cen >= np.minimum(c1, c2)) & (cen <= np.maximum(c1, c2)), axis=1))   # 채탄 막장(②) 자리는 석탄 벽 · 셰일 천장
+    SHELL = unified_shell(); T1 = tex1_sites(rooms, N, SEG, zi, scene_air, face_air, SHELL)   # 벽 · 바닥 사진은 소품을 다 놓은 뒤 tex1_paint() 가 (채탄 막장의 석탄 벽 · 셰일 천장도 환경 표에서)
     # ---- 2단계: 장면 방 소품 (바위 굴을 그 방의 좌표로 잠깐 옮겨 광선 재기가 맞게, 먼저 지은 방은 숨김)
     PASS = "dress"; zone_objs = {}
     for z in Z:
@@ -1461,6 +1606,34 @@ def map4():
         if hit2 and c_.z - f_.z < 2.0: low.append((where, round(f_.x, 1), round(f_.y, 1), round(c_.z - f_.z, 2)))
     print("CHECK map4 floor %.0f m2  rooms %d  scenes %d  tunnels %d  closets %d  signs %d  lights %d" % (ar[fl.reshape(-1, 3)[:, 2] > 0.9].sum(), len(rooms), len(Z), len(plan["edges"]), len(ALC), signs, len(LIGHTS)))
     print("CHECK map4 low spots %d of %d sampled (headroom < 2.0 m)%s" % (len(low), len(pts), (": " + "; ".join("%s (%s, %s) %.2f" % l for l in low[:12])) if low else ""))
+    # ---- TEX-1: 바위 굴 · 장면 바닥 판 · 석탄 소품에 환경 사진 (map4_tex.json)
+    st = tex1_paint(SHELL, T1, ray=True); extra = 0
+    for o in [o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith(("FLOOR", "COALPILLAR", "COALBAND"))]:
+        tex1_paint(o, T1, fixed=None if o.name.startswith("FLOOR") else "coalface"); extra += 1   # 바닥 판 넷은 걷지 않고 그 자리 바닥 사진을 입힌다(가장자리 금) · 석탄 기둥 · 단층 방 석탄 띠 = 석탄 면
+    for k_, env_ in list(TEX["room"].items()) + list(TEX["scene"].items()):                    # 방 · 장면마다 "여기 벽 · 바닥은 몇 번" 빈 노드 → 게임 검사 map4_room_photos 가 맞춰 본다
+        if k_ in N and N[k_]["kind"] == "closet": continue
+        c_ = Vector((N[k_]["x"], N[k_]["y"], N[k_]["z"] + 1.5)) if k_ in N else zi[k_]["T"] @ Vector({"z3": (L3 * 0.8, 0, 1.5), "z7": (L7S + L7W * 0.5, 0, 1.4), "z8": (10, 0, 1.5), "z2": (12, 0, 1.2)}.get(k_, (0, 0, 1.5)))
+        e_ = bpy.data.objects.new("TEX_%s_%d_%d" % (k_, TEX["env"][env_]["wall"], TEX["env"][env_]["floor"]), None); e_.location = c_; sc.collection.objects.link(e_)   # 큰 길의 벽 ② 는 사진 ③ (어둡기만 점마다)
+    for k_, (wall_, dx_) in enumerate(FACES):                                                  # 북쪽 막장 홈 셋 가운데 = 석탄 면
+        e_ = bpy.data.objects.new("TEX_N2face%d_%d_%d" % (k_, TEX["env"]["coalface"]["wall"], TEX["env"]["coalface"]["floor"]), None); e_.location = wall_ + Vector((0, 2.5, 1.2)); sc.collection.objects.link(e_)
+    joins = 0
+    for s in SEG:                                                                             # 이음 자리 캡처: 굴 가운데 4 m 앞에서 굴을 따라 본다 (환경이 바뀌는 굴만 — 굽기와 같은 환경 표로)
+        ea, eb = s["edge"]["a"].split(".")[0], s["edge"]["b"].split(".")[0]; na, nb = T1["end_env"](s["edge"]["a"], s["p"])[0], T1["end_env"](s["edge"]["b"], s["q"])[0]
+        if na == nb: continue
+        p, q = s["p"], s["q"]; d = (q - p).normalized(); L = (q - p).length; m_ = p.lerp(q, min(max((s["ta"] + L - s["tb"]) / 2 / max(L, 1e-6), 0.0), 1.0)); joins += 1
+        SHOTS.append(("seam%02d_%s_%s" % (joins, ea, eb), tuple(m_ - d * 4.0 + Vector((0, 0, EYE))), tuple(m_ + d * 4.0 + Vector((0, 0, 1.4)))))
+    for sn_, sp_ in TEX["scene_split"].items():                                                # 장면 안에서 환경이 바뀌는 자리 (바람문 앞문 틀 · 석탄 홈통) — 굴 가운데가 아니라 틀에 맞춘 경계
+        if sn_ not in zi: continue
+        x_ = T1["splitx"][sp_["x"]]; joins += 1
+        SHOTS.append(("seam%02d_%s_%s" % (joins, sn_, sp_["x"]), tuple(zi[sn_]["T"] @ Vector((x_ - 4.0, 0, EYE))), tuple(zi[sn_]["T"] @ Vector((x_ + 4.0, 0, 1.4)))))
+    tc = st["tri"]; cl = {}
+    for c_ in tc: cl.setdefault((int(c_[0] // 8), int(c_[1] // 8)), []).append(c_)
+    worst = sorted(cl.values(), key=len, reverse=True)
+    for k_, g_ in enumerate(worst):                                                           # 사진이 딱 끊겨 보이는 곳 (점이 많은 차례로 전부) — 가까운 자리에서 본다
+        c_ = np.mean(g_, axis=0); r_ = T1["kd"].find(c_.tolist())[1]; SHOTS.append(("tri_%d" % k_, (T1["S"][r_, 0], T1["S"][r_, 1], T1["S"][r_, 6] + EYE), tuple(c_)))
+    print("CHECK map4 tex1 sites %d (dropped %d in rock) · rock materials %d (%s) · two-photo faces %.0f of %.0f m2 · coal band %.0f m2 · floor plates and coal props %d" % (len(T1["S"]), T1["dropped"], len(st["names"]), " ".join(sorted(st["names"])), st["blend"], st["all"], st["coal"], extra))
+    print("CHECK map4 tex1 area by photo (m2): wall %s / floor %s" % (" · ".join("%d: %.0f" % kv for kv in sorted(st["wall"].items())), " · ".join("%d: %.0f" % kv for kv in sorted(st["floor"].items()))))
+    print("CHECK map4 tex1 joins %d (tunnels whose two ends differ + scene splits) · points where a photo's share jumps > 0.25 between touching faces (visible hard edge) %d in %d places%s" % (joins, len(tc), len(cl), (": " + "; ".join("(%.0f, %.0f, %.0f) x%d" % (*np.mean(g_, axis=0), len(g_)) for g_ in worst)) if worst else ""))
     tiles = split_tiles(SHELL)
     print("CHECK map4 shell tiles %d  tris %d  all tris %d" % (len(tiles), sum(len(t.data.polygons) for t in tiles), sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")))
     xs = [n["x"] for n in plan["nodes"]] + [s["x"] for s in plan["scenes"]]; ys = [n["y"] for n in plan["nodes"]] + [s["y"] for s in plan["scenes"]]
