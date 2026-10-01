@@ -51,7 +51,11 @@ public class DevHud : MonoBehaviour
         }
         // MAP4 1편 전체(사용자 10-01): -map4 — 새 맵 승강장에서 시작 (괴물 없음, 구조 · 텍스처 판정). [ ] = 장면 자리 옮기기
         if (Map4.Requested && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
-            && Map4.Spawn(player, pickaxe.cam.GetComponent<Camera>()) != null && stalker != null) stalker.gameObject.SetActive(false);
+            && Map4.Spawn(player, pickaxe.cam.GetComponent<Camera>()) != null)
+        {
+            if (stalker != null) stalker.gameObject.SetActive(false);
+            enabled = false;                                    // 밝기 판정 키(1 2 3 4 9 0 B)가 DevHud 키와 부딪힌다 (-fabvideo 와 같음)
+        }
         // 영상 재현 판정(09-30): -fabvideo — FabVideo.glb 에서 시작, 키로 빛 · 화각 (FabVideoTuner). 이 모드에선 DevHud 를 끈다 (판정 키가 부딪힌다)
         if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-fabvideo") >= 0 && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
             && FabTest.Spawn("FabVideo", new Vector3(0f, -160f, 0f)) is GameObject vid)

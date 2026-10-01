@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 // 입력은 가상 키보드·마우스 장치로 넣는다 — Player·Pickaxe 는 사람 장치와 같은 길(Keyboard.current / Mouse.current)로 읽는다.
 // -only booth 은 부스 맵(MAP2) 씬 검사만 — 전체 실행은 인트로 → 부스 맵 → 복도 차례로 돈다. -only repair 는 부스 맵의 REP-1 고칠 곳만.
 // -only m1|mining|mine|player|monster|stalker|chase|retreat|anim|throw|pick|tired|hud|sound|intro|props 은 그 구간만 돈다 (intro 는 씬을 떠나므로 늘 마지막; 인트로 씬 쪽 검사는 Intro.cs) (고치는 중에는 바뀐 구간만, 커밋 전에는 전체).
-// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|lowroof 는 검사가 FAIL 을 내는지 확인하는 용도다.
+// -sabotage floor|lamp|fog|thickfog|nodim|bury|onehit|spam|nomagnet|noassist|noviewmodel|picklamp|mute|deaf|bigears|ghost|blind|slowchase|nolose|noadapt|dimeyes|tank|noretreat|softretreat|stunlock|lurechase|nopickup|twopicks|flatsteps|quietfeet|rockflesh|nodull|steadyhands|everlasting|flatnod|nostagger|hudtext|noglow|ballpick|hudon|noanim|slide|uprightclimb|armsink|nopreview|oldwalk|oldrun|bouncy|stiffspine|straightfingers|shutjaw|stiffneck|shortneck|flatprops|skipearly|norestart|alwayslamp|nolamp|nogap|bigprop|nomat|renametmb|blockcut|blockleak|nonav|tallcap|bigmonster|nocol|smallmap|nohub|nosidings|nofakeexit|monsterfloat|crevshift|squeezelong|nicheplug|instantfix|silentfix|nobreak|oldlook|drywall|bouncedead|minefast|loudsoft|noslip|lookfree|resetprogress|ringhit|farhit|nomotion|rawtempo|olddust|whitechips|noik|fpbody|noswitch|standalone|twohands|claybody|nodetail|deadkeys|lowroof|slowspot 는 검사가 FAIL 을 내는지 확인하는 용도다.
 // -sabotage nokevin (3D-P: Kevin 동작 없이 = 다른 컴퓨터) 은 반대로 player_hands_on_grip 이 통과해야 한다.
 // -sweep 은 검사 대신 가까운 면 감광 값을 바꿔 가며 갱도·벽 앞 화면 값을 "SWEEP" 줄로 남긴다.
 public class M1Check : MonoBehaviour
@@ -4707,10 +4707,20 @@ public class M1Check : MonoBehaviour
         Check("map4_fps", fps >= 60f, $"{fps:0} fps at start (booth map is also loaded above)");
         var fell = new System.Collections.Generic.List<string>();
         var low = new System.Collections.Generic.List<string>();
+        float worst = float.MaxValue; string worstAt = "";
         for (int i = 0; i < m.spots.Length; i++)
         {
             m.Go(i); float y0 = player.transform.position.y;
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSeconds(0.5f);                // 옮긴 직후 끊김은 빼고 그 뒤 1 초를 잰다 (전등이 많은 넓은 방은 시작 자리에서 안 보인다 — 10-01 전등 1.5배)
+            int sf = Time.frameCount; float st = Time.realtimeSinceStartup;
+            while (Time.realtimeSinceStartup - st < 1.0f)
+            {
+                if (sabotageName == "slowspot" && i == 3) System.Threading.Thread.Sleep(40);   // 사보타주: 자리 하나만 느리게 → map4_fps_worst_spot FAIL
+                yield return null;
+            }
+            float sfps = (Time.frameCount - sf) / (Time.realtimeSinceStartup - st);
+            Debug.Log($"MAP4 fps {m.spots[i].name.Substring(4)} {sfps:0}");
+            if (sfps < worst) { worst = sfps; worstAt = m.spots[i].name.Substring(4); }
             float dy = player.transform.position.y - y0;
             if (Mathf.Abs(dy) > 0.3f) fell.Add($"{m.spots[i].name.Substring(4)} {dy:+0.0;-0.0} m");
             if (player.stance == "crouch") low.Add(m.spots[i].name.Substring(4));
@@ -4718,6 +4728,17 @@ public class M1Check : MonoBehaviour
         }
         Check("map4_no_forced_crouch", low.Count == 0, low.Count == 0 ? $"stood up at all {m.spots.Length} spots (사용자 10-01: 낮은 곳을 만들지 않는다)" : "forced to crouch at: " + string.Join(", ", low));
         Check("map4_spots_on_floor", fell.Count == 0, fell.Count == 0 ? $"all {m.spots.Length} spots stand on the floor" : "moved: " + string.Join(", ", fell));
+        Check("map4_fps_worst_spot", worst >= 60f, $"{worst:0} fps at {worstAt} (slowest of {m.spots.Length} spots)");
+        // 밝기 판정 키 (10-01): 2 = 전등 세기 +4 · 4 = 닿는 거리 +1 m · B = 판정값으로. 사보타주 deadkeys(키를 안 읽음) → FAIL
+        if (sabotageName == "deadkeys") m.enabled = false;
+        var kb = InputSystem.AddDevice<Keyboard>("Map4Keyboard");
+        var l0 = m.GetComponentsInChildren<Light>().First(l => l.name.StartsWith("LAMP_"));
+        yield return PressKey(kb, Key.Digit2); yield return null; float p2 = l0.intensity;
+        yield return PressKey(kb, Key.Digit4); yield return null; float r4 = l0.range;
+        yield return PressKey(kb, Key.B); yield return null;
+        Check("map4_light_keys", Mathf.Approximately(p2, Tuning.FAB_LIGHT_ENERGY + 4f) && Mathf.Approximately(r4, Tuning.FAB_LIGHT_RANGE + 1f) && Mathf.Approximately(l0.intensity, Tuning.FAB_LIGHT_ENERGY) && Mathf.Approximately(l0.range, Tuning.FAB_LIGHT_RANGE),
+            $"2 → power {p2:0.#}, 4 → reach {r4:0.#} m, B → {l0.intensity:0.#} / {l0.range:0.#} m");
+        InputSystem.RemoveDevice(kb);
     }
 
     // ================= Fab 소개 영상 재현 (사용자 09-30 "영상은 같은 모델인데 우리는 왜 이렇게 못 나오나"). -only fabvideo — 사람용 캡처

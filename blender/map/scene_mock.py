@@ -851,11 +851,37 @@ def rails(a, b, z=0.0, y=0.0):
     F, L = frame(a, b, z); n = max(1, round(L / 2.5)); k = L / (n * 2.5)
     for i in range(n): put("rail", F @ Matrix.Translation(((i + 0.5) * 2.5 * k, y, 0)) @ Matrix.Diagonal((k, 1, 1, 1)))
 
+LAMP_H = 2.8                                                             # 전등 빛 높이 (바닥 위) = 판정 받은 운반갱도 전등 높이. 게임 전등 빛은 4 m(FAB_LIGHT_RANGE)까지라 4~5.5 m 천장에 붙이면 천장만 밝힌다 (v2 "전체가 많이 어둡다")
+CORDS = []                                                               # 높은 천장에서 전등까지 늘어뜨린 줄 (가운데, 크기)
+LAMP_WALL = 2.0                                                          # 방 가장자리 전등과 벽 사이 (m)
 def lamp_at(x, y, z, top_guess, name, energy=120, col=(1.0, 0.62, 0.3)):
-    """철망 갓 전등을 천장 밑에 단다 (천장은 광선으로 잰다). 게임에서 LAMP_ = 판정값 빛(Tuning.FAB_*), ZL_<색> = 구역 색 등"""
+    """철망 갓 전등을 천장 밑에 단다 (천장은 광선으로 잰다) — 천장이 높으면 줄에 매달아 LAMP_H 까지 내린다. 게임에서 LAMP_ = 판정값 빛(Tuning.FAB_*), ZL_<색> = 구역 색 등"""
     deps = bpy.context.evaluated_depsgraph_get(); hit, loc, *_ = sc.ray_cast(deps, Vector((x, y, z + 1.6)), Vector((0, 0, 1)), distance=12)
-    top = loc.z if hit else z + top_guess; put("vgyidfpaw", Matrix.Translation((x, y, top - 0.25)))
-    LIGHTS.append((name % len(LIGHTS) if "%d" in name else name, (x, y, top - 0.45), energy, col, 0.08, True))
+    top = loc.z if hit else z + top_guess; lz = min(top - 0.45, z + LAMP_H); put("vgyidfpaw", Matrix.Translation((x, y, lz + 0.2)))
+    if top - lz > 0.55: CORDS.append(((x, y, (top + lz + 0.45) / 2), (0.014, 0.014, top - lz - 0.45 + 0.3)))   # 줄 끝은 바위 속 0.15 m (울퉁불퉁한 천장에 떠 보이지 않게)
+    LIGHTS.append((name % len(LIGHTS) if "%d" in name else name, (x, y, lz), energy, col, 0.08, True))
+
+def lamp_grid(n, nx, ny, name, **kw):
+    """방을 nx × ny 칸으로 나눠 칸마다 전등 하나. 전등 높이에 뭔가(돌 더미 · 석탄 기둥 · 통나무)가 있으면 옆으로 비킨다"""
+    deps = bpy.context.evaluated_depsgraph_get()
+    for ix in range(nx):
+        for iy in range(ny):
+            x0, y0 = n["x"] - n["w"] / 2 + (ix + 0.5) * n["w"] / nx, n["y"] - n["d"] / 2 + (iy + 0.5) * n["d"] / ny
+            # 가장자리 칸은 벽에서 LAMP_WALL 로 붙인다 — 빛이 4 m 까지라 방 가운데 전등은 천장만 밝히고 벽은 검다 (검수 10-01: 방 폭 · 끝 벽이 안 읽힌다). 한 줄뿐이면 양쪽 벽으로 번갈아
+            if nx > 1 and ix in (0, nx - 1): x0 = n["x"] + (1 if ix else -1) * (n["w"] / 2 - LAMP_WALL)
+            elif nx == 1 and ny > 1: x0 = n["x"] + (1 if iy % 2 else -1) * (n["w"] / 2 - LAMP_WALL)
+            if ny > 1 and iy in (0, ny - 1): y0 = n["y"] + (1 if iy else -1) * (n["d"] / 2 - LAMP_WALL)
+            elif ny == 1 and nx > 1: y0 = n["y"] + (1 if ix % 2 else -1) * (n["d"] / 2 - LAMP_WALL)
+            for dx, dy in ((0, 0), (2, 0), (-2, 0), (0, 2), (0, -2), (3, 3), (-3, -3), (3, -3), (-3, 3)):
+                if not any(sc.ray_cast(deps, Vector((x0 + dx, y0 + dy, n["z"] + h_)), Vector((math.cos(t), math.sin(t), 0)), distance=1.2)[0] for h_ in (2.0, 2.5) for t in np.linspace(0, 2 * math.pi, 8, endpoint=False)): break
+            lamp_at(x0 + dx, y0 + dy, n["z"], n["h"], name, **kw)
+
+def pole_lamp(bm, p, name, energy=50, col=(1.0, 0.69, 0.44)):
+    """세워 둔 작업등 — 천장이 너무 높아 못 매다는 곳(⑨ 12~16 m). 기둥 + 팔 끝에 전등, 빛 높이는 LAMP_H"""
+    deps = bpy.context.evaluated_depsgraph_get(); hit, loc, *_ = sc.ray_cast(deps, Vector((p.x, p.y, p.z + 2.0)), Vector((0, 0, -1)), distance=4)
+    z = loc.z if hit else p.z
+    box(bm, (p.x - 0.4, p.y, z + (LAMP_H + 0.6) / 2), (0.09, 0.09, LAMP_H + 0.6)); box(bm, (p.x - 0.2, p.y, z + LAMP_H + 0.5), (0.5, 0.06, 0.06)); box(bm, (p.x - 0.4, p.y, z + 0.04), (0.5, 0.5, 0.08))
+    put("vgyidfpaw", Matrix.Translation((p.x, p.y, z + LAMP_H + 0.2))); LIGHTS.append((name % len(LIGHTS), (p.x, p.y, z + LAMP_H), energy, col, 0.08, True))
 
 def ceiling_lamps(a, b, z=0.0, step=8.0, y=0.9):
     F, L = frame(a, b, z); bpy.context.view_layer.update()
@@ -904,12 +930,41 @@ def plank_door(center, d, name, iron=False):
     bm.transform(F); bmd.transform(F); box_uv(obj("TIMBER_" + name, bm, M_TAR_).data, 0.8)
     box_uv(obj("DOOR_" + name, bmd, M_IRONDOOR_ if iron else M_OLD_).data, 0.8)
 
-def paint_sign(p, n, lines):
-    """벽에 칠한 글씨 (카드 4) — p = 벽 위 점, n = 벽이 향한 쪽(수평). 글자가 n 쪽을 본다, 줄마다 0.34 m 아래로"""
-    th = math.atan2(n.x, -n.y); wb = max(len(b) * sz * 0.95 for b, sz in lines) + 0.35; hb = 0.26 + sum(sz for _, sz in lines) * 1.25
-    boxes_at = Matrix.Translation(p + n * 0.03 + Vector((0, 0, 0.12 - hb / 2 + lines[0][1] * 0.9))) @ Matrix.Rotation(th, 4, "Z")
-    bm = bmesh.new(); box(bm, (0, 0, 0), (wb, 0.04, hb)); bm.transform(boxes_at); box_uv(obj("SIGNBOARD", bm, M_TAR_).data, 0.8)   # 어두운 나무판 (주황 글씨가 읽히게)
-    for k, (body, size) in enumerate(lines): text(body, tuple(p + n * 0.06 - Vector((0, 0, k * (lines[0][1] * 1.2)))), size, M_SIGN_, (math.radians(90), 0, th))
+def sign_hidden(c, n, w, h, eye):
+    """표지 판이 눈 자리(eye)에서 얼마나 가렸나 (0~1): 판 앞면의 점 7 × 3 으로 쏜다 — 판 · 글자보다 먼저 맞는 것이 있으면 가린 것 (사용자 10-01 "표지판이 벽에 박혀 있다")"""
+    bpy.context.view_layer.update(); deps = bpy.context.evaluated_depsgraph_get(); r = Vector((-n.y, n.x, 0)); bad = 0
+    for i in range(7):
+        for j in range(3):
+            q = c + r * (w * (i / 6 - 0.5) * 0.9) + Vector((0, 0, h * (j / 2 - 0.5) * 0.8)); v = q - eye
+            hit, loc, _, _, ob, _ = sc.ray_cast(deps, eye, v.normalized(), distance=v.length)
+            bad += bool(hit and (loc - q).length > 0.09 and not ob.name.startswith(("NOCOL_SIGN", "TEXT")))
+    return bad / 21
+
+def sign_size(front, back): return max(len(l[0]) * l[1] for l in front + back) * 0.95 + 0.3, 0.2 + sum(l[1] * 1.12 for l in front)   # 판 (폭, 높이)
+
+def whitewash(m, name):
+    """흰 칠한 나무판 재질 — 나뭇결 그림을 밝게 바랜 사본으로 바꾼다 (glTF 는 색을 곱하기만 해서 어두운 나무를 밝게 못 만든다)"""
+    t = m.copy(); t.name = name; inp = next(n for n in t.node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"]
+    tex = inp.links[0].from_node if inp.links else None
+    if tex is None or tex.type != "TEX_IMAGE": inp.default_value = (0.55, 0.53, 0.47, 1); return t
+    im = tex.image.copy(); im.name = name; px = np.array(im.pixels[:], dtype=np.float32).reshape(-1, 4)
+    px[:, :3] = 0.40 + px[:, :3] * 0.38; px[:, 1] *= 0.98; px[:, 2] *= 0.92; im.pixels = px.ravel(); im.pack(); tex.image = im; return t
+
+def hang_sign(c, d, front, back, floor):
+    """굴 입구에 매단 양면 표지 판. c = 판 가운데(수평 자리), d = 굴 쪽 방향(수평). front = 방 안에서 보이는 줄들(이 굴이 가는 곳), back = 굴에서 들어오며 보이는 줄들(이 방 이름)
+    판 밑 = 바닥 위 SIGN_Z (선 채로 지난다), 천장까지 쇠줄 둘. 돌려주는 값 (판 가운데, 폭, 높이)"""
+    w, hb = sign_size(front, back); C = Vector((c.x, c.y, floor + SIGN_Z + hb / 2)); F = Matrix.Translation(C) @ Matrix.Rotation(math.atan2(d.y, d.x), 4, "Z")   # 판의 X = 굴 방향(두께), Y = 폭
+    deps = bpy.context.evaluated_depsgraph_get(); bm = bmesh.new(); box(bm, (0, 0, 0), (0.05, w, hb))
+    for s_ in (-1, 1):                                                                         # 쇠줄: 판 위에서 천장까지 (바위 속 0.15 m)
+        top = F @ Vector((0, s_ * (w / 2 - 0.12), hb / 2)); hit, loc, *_ = sc.ray_cast(deps, top + Vector((0, 0, 0.02)), Vector((0, 0, 1)), distance=8)
+        L = (loc.z - top.z if hit else 0.6) + 0.15; box(bm, (0, s_ * (w / 2 - 0.12), hb / 2 + L / 2), (0.02, 0.02, L))
+    bm.transform(F); box_uv(obj("NOCOL_SIGNBOARD", bm, M_SIGNBOARD_).data, 0.8)
+    for lines, face in ((front, -d), (back, d)):
+        z = C.z + (hb - 0.1) / 2 if lines is front else C.z + sum(l[1] * 1.12 for l in lines) / 2
+        for body, sz, *mt in lines:
+            z -= sz * 0.86; text(body, tuple(Vector((C.x, C.y, z)) + face * 0.032), sz, mt[0] if mt else M_SIGNTEXT_, (math.radians(90), 0, math.atan2(face.x, -face.y))); z -= sz * 0.26
+    return C, w, hb
+SIGN_Z = 2.15                                                            # 표지 판 밑 높이 (m) — 저절로 숙이는 높이 1.95 m 위
 
 def box_uv_fast(me, per_m):
     """box_uv 와 같은 UV 를 numpy 로 (맵 바위는 면이 수백만)"""
@@ -991,12 +1046,12 @@ ROOM_H = {"M": 5.0, "K": 5.5, "S1": 4.4, "W1": 4.4, "P": 4.2, "L": 4.2, "H": 4.2
 SCENE_NAME = {"z6": "⑥ 승강장", "z3": "③ 광차 싣는 곳", "z7": "⑦ 바람문", "z8": "⑧ 무너진 기둥", "z1": "① 쇠동발 숲", "z2": "② 채탄 막장", "z9": "⑨ 그것의 굴"}
 
 def map4():
-    global ZT, PASS, SHELL, M_OLD_, M_TAR_, M_SIGN_, M_IRONDOOR_
+    global ZT, PASS, SHELL, M_OLD_, M_TAR_, M_IRONDOOR_, M_SIGNBOARD_, M_SIGNTEXT_
     plan = json.load(open(MAP_PLAN, encoding="utf-8"))
     global M_RUST, M_TIMB
     M_RUST = tint(M_RUST, (0.42, 0.36, 0.32), "rust_dark"); M_TIMB = tint(M_TIMB, (0.62, 0.56, 0.5), "timber_map")   # 머리등에 하얗게 번쩍이던 것 (검수 10-01)
     M_OLD_ = tint(M_TIMB, (0.62, 0.56, 0.5), "timber_rotten"); M_TAR_ = tint(M_TIMB, (0.45, 0.4, 0.38), "frame_tar")
-    M_SIGN_ = paint("orangepaint", (0.95, 0.45, 0.05), 0.8); M_IRONDOOR_ = paint("irondoor", (0.13, 0.12, 0.11), 0.5, 0.8)
+    M_IRONDOOR_ = paint("irondoor", (0.13, 0.12, 0.11), 0.5, 0.8)
     M_WATER = paint("water", (0.01, 0.012, 0.012), 0.03); M_MACH = paint("machine", (0.07, 0.1, 0.085), 0.6, 0.6); M_RED = paint("redbox", (0.3, 0.05, 0.03), 0.7)
     M_WHITE = paint("white", (0.5, 0.49, 0.45), 0.8); M_CLOTH = paint("tarp", (0.08, 0.07, 0.05), 0.95); M_METAL = paint("metal", (0.09, 0.09, 0.1), 0.55, 0.8)
     M_PAPER = paint("paper", (0.45, 0.42, 0.33), 0.9); M_LADDER = paint("ladderpaint", (0.3, 0.22, 0.05), 0.75, 0.4)
@@ -1273,17 +1328,23 @@ def map4():
     # ---- 빛: 불 켜진 방(7 m 칸마다) · 구역 입구 색 등 (카드 15) · 장면 입구 색 등
     bpy.context.view_layer.update()
     for n in rooms:
-        if n.get("lit"):
-            nx, ny = max(1, round(n["w"] / 7)), max(1, round(n["d"] / 7))
-            for ix in range(nx):
-                for iy in range(ny): lamp_at(n["x"] - n["w"] / 2 + (ix + 0.5) * n["w"] / nx, n["y"] - n["d"] / 2 + (iy + 0.5) * n["d"] / ny, n["z"], n["h"], "L%d")
-    WORK = ("W2", "F", "K", "K2", "E1", "E4", "V", "X", "N0", "N2", "N3", "R2", "LD", "W1", "N1", "M")   # 안 켜진 방 = 작업등 하나 (R1 · E3 · E2 · MAG 는 어둡게 둔다 — 괴물 굴 쪽)
-    for rid in WORK:
+        if n.get("lit"): lamp_grid(n, max(1, round(n["w"] / 7)), max(1, round(n["d"] / 7)), "L%d")
+    # 안 켜진 방 = 작업등. 사용자 10-01 "전등을 1.5배로 — 넓은 곳은 머리등으로는 멀리 안 보인다" → 넓은 방부터 칸 수를 늘린다 (R1 · E3 · E2 · MAG 는 어둡게 둔다 — 괴물 굴 쪽)
+    WORK = {"M": (4, 3), "K": (3, 2), "V": (3, 2), "W1": (4, 1), "N1": (2, 2), "N2": (3, 1), "E1": (2, 1), "K2": (2, 1)}   # 방 → (가로 칸, 세로 칸)
+    for rid, (nx, ny) in WORK.items(): lamp_grid(N[rid], nx, ny, "ZL_ffb070_%d", energy=50, col=(1.0, 0.69, 0.44))
+    for rid in ("W2", "F", "E4", "X", "N0", "N3", "R2", "LD"):                                    # 작은 방 = 하나 (가운데를 비켜서)
         n = N[rid]; lamp_at(n["x"] + n["w"] * 0.2, n["y"] + n["d"] * 0.15, n["z"], n["h"], "ZL_ffb070_%d", 50, (1.0, 0.69, 0.44))
+    bm = bmesh.new()                                                                           # ⑨ 그것의 굴 (40 × 26, 천장 12~16 m): 바닥에 세운 작업등 넷 — 계단 밑 · 가운데 북쪽 · 기둥 사이 · 큰 틈 앞
+    for p in ((-15, -5, 0), (-2, 7, 0), (9, 0, 0), (15, 2, 0)): pole_lamp(bm, zi["z9"]["T"] @ Vector(p), "ZL_ffb070_%d")
+    box_uv(obj("LAMPPOST", bm, M_TAR_).data, 0.8)
     for rid, zone in (("W1", "west"), ("E1", "east"), ("S1", "south"), ("N1", "north")):
         col = plan["zone_color"][zone]; n = N[rid]; lamp_at(n["x"], n["y"], n["z"], n["h"], "ZL_%s_%%d" % col, 120, tuple(int(col[i:i + 2], 16) / 255 for i in (0, 2, 4)))
     for zn, p, col in (("z1", (-20, 0, 0), "cfe0ff"), ("z2", (1.5, 0, 0), "ff3319"), ("z8", (1.0, 0, 0), "ff8c1a"), ("z9", (-30, 4, 3), "8c0d0d")):
         v = zi[zn]["T"] @ Vector(p); lamp_at(v.x, v.y, v.z, 2.2, "ZL_%s_%%d" % col, 60, tuple(int(col[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+    bm = bmesh.new()
+    for c, s_ in CORDS: box(bm, c, s_)
+    if bm.verts: obj("NOCOL_LAMPCORD", bm, paint("lampcord", (0.012, 0.012, 0.012), 1.0))            # NOCOL_ = 게임에서 부딪힘 없음
+    print("CHECK map4 lamps %d  hung on a cord %d (ceiling above %.1f m)" % (len(LIGHTS), len(CORDS), LAMP_H + 0.55))
     # ---- 사다리: 2편으로 내려가는 구멍(카드 10) · 서쪽 모임터 세로 구멍
     def ladder(x, y, z0, z1, yoff):
         bm = bmesh.new()
@@ -1297,7 +1358,7 @@ def map4():
     boxes("RAILING", M_LADDER, [(Vector((lx + sx, ly + sy, lz + 0.55)), (0.08, 0.08, 1.1)) for sx in (-1.6, 1.6) for sy in (-1.6, 1.6)] +
           [(Vector((lx, ly + sy, lz + 1.05)), (3.2, 0.06, 0.06)) for sy in (-1.6, 1.6)] + [(Vector((lx + sx, ly, lz + 1.05)), (0.06, 3.2, 0.06)) for sx in (-1.6, 1.6)])
     ladder(lw["x"], lw["y"], lw["z"], n2["z"] + 0.9, 1.0)
-    # ---- 표지: 방마다 이름 + 승강장 쪽 화살표 (넓이 우선으로 승강장까지 다음 곳)
+    # ---- 표지 (넓이 우선으로 승강장까지 다음 곳 = home)
     adj = {}
     for e in plan["edges"]:
         a, b = e["a"].split(".")[0], e["b"].split(".")[0]; pa, pb = P(e["a"]), P(e["b"]); via = [Vector((v[0], v[1], 0)) for v in e["via"]]
@@ -1308,21 +1369,39 @@ def map4():
         u = q.pop(0)
         for v, _ in adj.get(u, []):
             if v not in home: home[v] = u; q.append(v)
-    deps = bpy.context.evaluated_depsgraph_get(); signs = 0
-    for n in rooms:
-        c0 = W(n, 0, 0, 1.6); exits = [d for _, d in adj.get(n["id"], [])]
-        h = next((d for v, d in adj.get(n["id"], []) if v == home.get(n["id"])), None)
-        best = None
-        for t in np.linspace(0, 2 * math.pi, 32, endpoint=False):
-            f = Vector((math.cos(t), math.sin(t), 0))
-            if any(f.dot(d) > 0.55 for d in exits): continue
-            hit, loc, nrm, *_ = sc.ray_cast(deps, c0, f, distance=max(n["w"], n["d"]))
-            if not hit or Vector((nrm.x, nrm.y, 0)).length < 0.3: continue
-            nh = Vector((nrm.x, nrm.y, 0)).normalized(); r = Vector((-nh.y, nh.x, 0)); s_ = abs(h.dot(r)) if h else 0.5
-            if best is None or s_ > best[0]: best = (s_, loc, nh, r)
-        if best is None: continue
-        _, loc, nh, r = best; arrow = ("승강장 →" if h.dot(r) > 0 else "← 승강장") if h is not None else ""
-        paint_sign(loc + Vector((0, 0, 0.1)), nh, [(n["name"][:10], 0.36)] + ([(arrow, 0.24)] if arrow else [])); signs += 1
+    # 굴 입구마다 매단 양면 판 (사용자 10-01 "표지판이 벽에 박혀 알아보기 힘들다 · 어디 있는지 찾기 어렵다" — v2 는 방마다 하나를 출구 없는 쪽 벽에 붙였고 24 개 중 19 개가 바위에 묻혔다)
+    # 규칙 하나: 방에서 나가는 굴 입구마다, 입구에서 방 안쪽 1 m 에, 굴 가운데 머리 위. 방 안에서 보면 "이 굴이 가는 곳"(+ 승강장 가는 길이면 한 줄 더), 굴에서 들어오며 보면 "이 방 이름"
+    SIGN = {"P": "펌프실", "R0": "대기소", "L": "램프실", "W1": "서쪽 모임터", "W2": "갱목 쌓는 곳", "F": "막장 앞", "M": "옛 채굴 빈터", "K": "붕락 방", "K2": "갱목 창고", "MAG": "화약고",
+            "S1": "광차 조차장", "LD": "사다리 굴", "H": "대피소", "R2": "선로 끝", "R1": "옛 펌프장", "E1": "선풍기 방", "E2": "막아 둔 채굴적", "E4": "권양기 방", "E3": "광차 굽이", "V": "창고 칸 줄",
+            "X": "배전실", "N0": "계단 방", "N1": "저탄장", "N2": "북쪽 막장", "N3": "단층 방", "LW": "사다리",
+            "z6": "승강장", "z3": "광차 싣는 곳", "z7": "바람문", "z8": "무너진 기둥", "z1": "쇠동발 숲", "z2": "채탄 막장", "z9": "큰 빈터"}
+    # 모양 = 레퍼런스 공통점(10-01 조사: 장성 · 화순 · 폴란드 Guido · 독일 · 영국 갱 안 사진) — 굴 입구 위 천장에 사슬 둘로 매단 흰 칠 나무판 + 검은 글씨, 강조만 빨강. 어두운 판 + 주황 글씨는 실제 사진에 없었다
+    M_SIGNBOARD_ = whitewash(MAT["MAT_Timber_EXPORT"], "sign_whitewash"); M_SIGNTEXT_ = paint("sign_black", (0.03, 0.03, 0.035), 0.8); M_SIGNRED = paint("sign_red", (0.25, 0.012, 0.01), 0.8)
+    signs, hid_room, hid_tun, worst = 0, 0, 0, []
+    def floor_eye(p):                                                                         # 눈 자리가 바위 바닥 위인가 (돌 더미 · 광차 위가 아니다)
+        hit, f_, _, _, ob, _ = sc.ray_cast(bpy.context.evaluated_depsgraph_get(), Vector((p.x, p.y, p.z + 1.2)), Vector((0, 0, -1)), distance=4.0)
+        return Vector((f_.x, f_.y, f_.z + EYE)) if hit and ob.name.startswith(("SHELL", "FLOOR", "STEPS", "NOCOL_")) else None   # 디딤 판 · 물웅덩이 위도 설 수 있다
+    for e in plan["edges"]:
+        if e["kind"] == "shaft": continue
+        for me_, other in ((e["a"], e["b"]), (e["b"], e["a"])):
+            n = N.get(me_)
+            if n is None or n not in rooms or min(n["w"], n["d"]) < 5: continue                 # 방 쪽 끝만 (장면 · 판자 문 칸 · 사다리 오목은 뺀다)
+            oid = other.split(".")[0]; d = next(dd for v, dd in adj[n["id"]] if v == oid)
+            front = [(SIGN[oid], 0.24)] + ([("승강장 가는 길", 0.17, M_SIGNRED)] if home.get(n["id"]) == oid and oid != "z6" else []); back = [(SIGN[n["id"]], 0.24)]
+            w_, hb = sign_size(front, back); best = None
+            for k_ in (1.0, 1.8, 2.6):                                                         # 입구에서 방 안쪽으로 얼마나 — 굴 문틀이 낮으면 굴에서 판이 안 보인다. 양쪽 다 보이는 가장 가까운 자리
+                c = W(n, 0, 0) + d * (exit_t(n["id"], d) - k_); C = Vector((c.x, c.y, n["z"] + SIGN_Z + hb / 2))
+                fr = next((p_ for p_ in (floor_eye(c - d * b_) for b_ in (3.0, 4.0, 2.4, 5.5, 1.8, 1.0)) if p_), None); ft = floor_eye(c + d * (k_ + 2.0))   # 설 수 있는 눈 자리 (없으면 재기만 하고 캡처 자리는 안 만든다 — 사다리 구멍 · 비탈)
+                er = fr or Vector((c.x, c.y, n["z"] + EYE)) - d * 3.0; et = ft or Vector((c.x, c.y, n["z"] + EYE)) + d * (k_ + 2.0)   # 굴 쪽 눈 = 입구에서 굴 안 2 m
+                hr, ht = sign_hidden(C - d * 0.03, -d, w_, hb, er), sign_hidden(C + d * 0.03, d, w_, hb, et)
+                if best is None or hr + ht < best[0] - 0.05: best = (hr + ht, c, er, et, hr, ht, fr, ft)
+                if hr + ht <= 0.1: break
+            _, c, er, et, hr, ht, fr, ft = best; C, w_, hb = hang_sign(c, d, front, back, n["z"]); signs += 1; hid_room += hr > 0.1; hid_tun += ht > 0.1
+            if max(hr, ht) > 0.1: worst.append("%s→%s room %.0f %% tunnel %.0f %%" % (n["id"], oid, hr * 100, ht * 100))
+            if home.get(n["id"]) == oid:                                                       # 캡처 자리: 방마다 승강장 쪽 입구의 표지를 방 안에서 (몇 방은 굴에서 들어오며도)
+                if fr: SHOTS.append(("sign_%s" % n["id"], tuple(er), tuple(C)))
+                if ft and abs(ft.z - EYE - n["z"]) < 0.3 and n["id"] in ("W1", "S1", "E1", "K"): SHOTS.append(("signin_%s" % n["id"], tuple(et), tuple(C)))
+    print("CHECK map4 signs %d at tunnel mouths · hidden more than 10 %% from 3 m at eye height: room side %d · tunnel side %d%s" % (signs, hid_room, hid_tun, (" — " + "; ".join(worst[:20])) if worst else ""))
     # ---- 방 자리 (판정용 [ ] 키 · 사진 맞히기): 방 한쪽에서 건너편을 본다
     LOOK = {"N2": (0, 1), "X": (0, 1), "V": (0, -1), "E1": (0, 1), "E2": None, "R0": (0, -1), "L": (0, 1), "N3": (0, 1)}   # 주인공 소품이 있는 벽 쪽
     for n in rooms:
