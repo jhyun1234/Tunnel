@@ -30,7 +30,15 @@ M_WALL, M_FLOOR, M_TIMB, M_ROCK, M_RUST = (MAT[n] for n in ("MAT_RockWall_EXPORT
 for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)
 sc = bpy.context.scene
 
+METAL = {"new": None, "old": None, "wet": False}                         # 맵 모드의 쇠 사진 재질 (map4() 가 채운다) · wet = 물 가까운 방을 짓는 중
 def paint(name, rgb, rough=0.7, metal=0.0, emit=0.0):
+    if metal > 0 and not emit and METAL["new"]:                          # 쇠 칠 → 사진 (사용자 10-01: 쇠 = 이어 붙인 철판, 물 가까운 곳 · 깊은 층 = 칠 벗겨지고 녹슨 쇠)
+        base = METAL["old"] if METAL["wet"] and METAL["old"] else METAL["new"]; k = max(rgb)
+        if k > 0 and (k - min(rgb)) / k > 0.5:                           # 색이 진한 칠(노란 문 · 빨간 관 · 사다리): 색은 그대로 두고 사진의 결(노멀 · 거칠기)만 — 색을 곱하면 어두운 철판에 묻혀 칠 색이 죽는다
+            t = base.copy(); t.name = name; b = next(n for n in t.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+            for l in list(b.inputs["Base Color"].links): t.node_tree.links.remove(l)
+            b.inputs["Base Color"].default_value = (*rgb, 1); return t
+        return tint(base, tuple(c / k for c in rgb) if k > 0 else (1, 1, 1), name)   # 회색 · 풀색 칠: 사진에 색조만 곱한다
     m = bpy.data.materials.new(name); m.use_nodes = True
     p = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
     p.inputs["Base Color"].default_value = (*rgb, 1); p.inputs["Roughness"].default_value = rough; p.inputs["Metallic"].default_value = metal
@@ -519,11 +527,25 @@ def tint(m, rgb, name):
     """재질 사본의 바탕색에 rgb 를 곱한다 — 나뭇결은 그대로 두고 칠 · 타르 색만"""
     t = m.copy(); t.name = name; nt = t.node_tree
     inp = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"]
+    if inp.links and inp.links[0].from_node.type == "MIX":                # 이미 곱한 재질 — 곱하기를 두 겹으로 쌓으면 glTF 에 마지막 것만 나간다(썩은 동발이 보통 나무 색으로 나갔다, 10-01 조사 12)
+        b = [x for x in inp.links[0].from_node.inputs if x.type == "RGBA"][1]; b.default_value = tuple(b.default_value[i] * rgb[i] for i in range(3)) + (1,); return t
     mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MULTIPLY"; mix.inputs["Factor"].default_value = 1.0
     a, b = [x for x in mix.inputs if x.type == "RGBA"][:2]; b.default_value = (*rgb, 1)
     if inp.links: nt.links.new(inp.links[0].from_socket, a)
     else: a.default_value = inp.default_value
     nt.links.new(next(x for x in mix.outputs if x.type == "RGBA"), inp); return t
+
+CC0 = os.path.join(ROOT, "build", "tex_test", "cc0")                   # 모은 무료(CC0) 사진 질감 — 조사 12. git 에 없다: 없으면 옛 재질로 굽고 로그에 적는다 (받는 곳은 폴더마다 source.txt)
+def cc0_mat(rel, tile_m, name, mul=None, per_m=0.8, metal=False):
+    """CC0 사진 재질. tile_m = 한 장이 덮는 m, per_m = 그 물체들의 box_uv 값. 없으면 None"""
+    d = os.path.join(CC0, rel)
+    if not os.path.isdir(d): print("CHECK cc0 missing %s — old material kept" % rel); return None
+    m = tex_mat(d, tile_m); m.name = name; nt = m.node_tree; mp = next(n for n in nt.nodes if n.type == "MAPPING"); mp.inputs["Scale"].default_value = (1 / (per_m * tile_m),) * 3
+    mf = next((os.path.join(d, f) for f in sorted(os.listdir(d)) if "metal" in f.lower().replace(os.path.basename(d).lower(), "") and f.lower().endswith((".jpg", ".png"))), None)
+    if metal and mf:
+        n = nt.nodes.new("ShaderNodeTexImage"); n.image = bpy.data.images.load(mf); n.image.colorspace_settings.name = "Non-Color"; nt.links.new(mp.outputs["Vector"], n.inputs["Vector"])
+        nt.links.new(n.outputs["Color"], next(x for x in nt.nodes if x.type == "BSDF_PRINCIPLED").inputs["Metallic"])
+    return tint(m, mul, name) if mul else m
 
 def slab(bm, x, a, b, z0, ta, tb, t):
     """세운 판자 하나 — y a~b, 두께 t (x 방향), 위 끝이 비스듬 (ta → tb, 아치에 맞춘다)"""
@@ -1049,13 +1071,19 @@ def map4():
     global ZT, PASS, SHELL, M_OLD_, M_TAR_, M_IRONDOOR_, M_SIGNBOARD_, M_SIGNTEXT_
     plan = json.load(open(MAP_PLAN, encoding="utf-8"))
     global M_RUST, M_TIMB
-    M_RUST = tint(M_RUST, (0.42, 0.36, 0.32), "rust_dark"); M_TIMB = tint(M_TIMB, (0.62, 0.56, 0.5), "timber_map")   # 머리등에 하얗게 번쩍이던 것 (검수 10-01)
-    M_OLD_ = tint(M_TIMB, (0.62, 0.56, 0.5), "timber_rotten"); M_TAR_ = tint(M_TIMB, (0.45, 0.4, 0.38), "frame_tar")
+    # 사용자 10-01 질감 결정(비교 그림 번호): 나무 4 검게 칠한 판자 · 7 껍질 벗긴 거친 나무 / 쇠 5 이어 붙인 철판 · 8 칠 벗겨지고 녹슨 쇠(물 가까운 곳 · 깊은 층일수록) / 천 · 자루 4
+    # 나눔(Claude): 갱목 · 동발 · 판자 = 거친 나무(밝기 0.38 이라 어둡게 물들임) · 문틀 · 디딤판 · 받침 · 기둥(타르 칠) = 검은 판자. 쇠는 물 고인 방(P · R1)만 녹슨 것, 나머지 철판 — 더 깊은 층은 METAL["wet"] 를 넓힌다
+    old_rust, old_timb = tint(M_RUST, (0.42, 0.36, 0.32), "rust_dark"), tint(M_TIMB, (0.62, 0.56, 0.5), "timber_map")   # 사진이 없을 때 (머리등에 하얗게 번쩍이던 것, 검수 10-01)
+    METAL["new"] = cc0_mat("metal/metal_plate_02", 2.0, "metal_plate"); METAL["old"] = cc0_mat("metal/rusty_metal_04", 2.0, "metal_rusty")   # 금속 지도는 안 쓴다 — 튀는 빛 · 비침이 없는 굴에서 금속 면은 새까맣게만 보였다(권양기 · 배전반). 녹 · 칠은 원래 금속 면이 아니다
+    M_RUST = METAL["new"] or old_rust; M_RUST_W = METAL["old"] or old_rust
+    M_TIMB = cc0_mat("wood/rough_wood", 0.5, "timber_map", (0.36, 0.31, 0.27)) or old_timb
+    M_OLD_ = tint(M_TIMB, (0.7, 0.68, 0.66), "timber_rotten"); M_TAR_ = cc0_mat("wood/black_painted_planks", 1.6, "frame_tar", (0.95, 0.85, 0.72)) or tint(old_timb, (0.72, 0.71, 0.76), "frame_tar")
     M_IRONDOOR_ = paint("irondoor", (0.13, 0.12, 0.11), 0.5, 0.8)
     M_WATER = paint("water", (0.01, 0.012, 0.012), 0.03); M_MACH = paint("machine", (0.07, 0.1, 0.085), 0.6, 0.6); M_RED = paint("redbox", (0.3, 0.05, 0.03), 0.7)
-    M_WHITE = paint("white", (0.5, 0.49, 0.45), 0.8); M_CLOTH = paint("tarp", (0.08, 0.07, 0.05), 0.95); M_METAL = paint("metal", (0.09, 0.09, 0.1), 0.55, 0.8)
+    M_WHITE = paint("white", (0.5, 0.49, 0.45), 0.8); M_CLOTH = cc0_mat("misc/decrepit_wallpaper", 2.5, "tarp", (0.34, 0.31, 0.27)) or paint("tarp", (0.08, 0.07, 0.05), 0.95); M_METAL = paint("metal", (0.09, 0.09, 0.1), 0.55, 0.8)
     M_PAPER = paint("paper", (0.45, 0.42, 0.33), 0.9); M_LADDER = paint("ladderpaint", (0.3, 0.22, 0.05), 0.75, 0.4)
-    M_FENCE = tint(M_TIMB, (0.5, 0.42, 0.34), "fence")
+    M_FENCE = tint(M_TIMB, (0.8, 0.75, 0.68), "fence")
+    METAL["wet"] = True; M_MACH_W, M_METAL_W = paint("machine_wet", (0.07, 0.1, 0.085), 0.6, 0.6), paint("metal_wet", (0.09, 0.09, 0.1), 0.55, 0.8); METAL["wet"] = False   # 물 가까운 방의 기계
     lib("ufekaeedw", key="rail", rails=True)                                                   # 레일 조각 (레일이 X 로 눕게)
     for fid in ("ueujednfa", "ufmodhpfa", "ujzhahdfa"): lib(fid, along=True)                   # 광차 (긴 쪽을 X 로)
     for key, col in (("coal", (0.09, 0.09, 0.1)), ("stone", (0.55, 0.55, 0.58))):               # 스캔 돌 = 석탄 덩이 · 바위 돌 (같은 모델, 다른 색)
@@ -1238,11 +1266,11 @@ def map4():
         F = M_(n, dx, dy, yaw); boxes("BENCH", M_TIMB, [(F @ Vector((0, 0, 0.45)), (L, 0.4, 0.06), F.to_3x3())] + [(F @ Vector((s_ * (L / 2 - 0.3), 0, 0.22)), (0.12, 0.35, 0.44), F.to_3x3()) for s_ in (-1, 1)])
     def rail_line(n, x0, y0, x1, y1): rails((n["x"] + x0, n["y"] + y0), (n["x"] + x1, n["y"] + y1), n["z"])
     for n in rooms:
-        i = n["id"]; w, dd = n["w"], n["d"]
+        i = n["id"]; w, dd = n["w"], n["d"]; METAL["wet"] = i in ("P", "R1")
         if i == "P":                                                                          # 펌프실: 물웅덩이(가장 낮은 곳) + 배수 펌프 + 관
             boxes("NOCOL_SUMP", M_WATER, [(W(n, -1, 0, 0.03), (5, 5, 0.02))])
-            boxes("PUMP", M_MACH, [(W(n, 3.5, 3.5, 0.5), (1.4, 0.9, 1.0)), (W(n, 3.5, 3.5, 0.04), (1.8, 1.3, 0.08))]); cyl("PUMPMOTOR", M_METAL, W(n, 3.5, 2.7, 0.6), 0.3, 0.8, "Y")
-            cyl("PIPE_SUMP", M_RUST, W(n, 1.0, 3.5, 0.35), 0.09, 5.0, "X")                     # 웅덩이에서 펌프로 가는 관
+            boxes("PUMP", M_MACH_W, [(W(n, 3.5, 3.5, 0.5), (1.4, 0.9, 1.0)), (W(n, 3.5, 3.5, 0.04), (1.8, 1.3, 0.08))]); cyl("PUMPMOTOR", M_METAL_W, W(n, 3.5, 2.7, 0.6), 0.3, 0.8, "Y")
+            cyl("PIPE_SUMP", M_RUST_W, W(n, 1.0, 3.5, 0.35), 0.09, 5.0, "X")                     # 웅덩이에서 펌프로 가는 관
             cyl("PIPE_UP", paint("pipe2", (0.5, 0.07, 0.04), 0.55, 0.4), W(n, 3.5, 4.3, 2.0), 0.1, 4.0, "Z")
         elif i == "R0":                                                                       # 대기소 겸 신호소: 긴 의자 줄 · 게시판 · 전화
             for k in range(3): bench(n, -6 + k * 5, dd / 2 - 1.0)
@@ -1284,7 +1312,7 @@ def map4():
             rail_line(n, -w / 2 + 0.5, 0, w / 2 - 1.5, 0); boxes("BUFFER", M_TAR_, [(W(n, w / 2 - 1.2, 0, 0.4), (0.5, 1.4, 0.8))]); cart(n, 1, 0, 0, tarp=True)
             pile(n, w / 2 - 0.6, 0, "stone", 0.8, 1.2, 0.8, 25, 2, 6)                              # 선로 끝 흙 · 돌 둔덕
         elif i == "R1":                                                                       # 물 고인 옛 펌프장: 발목 물 + 멈춘 펌프
-            boxes("NOCOL_WATER", M_WATER, [(W(n, 0, 0, 0.18), (w - 0.6, dd - 0.6, 0.02))]); boxes("OLDPUMP", M_RUST, [(W(n, 3, 3, 0.6), (1.6, 1.0, 1.2))])
+            boxes("NOCOL_WATER", M_WATER, [(W(n, 0, 0, 0.18), (w - 0.6, dd - 0.6, 0.02))]); boxes("OLDPUMP", M_RUST_W, [(W(n, 3, 3, 0.6), (1.6, 1.0, 1.2))])
         elif i == "E1":                                                                       # 선풍기 방: 큰 국부선풍기 + 찢어진 바람 관
             fy = dd / 2 - 1.6                                                                    # 선풍기: 짧은 원통 틀 + 날개 넷 + 받침 다리 (검수: 초록 캡슐이 공중에 떠 있었다)
             bm = bmesh.new()
@@ -1318,6 +1346,7 @@ def map4():
             boxes("COALBAND", cw, [(W(n, -w / 4, dd / 2 - 0.05, 1.0), (w / 2, 0.15, 0.7)), (W(n, w / 4, dd / 2 - 0.05, 3.0), (w / 2, 0.15, 0.7)), (W(n, 0, dd / 2 - 0.05, 2.0), (0.2, 0.16, 2.8), Matrix.Rotation(math.radians(20), 3, "Y"))])
         elif i == "N2":                                                                       # 북쪽 막장 줄: 막장 셋마다 석탄 덩이
             for wall, dx_ in FACES: pile(dict(x=wall.x, y=wall.y + 3.5, z=n["z"]), 0, 0, "coal", 1.2, 1.0, 0.6, 20, 2, 5)
+    METAL["wet"] = False
     for wall, f, z0 in FENCES:                                                                # 막아 둔 채굴적 울타리 + 붉은 등 + 출입 금지 (1964 광산보안규칙 제156 · 158조)
         F = Matrix.Translation(wall + f * 1.5) @ Matrix.Rotation(math.atan2(f.y, f.x), 4, "Z")
         boxes("FENCE", M_FENCE, [(F @ Vector((0, -1.6 + k * 0.4, 1.2)), (0.05, 0.28, 2.4), F.to_3x3()) for k in range(9)] + [(F @ Vector((-0.06, 0, z_)), (0.05, 3.6, 0.12), F.to_3x3()) for z_ in (0.6, 1.8)])
@@ -1439,6 +1468,10 @@ def map4():
     print("CHECK map4 view %.1f %.1f %.1f" % view)
     for n in rooms: print("CHECK map4 label %s|%.1f|%.1f" % (n["name"][:10], n["x"], n["y"]))
     for z in Z: v = z["T"] @ Vector(((L3 / 2) if z["n"] == "z3" else (L7S + L7W) / 2 if z["n"] == "z7" else 10 if z["n"] in ("z8", "z2") else 0, 0, 0)); print("CHECK map4 label %s|%.1f|%.1f" % (SCENE_NAME[z["n"]], v.x, v.y))
+    # 좌표 없는 물체(통 · 관 · 감개 · 장면의 쇠 틀)에 상자 투영 좌표 — 사진 재질이 펴지게 (조사 12: cyl() 이 좌표를 안 만들어 녹슨 통 · 관에 사진이 안 펴졌다)
+    nouv = [o for o in bpy.data.objects if o.type == "MESH" and not o.data.uv_layers and any(m_ and m_.use_nodes and any(x.type == "TEX_IMAGE" for x in m_.node_tree.nodes) for m_ in o.data.materials)]
+    for o in nouv: box_uv(o.data, 0.8)
+    print("CHECK map4 photo materials: wood %s · tar %s · metal %s / %s · cloth %s · box-uv added to %d objects" % tuple(["cc0" if os.path.isdir(os.path.join(CC0, d_)) else "OLD" for d_ in ("wood/rough_wood", "wood/black_painted_planks", "metal/metal_plate_02", "metal/rusty_metal_04", "misc/decrepit_wallpaper")] + [len(nouv)]))
     return dict(lights=LIGHTS, adapt=((0, 0, 3), 1, 1), fills=([], 3, 0, 1), shots=SHOTS, people=[(0, 0, 0)], ortho=view[2], side_z=2, center=view[:2], map=True)
 
 if SCENE == "t": OUT = os.path.join(ROOT, "build", "check_map4", "tex_" + os.environ.get("TEXNAME", "now"))
