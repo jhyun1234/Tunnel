@@ -9,6 +9,8 @@ using UnityEngine;
 // 그 전 검사는 [ ] 자리 65곳에 서서만 봐서 문 · 굴 속 · 소품은 못 잡았다. 걷는 길 · 훑을 넓이는 굽기가 빈 노드로 넣는다(scene_mock.py: WALK_<번호>_<반폭 × 10>_<점> · AREA_<이름>_<가로 × 10>_<세로 × 10>).
 //   map4_shell_not_torn   바위 굴 그물(0.25 m 복셀)에 0.75 m 넘게 늘어난 변이 없다 = 겉면이 접힌(검은 틈 · 뾰족한 조각) 곳이 없다        (사보타주 tornshell)
 //   map4_no_floating      모든 물체 · 덩어리가 바위나 바위에 닿은 다른 것에 5 cm 안으로 닿아 있다 (닿음을 번져 가며 센다)                 (사보타주 floatprop)
+//   map4_heaps_solid      돌 · 석탄 더미마다 속 찬 둔덕이 있고, 덩이 가운데 바로 밑(덩이 키 안)에 둔덕이나 바위 바닥이 있다 — 덩이 위에 덩이를 얹은 탑이 없다   (사보타주 heaplift)
+//   map4_monster_gaps     괴물 틈 여섯 넘게: 입 안은 사람이 서고 · 그 뒤는 선 몸이 못 들고 · 6 m 넘게 끝까지 뚫려 있다                              (사보타주 gapplug)
 //   map4_doors_in_wall    판자 문 칸의 문틀 양옆 0.25 m 밖, 0.3 m 안에 바위가 있다 = 문이 벽에 달려 있다                                   (사보타주 lonedoor)
 //   map4_carts_on_rails   선 광차의 바퀴 넷 밑에 레일 머리가 3 cm 안으로 있다                                                              (사보타주 offrail)
 //   map4_no_auto_crouch   방 · 굴 · 장면 바닥을 0.25~0.5 m 칸으로 훑어, 선 몸이 들어가는 자리에서 저절로 숙여지는 곳(Map4.LowAbove)이 없다   (사보타주 lowdoor)
@@ -170,6 +172,60 @@ public partial class M1Check
             yield return null; Physics.SyncTransforms();
         }
 
+        // ---- 2b. 돌 · 석탄 더미 = 속 찬 둔덕 + 그 겉에 묻힌 덩이 (사용자 10-03 "돌 무더기를 일부러 이렇게 띄워 놓았나": 덩이 위에 덩이를 얹어 가운데에 한 줄 탑이 섰고 모서리만 닿아 떠 보였다 —
+        //      위 검사는 상자가 5 cm 안이면 닿은 것으로 쳐서 통과했다). 더미마다(HEAPC_<종류>_<번호>_<반지름 x × 10>_<y × 10>_<높이 × 10>): 덩이 가운데 바로 밑, 덩이 반 높이 안에 둔덕이나 바위 바닥이 있어야 한다
+        {
+            var heaps = m.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("HEAPC_")).ToArray();
+            var lumps = filters.Where(f => f.name.Contains("wd3efb0")).ToArray(); var bad = new List<string>(); int inHeaps = 0, noMound = 0, thin = 0;
+            if (sabotageName == "heaplift" && heaps.Length > 0)                                    // 사보타주: 가장 큰 더미의 덩이 열둘을 1.2 m 띄운다 (옛 탑처럼 덩이가 덩이 위에)
+            {
+                var hc = heaps.OrderByDescending(t => int.Parse(t.name.Split('_')[5])).First(); Vector3 c0 = B(hc.position);
+                foreach (var f in lumps.Where(f => { var d = B(f.GetComponent<Renderer>().bounds.center) - c0; return d.x * d.x + d.y * d.y < 9f; }).Take(12)) f.transform.position += Vector3.up * 1.2f;
+                Physics.SyncTransforms(); yield return null;
+            }
+            foreach (var hc in heaps)
+            {
+                var p = hc.name.Split('_'); float rx = int.Parse(p[3]) / 10f, ry = int.Parse(p[4]) / 10f, hh = int.Parse(p[5]) / 10f; Vector3 c = B(hc.position);
+                if (!filters.Any(f => f.name.StartsWith("HEAP_") && f.GetComponent<Renderer>().bounds.Contains(hc.position + Vector3.up * 0.1f))) { noMound++; bad.Add($"{hc.name} {At(hc.position)} has no mound"); continue; }
+                int n = 0;
+                foreach (var f in lumps)
+                {
+                    var b = f.GetComponent<Renderer>().bounds; Vector3 lc = B(b.center); float ex = (lc.x - c.x) / (rx * 1.45f), ey = (lc.y - c.y) / (ry * 1.45f);
+                    if (ex * ex + ey * ey > 1f || Mathf.Abs(lc.z - c.z) > hh + 2.5f) continue;
+                    n++; inHeaps++;
+                    bool held = Physics.RaycastAll(b.center + Vector3.up * b.extents.y, Vector3.down, b.size.y + 0.05f, ~0, QueryTriggerInteraction.Ignore).Any(h => h.collider.name.StartsWith("HEAP_") || IsShell(h.collider) || h.collider.name.StartsWith("FLOOR"));   // 덩이 꼭대기에서 밑동 5 cm 아래까지
+                    if (!held) bad.Add($"{hc.name} lump {At(b.center)} {b.size.y:0.00} m tall: no mound or floor under its centre");
+                }
+                if (n < 5) { thin++; bad.Add($"{hc.name} {At(hc.position)} only {n} lumps"); }
+            }
+            foreach (var s in bad.Take(40)) Debug.Log("MAP4GEO heap " + s);
+            Check("map4_heaps_solid", heaps.Length >= 6 && bad.Count == 0, $"{heaps.Length} rock and coal heaps, {inHeaps} lumps on them · heaps without a solid mound {noMound} · with fewer than 5 lumps {thin} · lumps with nothing solid under their centre (stacked lump on lump) {bad.Count - noMound - thin}" +
+                (bad.Count > 0 ? " — " + string.Join("; ", bad.Take(6)) : ""));
+        }
+        yield return null;
+
+        // ---- 2c. 괴물 틈 (사용자 10-03 "괴물이 튀어나올 만한 위험이 인지되는 곳이 없다 — 괴물 전용 틈이 없다"): 설계가 약속한 방마다 벽에 깊은 틈이 실제로 뚫려 있나.
+        //      점 넷(굽기가 넣는 빈 노드 MGAP · MGAPIN · MGAPMID · MGAPEND _<방>): 입 안 1 m 는 사람이 설 수 있고 · 좁은 데는 선 몸이 못 들고 · 맨 끝까지 바위에 안 묻혔다 (머리등이 끝에 안 닿는 깊이 6 m 넘게)
+        {
+            var all = m.GetComponentsInChildren<Transform>(); var mouths = all.Where(t => t.name.StartsWith("MGAP_")).ToArray(); var bad = new List<string>(); float shallow = 99f;
+            Transform Nd(string pre, string room) => all.FirstOrDefault(t => t.name == pre + "_" + room);
+            if (sabotageName == "gapplug" && mouths.Length > 0)                                    // 사보타주: 첫 틈의 맨 끝을 바위(상자)로 메운다
+            { var e = Nd("MGAPEND", mouths[0].name.Substring(5)); var c = GameObject.CreatePrimitive(PrimitiveType.Cube); c.transform.position = e.position; c.transform.localScale = Vector3.one * 1.2f; Physics.SyncTransforms(); yield return null; }
+            foreach (var g in mouths)
+            {
+                string room = g.name.Substring(5); Transform gi = Nd("MGAPIN", room), gm = Nd("MGAPMID", room), ge = Nd("MGAPEND", room);
+                if (gi == null || gm == null || ge == null) { bad.Add(room + " nodes missing"); continue; }
+                Vector3 Feet(Vector3 p) => Physics.Raycast(p, Vector3.down, out var fh, 3f, ~0, QueryTriggerInteraction.Ignore) ? fh.point : p + Vector3.down * 1.2f;
+                bool Body(Vector3 feet) => !Physics.CheckCapsule(feet + Vector3.up * 0.72f, feet + Vector3.up * (Tuning.BODY_HEIGHT - 0.4f), 0.38f, ~0, QueryTriggerInteraction.Ignore);
+                bool open = Body(Feet(gi.position)), narrow = !Body(Feet(gm.position)), deep = !Physics.CheckSphere(ge.position, 0.1f, ~0, QueryTriggerInteraction.Ignore) && !Physics.CheckSphere(gm.position, 0.1f, ~0, QueryTriggerInteraction.Ignore);
+                float len = Vector3.Distance(g.position, gm.position) + Vector3.Distance(gm.position, ge.position); shallow = Mathf.Min(shallow, len);
+                if (!open || !narrow || !deep) bad.Add($"{room} {At(g.position)} mouth a body can stand in {open} · too narrow for a body further in {narrow} · open to the far end {deep}");
+            }
+            foreach (var s2 in bad) Debug.Log("MAP4GEO gap " + s2);
+            Check("map4_monster_gaps", mouths.Length >= 6 && bad.Count == 0 && shallow > 5f, $"{mouths.Length} monster cracks in room walls (plan promised them; none were built before 10-03) · bad {bad.Count}{(bad.Count > 0 ? " — " + string.Join("; ", bad.Take(5)) : "")} · shortest run from mouth to far end {shallow:0.0} m");
+        }
+        yield return null;
+
         // ---- 3. 판자 문 칸의 문이 벽에 달려 있나
         {
             var frames = filters.Where(f => f.name.StartsWith("TIMBER_C") || f.name.StartsWith("TIMBER_MAG")).ToArray(); var lone = new List<string>();
@@ -235,6 +291,8 @@ public partial class M1Check
             void Probe(Vector3 at, bool centre)
             {
                 samples++;
+                var mound = Physics.RaycastAll(at + Vector3.up * 4f, Vector3.down, 4f, ~0, QueryTriggerInteraction.Ignore).Where(h => h.collider.name.StartsWith("HEAP_")).OrderBy(h => h.distance).FirstOrDefault();
+                if (mound.collider != null) at = mound.point;                                      // 돌 · 석탄 둔덕 위: 둔덕 겉에 선다 (속 빈 그물이라 바닥에서 재면 둔덕 속에 서서 덩이 밑에서 숙이는 것으로 잘못 셌다 — 10-03)
                 if (!Physics.Raycast(at + Vector3.up * 1.0f, Vector3.down, out var fl, 2.6f, ~0, QueryTriggerInteraction.Ignore)) return;
                 if (!Stands(fl.point)) return;
                 standable++;

@@ -151,7 +151,7 @@ public static class Tuning
     public const bool FAB_BLUE_FAR = false;                     // 굴 끝 파란 먼 빛(판정 키 X) — 사용자 10-01: 구역 입구 색 등(카드 15)으로만. 굴 채움(Z)은 넣는다
     // TEX-1 새 맵 바위 사진 (제안서 docs/제안서_TEX1_층과_환경에_따라_잇는_벽과_바닥.md). 칸 번호 = 비교 그림 번호(MAP4_질감자료_rock · _floor.jpg), 0 = 안 쓰는 번호.
     // 전부 처음 값(판정 전) — 실행 파일 -map4 의 키(Tab → 5 6 · 7 8 · − = · ← → · Home End)로 받은 숫자를 여기에 넣는다. 어느 방이 몇 번인지는 blender/map/map4_tex.json
-    public static readonly float[] MAP4_WALL_DARK = { 0f, 0f, 0.55f, 0.70f, 0.52f, 0.45f, 0.60f, 1f, 0.50f, 0.55f, 1f, 1f };            // 벽 ②~⑪ 어둡기 = 사진 색에 곱하는 수(빛 계산 눈금). ② = 큰 길(③ 과 같은 사진). 제안서 1절 "처음 곱"
+    public static readonly float[] MAP4_WALL_DARK = { 0f, 0f, 0.55f, 0.70f, 0.52f, 0.45f, 0.60f, 0.5f, 0.50f, 0.55f, 1f, 1f };            // 벽 ②~⑪ 어둡기 = 사진 색에 곱하는 수(빛 계산 눈금). ② = 큰 길(③ 과 같은 사진). 제안서 1절 "처음 곱" · ⑦ 석탄 1 → 0.5 (10-03: 머리등 앞에서 옅은 회갈색 자갈처럼 보여 "막장 같지 않다" — 석탄은 빛을 4 % 만 되돌린다, 조사 05. Claude 가 정한 처음 값, 키 Tab → 5 6 으로 판정)
     public static readonly float[] MAP4_FLOOR_DARK = { 0f, 0f, 1f, 0f, 0.85f, 0f, 0.35f, 0.32f, 0f, 0f, 0.47f, 0f, 0.87f };            // 바닥 ② ④ ⑥ ⑦ ⑩ ⑫ — 같이 쓰이는 벽보다 조금(× 0.8) 어둡게 맞춘 값(Claude)
     public static readonly float[] MAP4_WALL_TILE_M = { 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f, 2.42f, 2f };                          // 사진 한 장이 덮는 길이 m (Fab · ambientCG 는 모름 → 비교 그림과 같은 2 m)
     public static readonly float[] MAP4_FLOOR_TILE_M = { 2f, 2f, 2f, 2f, 2f, 2f, 2.1f, 2f, 2f, 2f, 1.3f, 2f, 2f };

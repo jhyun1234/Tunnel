@@ -154,24 +154,26 @@ def _bracket(P, x, y, z, wall_d):
     for sx in (-0.12, 0.12): box(P["bare"], (x + sx, wall_d - 0.03, z - 0.13), (0.035, 0.02, 0.035))
 
 
-def _discharge(P, dx, wall_d, ceil_h, broken):
-    """밸브 위 → 머리 위(관 아래 2.3 m 넘게)에서 벽으로 → 벽을 타고 천장 속으로. broken: 가운데 토막이 빠져 바닥에 누워 있다"""
-    m = P["steel_red"]; r = 0.075; hz = min(2.45, ceil_h - 0.45); wy = wall_d - 0.13
-    path = _fillet([(dx, 0, 1.68), (dx, 0, hz), (dx, wy, hz), (dx, wy, ceil_h + 0.25)], 0.14, 3)
+def _discharge(P, dx, wall_d, ceil_h, broken, riser_top=None):
+    """밸브 위 → 머리 위(관 아래 2.3 m 넘게)에서 벽으로 → 벽을 타고 천장 속으로. broken: 가운데 토막이 빠져 바닥에 누워 있다.
+    riser_top = 높이(m)면 벽을 타고 그 높이까지만 오르고 플랜지로 끝난다 — 거기서 맵이 수갱까지 가는 관을 잇는다 (사용자 10-03 "배수구가 위쪽으로 이어지는지? 이게 끝인지?": 천장 속으로 들어가 그냥 끝났다)"""
+    m = P["steel_red"]; r = 0.075; hz = min(2.45, ceil_h - 0.45); wy = wall_d - 0.13; zt = riser_top if riser_top else ceil_h + 0.25
+    path = _fillet([(dx, 0, 1.68), (dx, 0, hz), (dx, wy, hz), (dx, wy, zt)], 0.14, 3)
+    if riser_top: _joint(P, "steel_red", (dx, wy, zt - 0.03), (0, 0, 1), r)
     if not broken:
         sweep(m, path, r, 10)
         _joint(P, "steel_red", (dx, 0, 2.12), (0, 0, 1), r); _joint(P, "steel_red", (dx, wy * 0.5, hz), (0, 1, 0), r)
     else:
         tube(m, (dx, wy - 0.42, hz), (dx, wy - 0.14, hz), r, r - 0.012, 10)      # 벽 쪽에 남은 토막 (끝이 트여 있다)
         _joint(P, "steel_red", (dx, wy - 0.40, hz), (0, 1, 0), r)
-        sweep(m, _fillet([(dx, wy - 0.15, hz), (dx, wy, hz), (dx, wy, ceil_h + 0.25)], 0.14, 3), r, 10)
+        sweep(m, _fillet([(dx, wy - 0.15, hz), (dx, wy, hz), (dx, wy, zt)], 0.14, 3), r, 10)
         tube(m, (dx, 0, 1.68), (dx, 0, 1.80), r, r - 0.012, 10)                  # 밸브 위에 남은 짧은 목 (트인 입)
         a, b = Vector((-0.55, -0.92, 0.135)), Vector((0.95, -0.74, 0.135))       # 바닥에 누운 한 토막 (플랜지로 바닥에 닿는다)
         tube(P["ochre"], a, b, r, r - 0.012, 12); d = (b - a).normalized()
         _joint(P, "ochre", a + d * 0.03, d, r); _joint(P, "ochre", b - d * 0.03, d, r)
     _joint(P, "steel_red", (dx, wy, hz + 0.32), (0, 0, 1), r)
     _bracket(P, dx, wy, hz + 0.62, wall_d)
-    if ceil_h - hz > 1.0: _bracket(P, dx, wy, ceil_h - 0.14, wall_d)
+    if ceil_h - hz > 1.0 and not riser_top: _bracket(P, dx, wy, ceil_h - 0.14, wall_d)
 
 
 def _suction(P, tide):
@@ -227,7 +229,7 @@ def _starter(P, mats, wall_d, hang_open):
     return [txt, cable]
 
 
-def _standby(P, mats, tide, wall_d, ceil_h):
+def _standby(P, mats, tide, wall_d, ceil_h, stub=True):
     """빈 예비 받침: 펌프와 전동기를 떼어 간 자리 — 녹슨 빈 바닥 틀(ㄷ 형강)이 앵커 볼트에 그대로 물려 있고,
     벽에는 막음 플랜지로 막은 내보내는 관 토막, 받침 위에는 잘린 전선 끝"""
     x = STANDBY_X; _plinth(P, x, tide); r = 0.075
@@ -239,12 +241,13 @@ def _standby(P, mats, tide, wall_d, ceil_h):
         for sy in (-0.32, 0.32):
             box(P["rust"], (x + sx, sy, 0.46), (0.12, 0.12, 0.02)); cyl(P["rust"], (x + sx, sy, 0.45), (x + sx, sy, 0.55), 0.018, 6); box(P["rust"], (x + sx, sy, 0.49), (0.05, 0.05, 0.035))
     wy = wall_d - 0.13; sx_ = x - 0.22; zb = 1.78                                              # 벽 관 토막: 천장 속 → 1.78 m 에서 막음 플랜지
-    cyl(P["steel_red"], (sx_, wy, zb), (sx_, wy, ceil_h + 0.25), r, 10)
-    cyl(P["steel_red"], (sx_, wy, zb), (sx_, wy, zb + 0.026), r + 0.055, 12); cyl(P["rust"], (sx_, wy, zb - 0.03), (sx_, wy, zb - 0.004), r + 0.055, 12)
-    for i in range(6):
-        t = math.pi * (i + 0.5) / 3; box(P["iron"], (sx_ + (r + 0.032) * math.cos(t), wy + (r + 0.032) * math.sin(t), zb), (0.024, 0.024, 0.09))
-    _bracket(P, sx_, wy, zb + 0.45, wall_d)
-    if ceil_h - zb > 1.5: _bracket(P, sx_, wy, ceil_h - 0.14, wall_d)
+    if stub:
+        cyl(P["steel_red"], (sx_, wy, zb), (sx_, wy, ceil_h + 0.25), r, 10)
+        cyl(P["steel_red"], (sx_, wy, zb), (sx_, wy, zb + 0.026), r + 0.055, 12); cyl(P["rust"], (sx_, wy, zb - 0.03), (sx_, wy, zb - 0.004), r + 0.055, 12)
+        for i in range(6):
+            t = math.pi * (i + 0.5) / 3; box(P["iron"], (sx_ + (r + 0.032) * math.cos(t), wy + (r + 0.032) * math.sin(t), zb), (0.024, 0.024, 0.09))
+        _bracket(P, sx_, wy, zb + 0.45, wall_d)
+        if ceil_h - zb > 1.5: _bracket(P, sx_, wy, ceil_h - 0.14, wall_d)
     y1 = wall_d - 0.035                                                                        # 잘린 전선: 벽 고정쇠 → 바닥 → 받침 위에서 끝
     pts = [(x + 0.62, y1, 1.30), (x + 0.61, y1, 0.80), (x + 0.58, y1, 0.30), (x + 0.55, y1 - 0.06, 0.06), (x + 0.52, y1 - 0.25, 0.022), (x + 0.50, 0.62, 0.022),
            (x + 0.49, 0.49, 0.06), (x + 0.49, 0.425, 0.30), (x + 0.48, 0.42, 0.46), (x + 0.46, 0.33, 0.60), (x + 0.42, 0.20, 0.595), (x + 0.33, 0.06, 0.595), (x + 0.22, 0.02, 0.60)]
@@ -262,24 +265,26 @@ def _clutter(P):
     box(P["cloth"], (-1.04, -0.403, 0.39), (0.13, 0.012, 0.13), Matrix.Rotation(0.12, 3, "Y"))
 
 
-def build(mats, state="working", wall_d=1.2, ceil_h=3.6, standby=True):
+def build(mats, state="working", wall_d=1.2, ceil_h=3.6, standby=True, riser_top=None, broken=None, stub=True):
+    """broken: 내보내는 관의 가운데 토막이 빠졌는가 (None = 버려진 것이면 빠짐). stub: 빈 예비 받침 위 벽의 관 토막"""
     ab = state == "abandoned"; P = _Parts(mats, ab)
     _plinth(P, 0, ab); _baseplate(P); _motor(P); _pump(P)
-    dx = _valves(P); _discharge(P, dx, wall_d, ceil_h, ab); _suction(P, ab)
+    dx = _valves(P); _discharge(P, dx, wall_d, ceil_h, ab if broken is None else broken, riser_top); _suction(P, ab)
     extra = _starter(P, mats, wall_d, ab); _clutter(P)
-    if standby: extra += _standby(P, mats, ab, wall_d, ceil_h)
+    if standby: extra += _standby(P, mats, ab, wall_d, ceil_h, stub)
     return P.finish("PUMP") + extra
 
 
-def station(mats, state="working", wall_d=1.2, ceil_h=3.6, standby=True, sump_w=2.0, sump_d=1.5):
+def station(mats, state="working", wall_d=1.2, ceil_h=3.6, standby=True, sump_w=2.0, sump_d=1.5, riser_top=None, **kw):
     """build() + sump_cover() 를 맞는 자리에 함께 (빨아들이는 관이 판자 빠진 틈 7번으로 내려간다).
     웅덩이 가운데 = build 자리표 (-SX - sump_w * (7.5 / 9 - 0.5), SY) — 맵은 이 자리에 웅덩이를 판다"""
     cx = -SX - sump_w * (7.5 / 9 - 0.5)
-    return build(mats, state, wall_d, ceil_h, standby) + place(sump_cover(mats, sump_w, sump_d), Matrix.Translation((cx, SY, 0)))
+    return build(mats, state, wall_d, ceil_h, standby, riser_top, **kw) + place(sump_cover(mats, sump_w, sump_d), Matrix.Translation((cx, SY, 0)))
 
 
 def sump_cover(mats, w=2.0, d=1.5):
-    """물웅덩이 입: 콘크리트 턱(높이 0.12) + 타르 판자 9장 자리 중 2장 빠짐(틈 0.25 m) + 한 장은 비스듬히 빠져 있음 + 검은 물(z = −0.15)"""
+    """물웅덩이 입: 콘크리트 턱(높이 0.12) + 묵은 판자 9장 자리 중 2장 빠짐(틈 0.25 m) + 한 장은 비스듬히 빠져 있음 + 검은 물(z = −0.03, 턱 바로 밑 — 판자 틈으로 물이 보인다)
+    (사용자 10-03 "펌프 밑에 판이 무슨 뜻인지": 타르 칠 검은 판자 + 0.18 m 아래 검은 물이라 틈이 새까만 구멍으로만 보였다 → 판자는 잿빛 묵은 나무, 물은 판자 밑 0.15 m 로 올리고 턱 안쪽에 누런 물때)"""
     P = _Parts(mats, False); k = 0.20; h = 0.12
     for sy in (-1, 1): box(P["concrete"], (0, sy * (d + k) / 2, h / 2), (w + 2 * k, k, h))
     for sx in (-1, 1): box(P["concrete"], (sx * (w + k) / 2, 0, h / 2), (k, d, h))
@@ -287,12 +292,14 @@ def sump_cover(mats, w=2.0, d=1.5):
     for i in range(n):
         if i in (3, 7): continue                                                 # 빠진 자리 (7 = 빨아들이는 관이 내려가는 틈)
         j = ((i * 37) % 7 - 3) / 3.0                                             # 판자마다 조금씩 어긋남
-        box(P["tar"], (-w / 2 + p * (i + 0.5) + 0.004 * j, 0.03 * j, h + 0.025), (p - 0.022, L - 0.05 * abs(j), 0.05), Matrix.Rotation(math.radians(1.2 * j), 3, "Z"))
+        box(P["timber_old"], (-w / 2 + p * (i + 0.5) + 0.004 * j, 0.03 * j, h + 0.025), (p - 0.022, L - 0.05 * abs(j), 0.05), Matrix.Rotation(math.radians(1.2 * j), 3, "Z"))
     x3 = -w / 2 + p * 3.5                                                        # 빠진 판자: 한 끝은 턱에 걸리고 한 끝은 물속
     a, b = Vector((x3 + 0.02, d / 2 + 0.06, h + 0.03)), Vector((x3 - 0.03, d / 2 - 1.25, -0.42))
     R = (b - a).to_track_quat("Y", "Z").to_matrix() @ Matrix.Rotation(math.radians(14), 3, "Y")
-    box(P["tar"], (a + b) / 2, (p - 0.022, (b - a).length, 0.05), R)
+    box(P["timber_old"], (a + b) / 2, (p - 0.022, (b - a).length, 0.05), R)
     for sy in (-1, 1):                                                           # 판자 누르는 띠쇠 (양 턱 위)
         box(P["rust"], (-w / 2 + p * 1.5, sy * (d / 2 + k * 0.55), h + 0.056), (p * 3 - 0.04, 0.05, 0.012))
-    wb = bmesh.new(); box(wb, (0, 0, -0.16), (w, d, 0.02))
+    for sy in (-1, 1): box(P["ochre"], (0, sy * (d / 2 - 0.004), 0.03), (w, 0.008, 0.10))          # 턱 안쪽 누런 물때 (물이 차오르던 높이)
+    for sx in (-1, 1): box(P["ochre"], (sx * (w / 2 - 0.004), 0, 0.03), (0.008, d, 0.10))
+    wb = bmesh.new(); box(wb, (0, 0, -0.03), (w, d, 0.02))
     return P.finish("SUMP") + [obj("NOCOL_SUMP_WATER", wb, mats["water"])]
