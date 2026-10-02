@@ -28,13 +28,14 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 
 - 작업 폴더: `C:\Users\anjyo\Tunnel\new-game` · 저장소: https://github.com/jhyun1234/Godot_Game
 - `new-game/MIGRATION_NOTES.md` — 기능 상태, 스크립트 역할, 파이프라인, 미해결 문제, `Tuning.gd` 수치 339개
-- `new-game/LOOK_REFERENCE.md` — 렌더링·안개·조명·재질 값
+- 화면 기준(조명·안개·색·합격선)은 이 저장소의 `docs/ART_BIBLE.md` 다. Godot판 `new-game/LOOK_REFERENCE.md` 는 낡았다 — 보지 않는다.
 - Blender 원본: `C:\Users\anjyo\Documents\MineTunnel` · 옛 git 기록: `Tunnel/godot-git-backup`
 - 이 문서들을 이 저장소로 복사하지 않는다. 경로로 참조한다.
 
 ## 이 프로젝트의 규칙
 
 - 감각 수치(이동·램프·안개·괴물)는 Godot `Tuning.gd` 값이 출발점이다. 옮길 때 이름을 유지해 대조할 수 있게 한다.
+- 화면 값(머리등·전등·안개·색·합격선)을 바꾸면 `docs/ART_BIBLE.md` 도 같이 고친다.
 - 이 저장소는 **Public**이다. API 키·토큰·개인 경로 밖 비밀을 커밋하지 않는다.
 - 참고로 받은 다른 게임의 영상·캡처는 `build/refs/`(커밋 안 됨)에만 둔다. 저작권 — 공개 저장소에 올리지 않는다.
 - 에셋을 넣기 전에 출처를 확인한다. Hunyuan 2.0·2.1 산출물(`Documents/MineTunnel/mesh/*_s50_o512.glb`, `miner_painted.glb`, `blender/mixamo_v2_hunyuan/`)은 넣지 않는다 — 라이선스가 한국 제외.
