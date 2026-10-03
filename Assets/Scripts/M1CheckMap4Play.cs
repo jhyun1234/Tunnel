@@ -276,11 +276,20 @@ public partial class M1Check
     // 봇 걷기: 길찾기 꺾는 점을 따라 방향만 돌리고 W(+ Shift)를 누른다 (실제 키). walk · burst(Shift 를 짧게 — 2 s 달리고 1.5 s 걷기, 기력 40 밑이면 놓는다) · sprint(끝까지 — 탈진까지)
     IEnumerator BotWalk(Keyboard kb, Vector3 goal, string style, Action<float, float> done)
     {
-        var path = new NavMeshPath();
-        bool has = NavMesh.CalculatePath(OnNav(player.transform.position), OnNav(goal), NavMesh.AllAreas, path) && path.status == NavMeshPathStatus.PathComplete;
-        var pts = has ? path.corners.ToList() : new List<Vector3> { goal };
-        float len = 0f; for (int i = 1; i < pts.Count; i++) len += Vector3.Distance(pts[i - 1], pts[i]);
-        float limit = len / Tuning.CROUCH_SPEED + 15f, t = 0f, bt = 0f; bool shift = false; int ci = Mathf.Min(1, pts.Count - 1);
+        // 길 = 괴물 바닥(턱 0.75 m 까지)이라 사람(턱 0.3 m)이 못 넘는 곳이 있다(10-04: 무너진 돌무더기 앞에서 매판 멈춤). 사람처럼: 2 초 동안 0.5 m 도 못 가면
+        //   그 자리를 길에서 지우고(NavMeshObstacle 깎기 — 이 구간 동안 괴물 길에서도 빠진다) 다른 길로 다시 찾는다. 네 번까지
+        var pts = new List<Vector3>(); float len = 0f, len0 = -1f, limit = 0f, t = 0f, bt = 0f, still = 0f; bool shift = false; int ci = 0, reroutes = 0;
+        Vector3 lastP = player.transform.position;
+        void Plan()
+        {
+            var path = new NavMeshPath();
+            bool has = NavMesh.CalculatePath(OnNav(player.transform.position), OnNav(goal), NavMesh.AllAreas, path) && path.status == NavMeshPathStatus.PathComplete;
+            pts = has ? path.corners.ToList() : new List<Vector3> { goal };
+            len = 0f; for (int i = 1; i < pts.Count; i++) len += Vector3.Distance(pts[i - 1], pts[i]);
+            if (len0 < 0f) len0 = len;
+            limit = t + len / Tuning.CROUCH_SPEED + 15f; ci = Mathf.Min(1, pts.Count - 1);
+        }
+        Plan();
         while (t < limit && Flat(goal - player.transform.position) > 1.0f)
         {
             while (ci < pts.Count - 1 && Flat(pts[ci] - player.transform.position) < 0.6f) ci++;
@@ -295,10 +304,19 @@ public partial class M1Check
             }
             InputSystem.QueueStateEvent(kb, shift ? new KeyboardState(Key.W, Key.LeftShift) : new KeyboardState(Key.W)); kb.MakeCurrent();
             yield return null; t += Time.deltaTime;
+            if (Flat(player.transform.position - lastP) > 0.5f) { lastP = player.transform.position; still = 0f; } else still += Time.deltaTime;
+            if (still > 2f && reroutes < 4 && !player.frozen)                               // 잡혀 얼어 있을 때는 아니다
+            {
+                Vector3 at = player.transform.position + player.transform.forward * 1.0f, pp = at - Map4.Offset;
+                var ob = new GameObject("botwalk_blocked").AddComponent<NavMeshObstacle>(); ob.transform.position = at; ob.shape = NavMeshObstacleShape.Capsule; ob.radius = 1.2f; ob.height = 3f; ob.carving = true; ob.carveOnlyStationary = false;
+                reroutes++; Debug.Log($"BOTWALK a person can't get past plan ({-pp.x:0.0}, {-pp.z:0.0}, {pp.y:0.0}) — trying another way ({reroutes})");
+                InputSystem.QueueStateEvent(kb, new KeyboardState()); yield return null; yield return null; t += 2f * Time.deltaTime;
+                Plan(); still = 0f; lastP = player.transform.position;
+            }
         }
         InputSystem.QueueStateEvent(kb, new KeyboardState());
         yield return null;
-        done(t, len);
+        done(t, len0);
     }
 
     // ================= 첫 마주침 (-only map4meet [-rounds N]). 판마다 씬을 다시 불러 새 씨앗 — 결과는 static 에 모은다
@@ -310,6 +328,7 @@ public partial class M1Check
         if (m == null || d == null) { Check("map4meet_first", false, "no MAP4 game"); yield break; }
         var a = Environment.GetCommandLineArgs(); int ri = Array.IndexOf(a, "-rounds"); int rounds = ri >= 0 && ri + 1 < a.Length && int.TryParse(a[ri + 1], out int rr) ? rr : 6;
         var cc = player.GetComponent<CharacterController>(); stalker.returnToIntro = false;
+        stalker.enabled = true;                                                               // 검사 틀(Run)이 구간마다 괴물 두뇌를 끈다 — 끄인 채면 감독이 쉬어 6 판 내내 안 나왔다(10-04)
         var kb = InputSystem.AddDevice<Keyboard>("Map4MeetKeyboard"); var mouse = InputSystem.AddDevice<Mouse>("Map4MeetMouse");
         Vector3 spawn = OnNav(player.transform.position); float t0 = Time.time; float met = -1f; int mined = 0;
         bool Met() => stalker.state == Stalker.State.Alert || stalker.state == Stalker.State.Chase || stalker.state == Stalker.State.Catch;
@@ -319,14 +338,17 @@ public partial class M1Check
         foreach (var c in order)
         {
             if (met >= 0f || Time.time - t0 > 240f) break;
-            yield return BotWalk(kb, SpotStand(c), "burst", (t, len) => { });
+            float wt = 0f; yield return BotWalk(kb, SpotStand(c), "burst", (t, len) => wt = t);
+            bool there = Flat(player.transform.position - SpotStand(c)) < 1.5f; Vector3 pp = player.transform.position - Map4.Offset;
+            Debug.Log($"MAP4MEET {Time.time - t0:0} s: walked to {c.name} in {wt:0.0} s · {(there ? "there" : $"NOT there — stopped at plan ({-pp.x:0.0}, {-pp.z:0.0}, {pp.y:0.0}) {Flat(player.transform.position - SpotStand(c)):0} m short · stance {player.stance}")} · stage {d.Stage} · {d.phase}");
+            if (!there) yield return Capture($"69_meet_stuck_{meetTimes.Count + 1}_{c.name.Replace("SLOT_Pocket_", "")}", _ => { });
             if (met >= 0f || c.pocket == null) continue;
             Vector3 aim = c.pocket.transform.position - pickaxe.cam.position;
             player.transform.rotation = Quaternion.LookRotation(Flat3(aim)); player.Pitch = -Mathf.Atan2(aim.y, Flat(aim)) * Mathf.Rad2Deg;
             InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
             for (float t = 0f; c.pocket != null && t < 15f && met < 0f; t += Time.deltaTime) { kb.MakeCurrent(); mouse.MakeCurrent(); yield return null; }
             InputSystem.QueueStateEvent(mouse, new MouseState()); player.Pitch = 0f;
-            if (c.pocket == null) mined++;
+            if (c.pocket == null) mined++; else Debug.Log($"MAP4MEET {c.name} not mined in 15 s");
             yield return new WaitForSeconds(0.8f);
         }
         while (met < 0f && Time.time - t0 < 240f) yield return null;             // 다 캤으면 그 자리에서 기다린다

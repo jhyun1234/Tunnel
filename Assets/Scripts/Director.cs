@@ -105,7 +105,12 @@ public class Director : MonoBehaviour
                 break;
             case Phase.Tunnel:
                 t -= dt;
-                if (t <= 0f) { phase = Phase.Warn; t = SabNoShake ? 0f : Tuning.EMERGE_WARN_S; warnFor = 0f; dustT = 0f; }
+                if (t <= 0f)
+                {
+                    var again = Choose(out float len2);                                           // 굴을 지나는 20~40 초 사이 사람은 다른 구역으로 간다 — 나오기 직전에 '지금' 마지막으로 일한 자리로 다시 고른다 (10-04 map4meet: 나왔을 때 사람과 71~181 m)
+                    if (again != null) { target = again; targetPath = len2; }
+                    phase = Phase.Warn; t = SabNoShake ? 0f : Tuning.EMERGE_WARN_S; warnFor = 0f; dustT = 0f;
+                }
                 break;
             case Phase.Warn:                                     // 돌가루 → 아무도 그 출구를 안 볼 때 나온다
                 t -= dt; warnFor += dt; Dust(dt);
