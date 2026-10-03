@@ -675,7 +675,7 @@ public static class Tuning
 
     // GAME-1 MAP4 에서 놀기 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md, 사용자 승인 10-03 "출발값으로"). 봇으로 맞춘 뒤 판정 키(DevHud Alt+숫자)로 고른다
     public const bool MAP4_GAME = true;                       // 인트로 "시작" = MAP4 승강장 (false = 옛 부스 맵 MAP2). -map4 는 괴물 없는 구조 · 재질 판정 그대로
-    public const int BOOTH_QUOTA = 6;                         // 몫 = 석탄 덩이 (광차 · 나르기는 BOOTH-2). 단계 게이지는 이것으로 나눈다 — 봇 결과에 따라 8 까지
+    public const int BOOTH_QUOTA = 8;                         // 몫 = 석탄 덩이 (광차 · 나르기는 BOOTH-2). 단계 게이지는 이것으로 나눈다. 출발 6 → 8 (10-03 map4play_move: 남쪽 Shift 끊어 달리기 123 s < 150 s)
     public static readonly string[] COAL_AREAS = { "N", "W", "S", "E" };   // 구역 넷 = 북 · 서 · 남 · 동 (SLOT_Pocket_<구역>_<번호>, scene_mock.py)
     public const int COAL_OPEN_RICH = 5, COAL_OPEN_POOR = 1;  // 판마다 좋은 광맥 구역은 5곳, 나머지 구역은 1곳씩 연다
     public const float GAUGE_STEP = 25f;                      // 게이지 100 = 몫을 깔끔하게 다 채움. 이만큼마다 한 단계

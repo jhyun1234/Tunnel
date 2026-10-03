@@ -1492,8 +1492,8 @@ def map4():
     #   지금 빌드에는 괴물이 없다(모양만). 괴물이 여기로 드나드는 동작은 다음 번호(바위 틈 드나들기 MR1 R3)
     CRACK_WANT = (("W2", "W", 0.0), ("M", "N", -9.0), ("K", "W", 1.0), ("E2", "S", -5.5), ("V", "W", 0.0), ("N3", "W", 0.0), ("E3", "N", 0.0))   # (방, 벽, 벽 가운데에서 세계 좌표 +x · +y 쪽으로 m)
     # GAME-1 (제안서 3절 "석탄 자리마다 25 m 안에 출구 하나", 불 켜진 방 · 승강장 안은 안 뚫는다): 북쪽 막장 줄 남쪽 벽 · 막장 앞 방 서쪽 벽 · 선로 끝 방 북쪽 벽 · 물 고인 옛 펌프장 북쪽 벽 ·
-    #   사다리 굴 동쪽 벽(조차장 남쪽 벽 석탄 — 조차장은 불 켜진 방) · 권양기 방 남쪽 벽. 아래 석탄 자리 고르기가 25 m 를 잰다 (CHECK map4 exits)
-    CRACK_WANT += (("N2", "S", -4.0), ("F", "W", -1.0), ("R2", "N", 3.5), ("R1", "N", -2.5), ("LD", "E", 0.0), ("E4", "S", -2.0))
+    #   사다리 굴 동쪽 벽(조차장 남쪽 벽 석탄 — 조차장은 불 켜진 방) · 권양기 방 남쪽 벽 · 창고 칸 줄 동쪽 벽(동벽 석탄이 서벽 틈에서 길로 27 m — map4play_exits 10-03). 아래 석탄 자리 고르기가 25 m 를 잰다 (CHECK map4 exits)
+    CRACK_WANT += (("N2", "S", -4.0), ("F", "W", -1.0), ("R2", "N", 3.5), ("R1", "N", -2.5), ("LD", "E", 0.0), ("E4", "S", -2.0), ("V", "E", -5.0))
     assert not any(N[r_].get("lit") for r_, _, _ in CRACK_WANT), "monster crack in a lit room"
     CRACKS = []
     def crack_path(w0, f, bend):                                                              # 틈 가운데 줄 (벽 점에서 바위 속으로): 입 1.7 m → 28° 꺾어 2.6 m → 55° 꺾어 3 m
@@ -1535,6 +1535,8 @@ def map4():
             if found: break
         if found: t, w0, bend = found; CRACKS.append((rid, f, w0, bend)); REC.setdefault(rid, []).append(((f, t), 1.3))
         print("CHECK map4 monster crack %s wall %s: %s" % (rid, side, ("at (%.1f, %.1f) bend %+d" % (found[1].x, found[1].y, found[2])) if found else "NOT placed — " + why))
+    def gap_key(k_):                                                                          # 빈 노드 이름 꼬리: 한 방에 틈이 둘이면 둘째는 <방>2 (창고 칸 줄 서 · 동 — 이름이 같으면 Blender 가 .001 을 붙인다)
+        n_ = sum(1 for c_ in CRACKS[:k_] if c_[0] == CRACKS[k_][0]); return CRACKS[k_][0] + ("%d" % (n_ + 1) if n_ else "")
     def closet_spot(r, p):                                                                    # 방 r 의 벽에서 p 에 가장 가까운 '빈 벽' 자리 (굴 입구 · 홈 · 모서리 · 다른 문 칸에서 떨어진 곳)
         best = None
         for f in (Vector((1, 0, 0)), Vector((-1, 0, 0)), Vector((0, 1, 0)), Vector((0, -1, 0))):
@@ -2209,8 +2211,8 @@ def map4():
             put("stone", Matrix.Translation((q.x, q.y, floor_at(q.x, q.y, z0) - sh0 * sc_ * 0.3)) @ R(rnd.uniform(0, 360)) @ Matrix.Diagonal((sc_, sc_, sc_, 1)) @ Matrix.Translation((-sxc, -syc, -sz0)))
         path = crack_path(w0, f, bend)                                                      # 검사 map4_monster_gaps 가 읽는 점 넷: 입(벽 면) · 입 안 1 m · 좁은 데 가운데 · 맨 끝 0.4 m 앞
         for nm_, pt_ in (("MGAP", w0), ("MGAPIN", w0 + f * 1.0), ("MGAPMID", path[1][0].lerp(path[1][1], 0.55)), ("MGAPEND", path[2][0].lerp(path[2][1], 0.86))):
-            e_ = bpy.data.objects.new("%s_%s" % (nm_, rid), None); e_.location = Vector((pt_.x, pt_.y, z0 + 1.2)); sc.collection.objects.link(e_)
-        SHOTS.append(("gap_%s" % rid, tuple(w0 - f * 4.0 + u * 0.8 + Vector((0, 0, EYE))), tuple(w0 + f * 1.0 + Vector((0, 0, 1.4)))))
+            e_ = bpy.data.objects.new("%s_%s" % (nm_, gap_key(k_)), None); e_.location = Vector((pt_.x, pt_.y, z0 + 1.2)); sc.collection.objects.link(e_)
+        SHOTS.append(("gap_%s" % gap_key(k_), tuple(w0 - f * 4.0 + u * 0.8 + Vector((0, 0, EYE))), tuple(w0 + f * 1.0 + Vector((0, 0, 1.4)))))
     # ---- 천장 구멍 꾸밈 (사용자 10-03 판정 ③ ⓑ — 벽 틈처럼 "저기로 드나든다"로 읽히게, 벽 틈 꾸밈과 같은 법): 입 둘레 천장에 누워 구멍 쪽을 가리키는 긁힌 자국 여섯 군데 × 네 줄
     #   + 목 안쪽 세로 자국 + 밑에 떨어진 돌 5~7 (붕락 방은 돌 더미 윗면 위, 옛 채굴 빈터는 무너진 돌 언덕을 비켜 바닥에). 벽에서 구멍까지 이어지는 자국은 넣지 않았다 (지적 밖 — 물어본다).
     #   빈 노드 CHIM(입 가운데, 천장 높이) · CHIMP1 · CHIMP2(꺾는 점) · CHIMEND(끝 0.4 m 앞) _<방> = 검사 map4_ceiling_holes
@@ -2452,7 +2454,7 @@ def map4():
     #   굴 입구 · 홈 · 문 칸 · 벽 소품 · 괴물 틈 · 천장 구멍 가장자리에서 1.5 m · 0.8 m 앞 1.6 m 밑에 설 바닥(바위 · 바닥 판 · 더미) · 앞 1 m 가 빔 · 괴물 출구(틈 입 · 천장 구멍 입) 25 m 안.
     #   빈 노드 SLOT_Pocket_<구역>_<번호> = 벽 겉 점 · SLOTOUT_<구역>_<번호> = 벽 면에서 0.8 m 바깥 (캐는 사람이 서는 쪽 — 게임은 길찾기 바닥으로 다시 잰다)
     bpy.context.view_layer.update(); dg = bpy.context.evaluated_depsgraph_get(); ST = T1["S"]
-    EXITS = [("MGAP_" + rid, w0 + Vector((0, 0, 1.2))) for rid, f, w0, bend in CRACKS] + [("CHIM_" + rid, v_[0]) for rid, v_ in CHIMS.items()]   # 게임의 출구 빈 노드 자리
+    EXITS = [("MGAP_" + gap_key(k_), w0 + Vector((0, 0, 1.2))) for k_, (rid, f, w0, bend) in enumerate(CRACKS)] + [("CHIM_" + rid, v_[0]) for rid, v_ in CHIMS.items()]   # 게임의 출구 빈 노드 자리
     def seg_d(p, a, b):
         ab, ap = (b - a).to_2d(), (p - a).to_2d(); t = max(0.0, min(1.0, ap.dot(ab) / max(ab.length_squared, 1e-9))); return (ap - ab * t).length
     side_ = lambda f: Vector((-f.y, f.x, 0))
@@ -2524,8 +2526,8 @@ def map4():
               ("N2 west", W(n2_, -14, 2.5), (-1, 0), 2.0), ("N2 south", W(n2_, 10, -6), (0, -1), 2.0), ("N3 west", W(N["N3"], -6, 3.2), (-1, 0), 1.0)],   # 단층 방은 서쪽 반(띠 0.5~1.5 m)만
         "W": [("M pillar A north", pa + Vector((0, ay_ / 2, 0)), (0, -1), 1.2), ("M pillar A east", pa + Vector((ax_ / 2, 0, 0)), (-1, 0), 1.0),
               ("M pillar B east", pb + Vector((bx_ / 2, 0, 0)), (-1, 0), 1.2), ("M pillar B south", pb - Vector((0, by_ / 2, 0)), (0, 1), 1.0),
-              ("z2 west", S2(a2_ + 2.6, -3.0), tuple(D2(0, -1))[:2], 1.5), ("z2 east", S2(a2_ + 5.6, 3.0), tuple(D2(0, 1))[:2], 1.5), ("F west", W(N["F"], -4, 2.3), (-1, 0), 0.6),
-              ("z2 west", S2(a2_ + 5.6, -3.0), tuple(D2(0, -1))[:2], 1.5), ("M pillar A west", pa - Vector((ax_ / 2, 0, 0)), (1, 0), 1.0), ("M pillar B north", pb + Vector((0, by_ / 2, 0)), (0, -1), 1.0)],   # 채탄 막장은 앞쪽 반(막장 앞 방 틈에서 25 m)
+              ("z2 west", S2(a2_ + 5.6, -3.0), tuple(D2(0, -1))[:2], 1.5), ("z2 east", S2(a2_ + 5.6, 3.0), tuple(D2(0, 1))[:2], 1.5), ("F west", W(N["F"], -4, 2.3), (-1, 0), 0.6),
+              ("z2 west", S2(a2_ + 2.6, -3.0), tuple(D2(0, -1))[:2], 1.5), ("M pillar A west", pa - Vector((ax_ / 2, 0, 0)), (1, 0), 1.0), ("M pillar B north", pb + Vector((0, by_ / 2, 0)), (0, -1), 1.0)],   # 채탄 막장은 앞쪽 반(막장 앞 방 틈에서 25 m). 서벽 입구 쪽 2.6 m 는 뒤로 — 앞 3 m 에 설 바닥이 없었다(map4play_ore 10-03)
         "S": [("R2 south", W(N["R2"], -4.8, -4), (0, -1), 1.0), ("R2 south", W(N["R2"], -2.2, -4), (0, -1), 1.0), ("R2 south", W(N["R2"], 0.4, -4), (0, -1), 1.0),
               ("R1 west", W(N["R1"], -8, -1.5), (-1, 0), 2.0), ("R1 east", W(N["R1"], 8, -1.5), (1, 0), 2.0), ("S1 south", W(N["S1"], -7, -15), (0, -1), 2.5), ("S1 south", W(N["S1"], 7, -15), (0, -1), 2.5),
               ("R1 west", W(N["R1"], -8, -4.5), (-1, 0), 1.0), ("R1 east", W(N["R1"], 8, -4.5), (1, 0), 1.0), ("LD west", W(N["LD"], -4, -1), (-1, 0), 1.5), ("R2 south", W(N["R2"], 3.0, -4), (0, -1), 1.0)],

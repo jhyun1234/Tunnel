@@ -9,12 +9,12 @@ using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 
 // GAME-1 검사 (-only map4play, 제안서 docs/제안서_GAME1_MAP4에서_놀기.md 5절). 사람 길(인트로 → 아무 키 → "시작")로 들어와 DevHud 가 놓은 MAP4 게임을 그대로 탄다 — 맵 · 괴물 · 감독을 검사가 따로 놓지 않는다.
-//   map4play_start   플래그 없이 MAP4 승강장 · 감독 · 괴물 · 옛 부스 맵 꺼짐                                   (사보타주 startbooth)
+//   map4play_start   플래그 없이 MAP4 승강장 · 감독 · 괴물 (옛 부스 맵은 켜 둔다 — 판정 받은 -map4 모습과 같게)                                 (사보타주 startbooth)
 //   map4play_nav     괴물 바닥(Map4_NavMesh) 넓이 · 승강장에서 석탄 28 · 출구 · 집 셋까지 길                    (nonav)
-//   map4play_ore     씨앗 12 개: 좋은 광맥 5 + 나머지 1 씩 = 8 · 좋은 구역이 바뀐다 · 지금 판 8 곳 · 닫힌 조각 숨김 · 하나 캐면 덩이   (noore · sameseed)
+//   map4play_ore     씨앗 12 개: 좋은 광맥 5 + 나머지 1 씩 = 8 · 좋은 구역이 바뀐다 · 지금 판 8 곳 · 닫힌 조각 숨김 · 28 곳 모두 앞 바닥에서 곡괭이가 닿는다 · 하나 캐면 덩이   (noore · sameseed)
 //   map4play_exits   석탄 자리마다 굴 길이 25 m 안 출구 · 불 켜진 방 안 출구 0                                      (farexit · homeexit)
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
-//   map4play_stage   깔끔한 몫(콱 3 × 6) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
+//   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
 //   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있으면 안 나옴 · 보일 때 나온 수 0   (chaseplayer · noshake · seenexit)
 //   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 ↔ 가까운/먼 구역 왕복 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
@@ -60,7 +60,24 @@ public partial class M1Check
         }
         var live = m.coal.Where(c => c.open && c.pocket != null).ToList();
         int closedShown = m.coal.Count(c => !c.open && ((c.loose != null && c.loose.gameObject.activeInHierarchy) || (c.face != null && c.face.gameObject.activeInHierarchy)));
-        int offNav = live.Count(c => !NavMesh.SamplePosition(c.pocket.transform.position, out _, 2f, NavMesh.AllAreas));
+        // 28 곳 전부(이번 판에 닫힌 곳도): 석탄 앞 1.6 m 바닥(1.5 m 안)에 선 눈(1.6 m)에서 곡괭이가 닿나 — 판마다 8 곳만 보면 운으로 갈린다
+        var reachRows = new List<string>(); var cantMine = new List<string>();
+        foreach (var c in m.coal.Where(c => c.outT != null))
+        {
+            Vector3 o = c.outT.position - c.slot.position; o.y = 0f; o.Normalize();
+            bool onFloor = NavMesh.SamplePosition(c.slot.position + o * 1.6f, out var sh, 1.5f, NavMesh.AllAreas);
+            float reach = onFloor ? Vector3.Distance(sh.position + Vector3.up * 1.6f, c.slot.position) : 99f;
+            float nav = NavMesh.SamplePosition(c.slot.position, out var nh, 6f, NavMesh.AllAreas) ? Vector3.Distance(nh.position, c.slot.position) : 99f;
+            reachRows.Add($"{c.name.Replace("SLOT_Pocket_", "")} {reach:0.0} (floor {nav:0.0})");
+            if (reach > Tuning.MINE_RANGE - 0.5f)                                                 // 앞에 선 몸 자리를 무엇이 차지했나
+            {
+                Vector3 b0 = c.slot.position + o * 1.6f; b0.y = c.slot.position.y - 0.7f;
+                var blk = Physics.OverlapCapsule(b0, b0 + Vector3.up * 1.2f, Tuning.BODY_RADIUS, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore).Select(x => x.name).Distinct().Take(4);
+                cantMine.Add($"{c.name} {(onFloor ? reach.ToString("0.0") + " m" : "no floor")} (in the way: {string.Join(" ", blk)})");
+            }
+        }
+        Debug.Log("MAP4PLAY coal reach (eye → coal from 1.6 m in front): " + string.Join(", ", reachRows));
+        int offNav = cantMine.Count;
         int noParts = m.coal.Count(c => c.face == null || c.loose == null || c.gap == null || c.outT == null);
         var kb = InputSystem.AddDevice<Keyboard>("Map4PlayKeyboard"); var mouse = InputSystem.AddDevice<Mouse>("Map4PlayMouse");
         if (!pickaxe.hasPick) pickaxe.Return();
@@ -70,7 +87,7 @@ public partial class M1Check
         if (first != null) yield return MineOne(cc, kb, mouse, first.pocket, false, (p, t) => { popped = p; mineT = t; });
         yield return new WaitForSeconds(1.5f);
         Check("map4play_ore", counts && riches.Count >= 3 && sets.Count >= 6 && live.Count == 8 && closedShown == 0 && offNav == 0 && noParts == 0 && popped && player.ore > ore0,
-            $"12 seeds: 8 open each with 5 in the good seam {counts} · good seams seen {string.Join("", riches.OrderBy(x => x))} ({riches.Count}, want ≥ 3) · different sets {sets.Count} · this round: seed {m.seed} good {m.rich} open {live.Count} (want 8) closed chunks shown {closedShown} · pockets off the floor {offNav} · spots missing face/loose/gap/out {noParts} · mined {(first != null ? first.name : "-")} popped {popped} in {mineT:0.0} s · ore {ore0} → {player.ore}");
+            $"12 seeds: 8 open each with 5 in the good seam {counts} · good seams seen {string.Join("", riches.OrderBy(x => x))} ({riches.Count}, want ≥ 3) · different sets {sets.Count} · this round: seed {m.seed} good {m.rich} open {live.Count} (want 8) closed chunks shown {closedShown} · of 28 spots can't be mined from the floor in front (reach {Tuning.MINE_RANGE - 0.5f:0.0} m) {offNav} {string.Join(", ", cantMine)} · spots missing face/loose/gap/out {noParts} · mined {(first != null ? first.name : "-")} popped {popped} in {mineT:0.0} s · ore {ore0} → {player.ore}");
 
         // ---- 출구
         var far = new List<string>(); float worst = 0f; string worstName = "-";
@@ -86,7 +103,7 @@ public partial class M1Check
 
         // ---- 게이지: 같은 덩이를 세 방식으로 (실제 곡괭이 · 실제 소리)
         var pk = live.Where(c => c != first && c.pocket != null).Select(c => c.pocket).Where(p => p.transform.position.y - OnNav(p.transform.position + p.outDir * 1.6f, 1.5f).y >= Tuning.MINE_LOW_M + 0.1f).Take(3).ToList();
-        float[] dg = new float[3]; float firstStrike = -1f;
+        float[] dg = new float[3]; float firstStrike = -1f; var how = new List<string>();
         for (int k = 0; k < pk.Count; k++)
         {
             pickaxe.slipChance = k == 2 ? 1f : 0f;
@@ -94,8 +111,9 @@ public partial class M1Check
             bool watch = k == 0;
             IEnumerator Watch() { while (watch) { if (firstStrike < 0f && pickaxe.hitsLanded > strikes0) firstStrike = d.gauge - g0; yield return null; } }
             if (watch) StartCoroutine(Watch());
-            bool got = false; yield return MineOne(cc, kb, mouse, pk[k], k == 1, (p, t) => got = p);
+            bool got = false; float mt = 0f; string nm = pk[k].name; yield return MineOne(cc, kb, mouse, pk[k], k == 1, (p, t) => { got = p; mt = t; });
             watch = false; yield return null;
+            how.Add($"{nm.Replace("OrePocket_", "")} {(got ? "out" : "STUCK")} {mt:0.0}s {pickaxe.hitsLanded - strikes0} hits");
             dg[k] = got ? (d.gauge - g0) / Director.Lump : -1f;
         }
         pickaxe.slipChance = 0f;
@@ -104,7 +122,7 @@ public partial class M1Check
         float stepG = d.gauge - gw;
         bool order = pk.Count == 3 && dg[0] > 0f && dg[0] < dg[1] && dg[1] < dg[2];
         Check("map4play_gauge", order && Mathf.Abs(dg[0] - 1f) < 0.15f && dg[1] > 1.4f && dg[1] < 1.95f && dg[2] > 2.0f && dg[2] < 2.8f && Mathf.Abs(stepG) < 1e-4f && firstStrike > 0f && firstStrike <= 0.5f * Director.Lump,
-            $"one lump in lump units: stand clean {dg[0]:0.00} (want 1) · crouched {(pk.Count > 1 ? dg[1] : -1f):0.00} (want ~1.67) · with a slip {(pk.Count > 2 ? dg[2] : -1f):0.00} (want ~2.39) · walking + running 4 s {stepG:0.00} (want 0) · first strike {firstStrike:0.0} of a {Director.Lump:0.0} lump (want a third) · pockets used {pk.Count}");
+            $"one lump in lump units: stand clean {dg[0]:0.00} (want 1) · crouched {(pk.Count > 1 ? dg[1] : -1f):0.00} (want ~1.67) · with a slip {(pk.Count > 2 ? dg[2] : -1f):0.00} (want ~2.39) · walking + running 4 s {stepG:0.00} (want 0) · first strike {firstStrike:0.0} of a {Director.Lump:0.0} lump (want a third) · pockets used {pk.Count}: {string.Join(", ", how)}");
 
         // ---- 단계 (깔끔한 몫 = 콱 3 × BOOTH_QUOTA)
         d.gauge = 0f; var stages = new List<int>();
@@ -192,7 +210,7 @@ public partial class M1Check
                 if (quota > 0f && quota < fastest) { fastest = quota; fastestNote = $"{a} {style}"; }
             }
         Check("map4play_move", fastest < 1e5f && fastest >= Tuning.QUOTA_FLOOR_S,
-            $"fastest quota estimate {fastest:0} s ({fastestNote}) — want ≥ {Tuning.QUOTA_FLOOR_S:0} s, else raise BOOTH_QUOTA (6 → 8) · {string.Join(" | ", rows)}");
+            $"fastest quota estimate {fastest:0} s ({fastestNote}) — want ≥ {Tuning.QUOTA_FLOOR_S:0} s, else raise BOOTH_QUOTA (now {Tuning.BOOTH_QUOTA}) · {string.Join(" | ", rows)}");
         InputSystem.RemoveDevice(kb); InputSystem.RemoveDevice(mouse);
         player.runMul = 1f;
     }
@@ -201,6 +219,8 @@ public partial class M1Check
     IEnumerator MineOne(CharacterController cc, Keyboard kb, Mouse mouse, OrePocket pk, bool crouch, Action<bool, float> done)
     {
         if (!pickaxe.hasPick) pickaxe.Return();
+        float w0 = Time.time; while (player.mineLock && Time.time - w0 < 5f) yield return null;   // 앞 덩이의 내리기 동작이 끝날 때까지 (사람은 다음 자리까지 걷는 동안 끝난다 — 묶인 채 옮기면 고개가 앞 방향에 묶인다)
+        if (Time.time - w0 > 0.05f) Debug.Log($"MINEONE waited {Time.time - w0:0.00} s for the last swing to end before {pk.name}");
         Vector3 at = OnNav(pk.transform.position + pk.outDir * 1.6f, 1.5f);
         Teleport(cc, at + Vector3.up * 0.1f, Quaternion.LookRotation(-pk.outDir).eulerAngles.y);
         InputSystem.QueueStateEvent(kb, crouch ? new KeyboardState(Key.LeftCtrl) : new KeyboardState());
@@ -211,6 +231,11 @@ public partial class M1Check
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
         float t = 0f;
         for (; pk != null && t < 15f; t += Time.deltaTime) yield return null;
+        if (pk != null)                                                                       // 안 빠졌다: 어디에 섰고 겨눈 줄에 무엇이 걸렸나
+        {
+            var want = pk.transform.position + pk.outDir * 1.6f; var hits = Physics.RaycastAll(pickaxe.cam.position, pickaxe.cam.forward, 6f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore).OrderBy(h => h.distance).Take(5);
+            Debug.Log($"MINEONE stuck {pk.name}: eye→coal {Vector3.Distance(pickaxe.cam.position, pk.transform.position):0.00} m (reach {Tuning.MINE_RANGE}) · stood {Flat(player.transform.position - want):0.00} m off the 1.6 m spot · eye {pickaxe.cam.position.y - player.transform.position.y:0.00} m · facing off {Mathf.DeltaAngle(player.transform.eulerAngles.y, Quaternion.LookRotation(-pk.outDir).eulerAngles.y):0}° · pitch {player.Pitch:0} · mine lock {player.mineLock} · ray: {string.Join(", ", hits.Select(h => $"{h.collider.name} {h.distance:0.00}"))}");
+        }
         InputSystem.QueueStateEvent(mouse, new MouseState()); InputSystem.QueueStateEvent(kb, new KeyboardState());
         player.Pitch = 0f;
         yield return new WaitForSeconds(0.6f);
