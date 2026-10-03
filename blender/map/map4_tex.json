@@ -18,7 +18,7 @@
     "seam":      {"wall": 11, "floor": 10, "coalband": [0.6, 1.6], "name": "탄층 가까움"},
     "coalface":  {"wall": 7,  "roof": 8, "floor": 2, "name": "석탄 면"},
     "fault":     {"wall": 8,  "floor": 7,  "name": "단층"},
-    "fall":      {"wall": 5,  "floor": 7,  "name": "무너짐"},
+    "fall":      {"wall": 3,  "dim": 1, "floor": 7,  "name": "무너짐 (벽 ② = ③ 을 어둡게 — 사용자 10-03 판정 ③ \"회색 벽이 콘크리트처럼 보인다\" · 옛 벽 ⑤)"},
     "lair":      {"wall": 9,  "floor": 6,  "name": "그것의 굴 (6 m 아래)"},
     "lairhigh":  {"wall": 10, "floor": 6,  "name": "그것의 굴 (6 m 위)"},
     "sump":      {"wall": 9,  "floor": 4,  "band": 0.9, "name": "물 고인 곳"}

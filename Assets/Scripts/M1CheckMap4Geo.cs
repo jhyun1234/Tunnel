@@ -11,6 +11,9 @@ using UnityEngine;
 //   map4_no_floating      모든 물체 · 덩어리가 바위나 바위에 닿은 다른 것에 5 cm 안으로 닿아 있다 (닿음을 번져 가며 센다)                 (사보타주 floatprop)
 //   map4_heaps_solid      돌 · 석탄 더미마다 속 찬 둔덕이 있고, 덩이 가운데 바로 밑(덩이 키 안)에 둔덕이나 바위 바닥이 있다 — 덩이 위에 덩이를 얹은 탑이 없다   (사보타주 heaplift)
 //   map4_monster_gaps     괴물 틈 여섯 넘게: 입 안은 사람이 서고 · 그 뒤는 선 몸이 못 들고 · 6 m 넘게 끝까지 뚫려 있다                              (사보타주 gapplug)
+//   map4_ceiling_holes    천장 구멍 둘(K · M): 입 → 꺾는 점 둘 → 끝까지 뚫렸고 · 밑 8 m 안 선 자리 어디서도 끝이 안 보이고 · 긁힌 자국 16 줄 · 떨어진 돌 넷 넘게   (사보타주 chimplug · chimpeek · chimbare)
+//   map4_fan_ducts        바람 관(E1 · z2): 선풍기 출구 1 m 안에서 시작 · 점 사이 3 m 안 · 바위를 안 뚫고 · 끝이 막장 면 7 m 안 · 선풍기는 막장 9 m 밖          (사보타주 ductcut · ductfar)
+//   map4_air_lines        압축공기 관(E1 · z2 · N2): 점 사이 3.5 m 안 · 바위를 안 뚫고 · 두 끝은 밸브거나 벽 속으로 · 호스가 밸브와 착암기를 잇는다           (사보타주 pipeend · hoseloose)
 //   map4_doors_in_wall    판자 문 칸의 문틀 양옆 0.25 m 밖, 0.3 m 안에 바위가 있다 = 문이 벽에 달려 있다                                   (사보타주 lonedoor)
 //   map4_carts_on_rails   선 광차의 바퀴 넷 밑에 레일 머리가 3 cm 안으로 있다                                                              (사보타주 offrail)
 //   map4_no_auto_crouch   방 · 굴 · 장면 바닥을 0.25~0.5 m 칸으로 훑어, 선 몸이 들어가는 자리에서 저절로 숙여지는 곳(Map4.LowAbove)이 없다   (사보타주 lowdoor)
@@ -223,6 +226,113 @@ public partial class M1Check
             }
             foreach (var s2 in bad) Debug.Log("MAP4GEO gap " + s2);
             Check("map4_monster_gaps", mouths.Length >= 6 && bad.Count == 0 && shallow > 5f, $"{mouths.Length} monster cracks in room walls (plan promised them; none were built before 10-03) · bad {bad.Count}{(bad.Count > 0 ? " — " + string.Join("; ", bad.Take(5)) : "")} · shortest run from mouth to far end {shallow:0.0} m");
+        }
+        yield return null;
+
+        // ---- 2d. 천장 구멍 (사용자 10-03 판정 ③ ⓑ "천장 구멍은 저기서 갑자기 나오는 듯"): 굴뚝 꼴 구멍 둘(K · M)이 벽 틈처럼 꺾여 끝이 안 보이고 · 긁힌 자국 · 떨어진 돌이 있나.
+        //      빈 노드 CHIM(입 가운데, 천장 높이) · CHIMP1 · CHIMP2(꺾는 점) · CHIMEND(끝 0.4 m 앞) _<방> · 자국 = NOCOL_CHGOUGE_<방> · 돌 = put("stone") 의 Fab 돌(이름에 wd3efb0, 재질 stone_lump)
+        {
+            var all = m.GetComponentsInChildren<Transform>(); var rows = new List<string>(); int nbad = 0; GameObject plug = null;
+            Transform Nd(string pre, string room) => all.FirstOrDefault(t => t.name == pre + "_" + room);
+            var stones = filters.Where(f => f.name.Contains("wd3efb0") && f.GetComponent<Renderer>().sharedMaterials.Any(x => x != null && x.name.StartsWith("stone"))).Select(f => f.GetComponent<Renderer>().bounds.center).ToArray();
+            var e0 = new[] { "K", "M" }.Select(r => Nd("CHIMEND", r)).FirstOrDefault(t => t != null);
+            if (sabotageName == "chimplug" && e0 != null)                                          // 사보타주: 첫 구멍의 끝을 바위(상자)로 메운다
+            { plug = GameObject.CreatePrimitive(PrimitiveType.Cube); plug.transform.position = e0.position; plug.transform.localScale = Vector3.one * 1.2f; }
+            if (sabotageName == "chimbare") foreach (var f in filters.Where(f => f.name.StartsWith("NOCOL_CHGOUGE_"))) f.gameObject.SetActive(false);   // 사보타주: 긁힌 자국을 지운다 (끈 것은 아래에서 안 센다)
+            Physics.SyncTransforms(); yield return null;
+            var gouge = m.GetComponentsInChildren<MeshFilter>().Where(f => f.name.StartsWith("NOCOL_CHGOUGE_") && f.sharedMesh != null).ToArray();
+            foreach (var room in new[] { "K", "M" })
+            {
+                Transform c0 = Nd("CHIM", room), c1 = Nd("CHIMP1", room), c2 = Nd("CHIMP2", room), ce = Nd("CHIMEND", room);
+                if (c0 == null || c1 == null || c2 == null || ce == null) { rows.Add(room + " nodes missing (CHIM · CHIMP1 · CHIMP2 · CHIMEND)"); nbad++; continue; }
+                var path = new[] { c0.position, c1.position, c2.position, ce.position }; string blocked = "";       // (a) 입 → 꺾는 점 → 끝 사이에 아무것도 없다
+                for (int i = 1; i < path.Length; i++) if (Physics.Linecast(path[i - 1], path[i], out var lh, ~0, QueryTriggerInteraction.Ignore)) blocked += $" leg {i} hits {lh.collider.name}";
+                Vector3 aim = sabotageName == "chimpeek" ? c0.position + Vector3.up : ce.position; int st = 0, vis = 0; string visAt = "";   // (b) 밑 8 m 안 선 자리(돌 더미 위 포함)의 눈 1.7 m 에서 끝이 안 보인다 (사보타주 chimpeek: 과녁 = 입 위 1 m)
+                Vector3 under = Physics.Raycast(c0.position, Vector3.down, out var uh, 15f, ~0, QueryTriggerInteraction.Ignore) ? uh.point : c0.position + Vector3.down * 4f;
+                for (float x = -8f; x <= 8f; x += 0.5f)
+                    for (float z = -8f; z <= 8f; z += 0.5f)
+                    {
+                        if (x * x + z * z > 64f || !Physics.Raycast(new Vector3(c0.position.x + x, c0.position.y - 0.2f, c0.position.z + z), Vector3.down, out var fh, 12f, ~0, QueryTriggerInteraction.Ignore)) continue;
+                        if (fh.point.y > under.y + 2.5f) continue;   // 사람이 못 오르는 턱은 뺀다: K 는 무너져 올라간 구멍 안쪽 판(발 7.1 m)까지 셌다 — 입 밑 바닥(돌 더미 꼭대기 2.0 m) + 2.5 m 위로는 오를 길이 없다
+                        if (Physics.CheckCapsule(fh.point + Vector3.up * 0.72f, fh.point + Vector3.up * (Tuning.BODY_HEIGHT - 0.4f), 0.38f, ~0, QueryTriggerInteraction.Ignore)) continue;   // 선 몸이 안 들어가는 자리는 뺀다
+                        st++;
+                        if (!Physics.Linecast(fh.point + Vector3.up * 1.7f, aim, ~0, QueryTriggerInteraction.Ignore)) { vis++; if (visAt == "") visAt = At(fh.point); }
+                    }
+                long gt = gouge.Where(f => f.name.StartsWith("NOCOL_CHGOUGE_" + room)).Sum(f => Enumerable.Range(0, f.sharedMesh.subMeshCount).Sum(s => (long)f.sharedMesh.GetIndexCount(s))) / 3;   // (c) 자국 상자 하나 = 삼각형 12
+                int nst =stones.Count(p => (p - under).magnitude <= 1.6f);
+                bool ok = blocked == "" && st >= 40 && vis == 0 && gt / 12 >= 16 && nst >= 4; if (!ok) nbad++;
+                rows.Add($"{room} {At(c0.position)} open to the end {blocked == ""}{blocked} · {st} standing spots within 8 m below, {vis} see the far end{(visAt != "" ? " (first " + visAt + ")" : "")} · gouge strips {gt / 12} · fallen stones within 1.6 m of the floor below {nst}{(ok ? "" : " BAD")}");
+            }
+            foreach (var s2 in rows) Debug.Log("MAP4GEO chimney " + s2);
+            Check("map4_ceiling_holes", nbad == 0, $"ceiling chimneys K · M · bad {nbad} — " + string.Join("; ", rows) + " (want: open from mouth to end · 40+ standing spots, none sees the end · 16+ gouge strips · 4+ fallen stones)");
+            if (plug != null) Destroy(plug);
+        }
+        yield return null;
+
+        // ---- 2e. 바람 관 (국부 선풍기 → 막장): 빈 노드 FAN_<id>(선풍기 출구) · DUCTP_<id>_<00..>(관 가운데 줄, 00 = 출구 쪽) · DFACE_<id>(바람 받는 막장 면 가운데, 바닥 위 1.5 m).
+        //      출구에 붙고 · 벽을 안 뚫고 · 끝이 막장에서 7 m 안(법: 풍관 끝은 막장에서 7 m 안) · 선풍기는 막장에서 9 m 밖(막다른 굴 입구에서 5 m 밖을 곧은 거리로 대신)
+        {
+            var all = m.GetComponentsInChildren<Transform>(); var rows = new List<string>(); int nbad = 0, nfan = 0;
+            foreach (var id in new[] { "E1", "z2" })                                               // z2 는 못 지을 수도 있다 — FAN_ 이 있는 것만 (E1 은 꼭)
+            {
+                var fan = all.FirstOrDefault(t => t.name == "FAN_" + id); var face = all.FirstOrDefault(t => t.name == "DFACE_" + id);
+                if (fan == null) { if (id == "E1") { rows.Add("E1 no FAN_E1 node"); nbad++; } continue; }
+                nfan++;
+                var pts = all.Where(t => t.name.StartsWith("DUCTP_" + id + "_")).OrderBy(t => t.name).Select(t => t.position).ToList();
+                if (pts.Count < 2 || face == null) { rows.Add($"{id} duct points {pts.Count} · DFACE node {face != null}"); nbad++; continue; }
+                Vector3 fp = face.position;
+                if (sabotageName == "ductcut" && nfan == 1 && pts.Count > 2) pts.RemoveAt(pts.Count / 2);   // 사보타주: 가운데 점 하나를 지운다 → 이웃 사이가 3 m 넘는다
+                if (sabotageName == "ductfar" && nfan == 1) { var d0 = fp - pts[pts.Count - 1]; fp += (d0.sqrMagnitude > 1e-4f ? d0.normalized : (fp - fan.position).normalized) * 10f; }   // 사보타주: 막장 면을 관 끝에서 10 m 민다
+                float start = Vector3.Distance(fan.position, pts[0]), gap = 0f; string through = "";
+                for (int i = 1; i < pts.Count; i++)
+                {
+                    Vector3 a = pts[i - 1], d = pts[i] - a; gap = Mathf.Max(gap, d.magnitude);
+                    var hr = Physics.RaycastAll(a, d.normalized, d.magnitude, ~0, QueryTriggerInteraction.Ignore).FirstOrDefault(h => IsShell(h.collider));
+                    if (hr.collider != null && through == "") through = $" through rock between {i - 1:00} and {i:00} at {At(hr.point)}";
+                }
+                float endGap = Vector3.Distance(pts[pts.Count - 1], fp), fanFace = Vector3.Distance(fan.position, fp);
+                bool ok = start <= 1.0f && gap <= 3.0f && through == "" && endGap <= 7.0f && fanFace >= 9.0f; if (!ok) nbad++;
+                rows.Add($"{id} {At(fan.position)} first point {start:0.00} m from the outlet · {pts.Count} points, widest gap {gap:0.00} m{through} · duct end {endGap:0.0} m from the face · fan {fanFace:0.0} m from the face{(ok ? "" : " BAD")}");
+            }
+            foreach (var s2 in rows) Debug.Log("MAP4GEO duct " + s2);
+            Check("map4_fan_ducts", nfan > 0 && nbad == 0, $"{nfan} fans with ducts · bad {nbad} — " + string.Join("; ", rows) + " (want: first point ≤ 1.0 m · gaps ≤ 3.0 m, none through rock · end ≤ 7 m from the face · fan ≥ 9 m from the face)");
+        }
+        yield return null;
+
+        // ---- 2f. 압축공기 관 · 호스 · 착암기: 빈 노드 AIRP_<id>_<00..>(관 가운데 줄) · VALVE_<id>_<k>(밸브 꼭지) · HOSEP_<id>_<00..>(호스 줄, 00 = 밸브 쪽) · JACKLEG_<id>(착암기 호스 나오는 점).
+        //      관이 바위를 안 뚫고 · 두 끝은 밸브가 아니면 벽 속으로 들어가고(사용자 10-03 "관이 양 끝에서 뚝 끊김") · 호스가 밸브와 착암기를 잇는다
+        {
+            var all = m.GetComponentsInChildren<Transform>(); var rows = new List<string>(); int nbad = 0, nline = 0; bool sabDone = false;
+            foreach (var id in new[] { "E1", "z2", "N2" })
+            {
+                List<Vector3> Line(string pre) => all.Where(t => t.name.StartsWith(pre + "_" + id + "_")).OrderBy(t => t.name).Select(t => t.position).ToList();
+                var pipe = Line("AIRP"); var valves = Line("VALVE"); var hose = Line("HOSEP"); var jack = all.FirstOrDefault(t => t.name == "JACKLEG_" + id);
+                if (pipe.Count < 2) { rows.Add($"{id} pipe points {pipe.Count}"); nbad++; continue; }
+                nline++;
+                bool Valve(Vector3 p) => valves.Any(v => (v - p).sqrMagnitude < 0.25f);                     // 밸브 꼭지에서 0.5 m 안 = 밸브로 끝나는 끝
+                if (sabotageName == "pipeend" && !sabDone)                                         // 사보타주: 벽 속으로 들어간 끝 하나를 1 m 떼어 낸다 (관이 굴 한가운데서 뚝 끊긴다)
+                    foreach (int e in new[] { 0, pipe.Count - 1 })
+                        if (!sabDone && !Valve(pipe[e])) { int nb = e == 0 ? 1 : pipe.Count - 2; pipe[e] -= (pipe[e] - pipe[nb]).normalized * 1.0f; sabDone = true; }
+                if (sabotageName == "hoseloose" && !sabDone && hose.Count > 0) { hose[hose.Count - 1] += Vector3.right * 1.0f; sabDone = true; }   // 사보타주: 호스 끝을 착암기에서 1 m 옮긴다
+                float gap = 0f; string through = "", loose = "";
+                for (int i = 1; i < pipe.Count; i++)                                              // (a) 점 사이 3.5 m 안 · 바위를 안 뚫는다 (두 끝 0.35 m 안은 벽 속으로 들어가는 자리라 뺀다)
+                {
+                    Vector3 a = pipe[i - 1], d = pipe[i] - a; gap = Mathf.Max(gap, d.magnitude);
+                    foreach (var h in Physics.RaycastAll(a, d.normalized, d.magnitude, ~0, QueryTriggerInteraction.Ignore))
+                        if (through == "" && IsShell(h.collider) && (h.point - pipe[0]).magnitude > 0.35f && (h.point - pipe[pipe.Count - 1]).magnitude > 0.35f) through = $" through rock between {i - 1:00} and {i:00} at {At(h.point)}";
+                }
+                foreach (int e in new[] { 0, pipe.Count - 1 })                                    // (b) 밸브가 아닌 끝: 관 방향으로 끝점 앞뒤 0.35 m 안에 바위 겉면 (벽을 따라 걸린 관은 옆 벽이 늘 0.35 m 안이라 여섯 방향으로 재면 굴 한가운데서 끊긴 끝도 통과한다)
+                {
+                    if (Valve(pipe[e])) continue;
+                    Vector3 nb = pipe[e == 0 ? 1 : pipe.Count - 2], d = pipe[e] - nb; float L = d.magnitude;
+                    if (!Physics.RaycastAll(nb, d.normalized, L + 0.35f, ~0, QueryTriggerInteraction.Ignore).Any(h => IsShell(h.collider) && h.distance >= L - 0.35f)) loose += $" end {e:00} {At(pipe[e])} stops in the air";
+                }
+                float hv = hose.Count > 0 && valves.Count > 0 ? valves.Min(v => Vector3.Distance(v, hose[0])) : 99f, hj = hose.Count > 0 && jack != null ? Vector3.Distance(hose[hose.Count - 1], jack.position) : 99f;   // (c) 호스 = 밸브 → 착암기
+                bool ok = gap <= 3.5f && through == "" && loose == "" && hv <= 0.35f && hj <= 0.4f; if (!ok) nbad++;
+                rows.Add($"{id} {pipe.Count} pipe points, widest gap {gap:0.00} m{through}{loose} · {valves.Count} valves · hose {hose.Count} points: start {hv:0.00} m from a valve, end {hj:0.00} m from the drill{(jack == null ? " (no JACKLEG node)" : "")}{(ok ? "" : " BAD")}");
+            }
+            foreach (var s2 in rows) Debug.Log("MAP4GEO air " + s2);
+            Check("map4_air_lines", nline > 0 && nbad == 0, $"{nline}/3 compressed-air lines · bad {nbad} — " + string.Join("; ", rows) + " (want: gaps ≤ 3.5 m, none through rock · each end at a valve or into rock within 0.35 m along the pipe · hose start ≤ 0.35 m from a valve, end ≤ 0.4 m from the drill)");
         }
         yield return null;
 

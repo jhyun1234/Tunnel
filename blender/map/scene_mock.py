@@ -12,6 +12,7 @@ from mathutils import Vector, Matrix, Euler
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "props"))   # 알아볼 수 있게 다시 만든 소품 (10-02 판정 ①) — props/<이름>.py, 미리보기는 props/_preview.py
 import _util as PU, pump_set, fan_duct, timber_store, staging as staging_, wall_props, cloth as cloth_, machines, cc0_models
 import timber_sets, lamp_rack, chute, substation, store_stalls                                   # 10-03 판정 ② 뒤 더한 소품: 둥근 동발 틀 · 램프 충전대 · 광차 싣는 곳 홈통
+import face_kit                                                                                   # 10-03 판정 ③ 뒤: 착암기 · 압축공기 관 · 호스 · 발파 구멍 · 분필 (막장 연장)
 PMATS = None                                                              # 소품 재질 (이름 → 재질, map4() 가 사진 재질로 채운다)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -140,10 +141,9 @@ def shell(bm, carve, big=None, big_m=1.6, keep=()):
     o = bpy.data.objects.new("SHELL", me); sc.collection.objects.link(o); return o
 
 def text(body, loc, size, mat, rot=(math.radians(90), 0, 0)):
-    """벽에 칠한 글자 — 한글은 맑은 고딕 (기본 글꼴엔 한글이 없다)"""
-    cu = bpy.data.curves.new("T", "FONT"); cu.body = body; cu.size = size; cu.align_x = "CENTER"; cu.extrude = 0.005
-    cu.font = bpy.data.fonts.load("C:/Windows/Fonts/malgunbd.ttf")
-    o = bpy.data.objects.new("TEXT", cu); o.location = loc; o.rotation_euler = rot; sc.collection.objects.link(o); cu.materials.append(mat); return o
+    """벽에 칠한 글자 · 굴 입구 표지 글자 = 인트로 글씨체 배민 을지로체 (사용자 10-03 "표지의 글씨는 인트로 폰트를 사용해라. 모든 것들을").
+    곡선은 성기게(resolution 2) + thin 으로 그물에 굽는다 (props/_util.text_mesh). 옛 것: 맑은 고딕 곡선 · 기본 12 — 내보낼 때 그물로 바뀌며 글자만 삼각형 22만 개였다"""
+    return PU.text_mesh("TEXT", body, loc, size, mat, rot=rot, extrude=0.005)
 
 # ================= 장면 9 — 거대한 채굴 빈 공간 = 1편 그것의 굴
 # 장면 카드 9. 참고(09-30): 스톱의 나무 버팀목 · 벽 따라 발판·계단 · 돌 더미 · 남은 바위 기둥 + 한국 탄광 급경사 탄층 → 천장 위 비스듬한 틈 = 그것이 내려오는 곳.
@@ -869,11 +869,12 @@ def scene2():
             if x < tun + 0.3: spots.append((x, y, max(0.0, top(x, y) - 0.0694 * s_ * 0.35), random.uniform(0, 360), s_))
         fab_many("wd3efb0", spots)
     else: fab_many("wd3efb0", rock_pile(tun - 0.9, 0.0, 0.8, 2.6, 0.55, 110, 2, 6) + rock_pile(tun - 3.0, -2.5, 0.9, 0.4, 0.4, 25, 2, 5))
-    cu = bpy.data.curves.new("HOSE", "CURVE"); cu.dimensions = "3D"; cu.bevel_depth = 0.03; cu.bevel_resolution = 3   # 바닥을 기는 공기 호스 (사진)
-    pts = [(a1 - 4, -0.9), (a1 - 1, -1.0), (a1 + 1.5, -0.6), (a1 + 4, -0.3), (a1 + 7, -0.55), (a1 + 10, -0.2), (tun - 2.2, -0.5), (tun - 1.4, -1.2)]
-    sp = cu.splines.new("NURBS"); sp.points.add(len(pts) - 1); sp.use_endpoint_u = True; sp.order_u = 3
-    for pt, (hx, hy) in zip(sp.points, pts): pt.co = (hx, hy, 0.04, 1)
-    ho = bpy.data.objects.new("HOSE", cu); sc.collection.objects.link(ho); cu.materials.append(paint("rubber", (0.02, 0.02, 0.02), 0.5))
+    if not MAP:                                                                             # 맵: 호스는 map4() 의 "막장 연장" 이 곁굴 벽의 압축공기 관 밸브 → 착암기로 잇는다 (사용자 10-03 판정 ③ "막장의 디테일 부족" — 이 호스는 양 끝이 바닥에서 뚝 끊겨 있었다)
+        cu = bpy.data.curves.new("HOSE", "CURVE"); cu.dimensions = "3D"; cu.bevel_depth = 0.03; cu.bevel_resolution = 3   # 바닥을 기는 공기 호스 (사진)
+        pts = [(a1 - 4, -0.9), (a1 - 1, -1.0), (a1 + 1.5, -0.6), (a1 + 4, -0.3), (a1 + 7, -0.55), (a1 + 10, -0.2), (tun - 2.2, -0.5), (tun - 1.4, -1.2)]
+        sp = cu.splines.new("NURBS"); sp.points.add(len(pts) - 1); sp.use_endpoint_u = True; sp.order_u = 3
+        for pt, (hx, hy) in zip(sp.points, pts): pt.co = (hx, hy, 0.04, 1)
+        ho = bpy.data.objects.new("HOSE", cu); sc.collection.objects.link(ho); cu.materials.append(paint("rubber", (0.02, 0.02, 0.02), 0.5))
     fab_many("uddjeelqx", [(tun - 1.8, -1.6, 0.0, 70, 1.0)])                               # 삽 (막장 앞에 누움)
     M_EYE = paint("eye", (1.0, 0.85, 0.6), 0.3, 0, 25.0)
     bm = bmesh.new()
@@ -1018,11 +1019,12 @@ def lamp_at(x, y, z, top_guess, name, energy=120, col=(1.0, 0.62, 0.3)):
     if top - lz > 0.3: CORDS.append(((x, y, (top + lz + 0.35) / 2), (0.014, 0.014, top - lz - 0.05)))   # 줄 끝은 바위 속 0.15 m (울퉁불퉁한 천장에 떠 보이지 않게)
     LIGHTS.append((name % len(LIGHTS) if "%d" in name else name, (x, y, lz), energy, col, 0.08, True))
 
-def lamp_grid(n, nx, ny, name, **kw):
-    """방을 nx × ny 칸으로 나눠 칸마다 전등 하나. 전등 높이에 뭔가(돌 더미 · 석탄 기둥 · 통나무)가 있으면 옆으로 비킨다"""
+def lamp_grid(n, nx, ny, name, move=None, **kw):
+    """방을 nx × ny 칸으로 나눠 칸마다 전등 하나. 전등 높이에 뭔가(돌 더미 · 석탄 기둥 · 통나무)가 있으면 옆으로 비킨다. move = {(ix, iy): (x, y)} 그 칸 전등을 정한 자리에"""
     deps = bpy.context.evaluated_depsgraph_get()
     for ix in range(nx):
         for iy in range(ny):
+            if move and (ix, iy) in move: lamp_at(*move[(ix, iy)], n["z"], n["h"], name, **kw); continue
             x0, y0 = n["x"] - n["w"] / 2 + (ix + 0.5) * n["w"] / nx, n["y"] - n["d"] / 2 + (iy + 0.5) * n["d"] / ny
             # 가장자리 칸은 벽에서 LAMP_WALL 로 붙인다 — 빛이 4 m 까지라 방 가운데 전등은 천장만 밝히고 벽은 검다 (검수 10-01: 방 폭 · 끝 벽이 안 읽힌다). 한 줄뿐이면 양쪽 벽으로 번갈아
             if nx > 1 and ix in (0, nx - 1): x0 = n["x"] + (1 if ix else -1) * (n["w"] / 2 - LAMP_WALL)
@@ -1501,6 +1503,17 @@ def map4():
             vs = np.array([v.co[:] for v in b_.verts]); lo, hi = vs.min(0) - 1.6, vs.max(0) + 1.6
             if lo[0] < pt.x < hi[0] and lo[1] < pt.y < hi[1] and lo[2] - 2.0 < pt.z < hi[2] + 2.0: return sn_
         return None
+    # 선풍기 방 북쪽 벽의 굴진 막장 (사용자 10-03 판정 ③ "바람 관이 무슨 의미인지 모르겠다. 방 하나에 선풍기 하나가 달랑 남아 있어서 무슨 기구인지 인지가 안 된다. 실제로 어떻게 쓰이는지 확인 후 배치와 모델링").
+    #   레퍼런스 공통점(보령석탄박물관 국부선풍기 · 독일 Sonderbewetterung 통기도 · La Mine Image · Idrija · Nowa Ruda 풍관 · 조사/09:514 · 09:642): 국부선풍기 = 바람이 안 통하는 막다른 굴(굴진 막장) 하나에
+    #   관으로 새 바람을 밀어 넣는 기계 → 그 막다른 굴을 판다. 북쪽 벽(그 너머 12 m 넘게 빈 바위) · 북쪽 막장 줄과 같은 법(side_recess). 폭 3.2 · 깊이 12 m.
+    #   높이 3.2 m (지시는 3.0 — 동발 캡 밑 = 천장 − 0.27 에 매단 지름 0.6 m 관의 밑이 바닥 위 2.0 m 를 넘게. 3.0 이면 잰 천장에 따라 1.95 m 안팎)
+    e1 = N["E1"]; HEAD = dict(w=3.2, d=12.0, h=3.2, x=None); hw_ = HEAD["w"] / 2
+    for hx_ in sorted({round(52.5 + 0.5 * k, 2) for k in range(-20, 21)}, key=lambda v: abs(v - 52.5)):   # 입 둘레를 비운다: 방 모서리에서 2 m · 개폐기(sw_E1, x 44.9)에서 2.5 m · 다른 방 · 굴과 1.6 m
+        if not (e1["x"] - e1["w"] / 2 + hw_ + 2.0 <= hx_ <= e1["x"] + e1["w"] / 2 - hw_ - 2.0) or abs(hx_ - (e1["x"] - 4.1)) < hw_ + 2.5: continue
+        if next((x for x in (near_air(Vector((hx_ + sx_, e1["y"] + e1["d"] / 2 + t_, 1.2)), "E1") for t_ in np.arange(0.5, HEAD["d"] + 0.01, 1.0) for sx_ in (-hw_, 0.0, hw_)) if x), None) is None: HEAD["x"] = float(hx_); break
+    assert HEAD["x"] is not None, "E1 heading: no free north wall"
+    REC.setdefault("E1", []).append(((Vector((0, 1, 0)), e1["x"] - HEAD["x"]), hw_))
+    print("CHECK map4 E1 heading: mouth at x %.1f on the north wall, %.0f m deep, %.1f m wide, %.1f m high (no other room or tunnel within 1.6 m)" % (HEAD["x"], HEAD["d"], HEAD["w"], HEAD["h"]))
     for rid, side, want in CRACK_WANT:
         r = N[rid]; f = {"N": Vector((0, 1, 0)), "S": Vector((0, -1, 0)), "E": Vector((1, 0, 0)), "W": Vector((-1, 0, 0))}[side]; u = Vector((-f.y, f.x, 0)); Lw = (r["d"] if f.x else r["w"]) / 2 - 2.0
         want_t = want * (u.x + u.y)                                                            # 세계 좌표 쪽 → 벽 따라 자리
@@ -1565,8 +1578,24 @@ def map4():
     #   이제: 방 공기를 기둥 자리만 빼고 판다 → 벽과 한 덩어리로 복셀 · 잔굴곡이 들어가고 바닥 · 천장과 이어진다. 겉은 탄층 띠(석탄 사진)로 칠한다 (tex1_sites 의 pillars)
     PILLARS = {"M": [(7.0, 5.0, 4.6, 3.8), (-6.0, -6.0, 3.6, 4.4)]}                            # 방 → [(가운데 dx, dy, 크기 x, y)]
     for n in rooms: n["pillars"] = [(n["x"] + a_, n["y"] + b_, c_, d_) for a_, b_, c_, d_ in PILLARS.get(n["id"], [])]
-    CHIMNEY = {"K": [(1.2, -0.5, 1.8, 1.5, 7.0, 0.22)], "M": [(-1.0, 1.5, 3.4, 1.1, 6.0, -0.25)]}     # 방 → [(가운데 dx, dy, 폭 x, y, 천장 위 높이, 기울기)] — 붕락 구멍 꼭대기 · 옛 채굴 빈터 천장의 긴 틈
     FALL = {"K": (0.0, 0.0, 4.2, 3.0)}                                                         # 방 → 붕락 구멍 (가운데 dx, dy, 반지름, 천장 위 높이) — 돌 더미 바로 위
+    # 천장 구멍 (사용자 10-03 판정 ③ ⓑ "벽 틈은 '여기서 나오겠다'로 읽히는데 천장은 '저기서 갑자기 나오는 듯 = 괴물이 저기서 생성된다'로 읽힌다" → 고친다(나)).
+    #   옛 것: 곧게 6~7 m 뻗은 상자 하나 — 밑에서 올려다보면 끝까지 휑한 네모 굴뚝. 이제 벽 틈(crack_path)과 같은 법으로 세 토막: 입(세로 1.1 m) → 수직에서 50° 기울여 2.6 m (폭 0.9)
+    #   → 수평 3.0 m (폭 0.7) — 밑 어디서 올려다봐도 끝이 안 보이고, 뒤 두 토막은 파는 깊이 0.05 로 좁게(사람 몸이 못 든다). 다른 방 · 굴 1.6 m 안으로 가는 쪽이면 45° 씩 돌려 다시 잰다 (near_air, 뒤 두 토막만).
+    #   긁힌 자국 · 떨어진 돌은 아래 "천장 구멍 꾸밈". 자리 · 입 크기 · 먼저 기울일 쪽은 옛 것 그대로 (K = 붕락 구멍 꼭대기, M = 옛 채굴 빈터 천장의 긴 틈)
+    CHIMNEY = {"K": (1.2, -0.5, 1.8, 1.5, (0, -1)), "M": (-1.0, 1.5, 3.4, 1.1, (0, 1))}       # 방 → (입 가운데 dx, dy, 입 폭 x, y, 먼저 기울일 쪽)
+    def chim_path(c0, a):                                                                     # 입 가운데 c0 (천장 높이) → (꺾는 점 1, 꺾는 점 2, 끝, 둘째 토막 방향, 수평 방향)
+        a = Vector((a[0], a[1], 0)).normalized(); d1 = a * math.sin(math.radians(50)) + Vector((0, 0, math.cos(math.radians(50))))
+        p1 = c0 + Vector((0, 0, 1.1)); p2 = p1 + d1 * 2.6; return p1, p2, p2 + a * 3.0, d1, a
+    CHIMS = {}
+    for rid, (dx_, dy_, sx_, sy_, a0) in CHIMNEY.items():
+        n = N[rid]; c0 = Vector((n["x"] + dx_, n["y"] + dy_, n["z"] + n["h"] + (FALL[rid][3] * 0.84 if rid in FALL else 0.0))); why = ""   # 천장 높이 (붕락 방 = 무너져 올라간 구멍의 셋째 판 꼭대기)
+        for k_ in (0, 1, -1, 2, -2, 3, -3, 4):
+            p1, p2, p3, d1, a = chim_path(c0, Matrix.Rotation(math.radians(45 * k_), 3, "Z") @ Vector((a0[0], a0[1], 0)))
+            hit = next((x for x in (near_air(q, rid) for q in [p1.lerp(p2, t_) for t_ in (0.33, 0.66, 1.0)] + [p2.lerp(p3, t_) for t_ in (0.33, 0.66, 1.0)]) if x), None)   # 입 꼭대기(p1)는 빼고 잰다 — 방 가운데까지 이어 잰 굴 줄(F-M)이 방 천장 위 6 m 안을 다 막았다 (첫 굽기)
+            if hit is None: CHIMS[rid] = (c0, p1, p2, p3, d1, a, sx_, sy_); break
+            why = "would break into " + hit
+        print("CHECK map4 ceiling chimney %s: mouth (%.1f, %.1f, %.1f) %s" % (rid, c0.x, c0.y, c0.z, ("leans toward (%+.2f, %+.2f), end (%.1f, %.1f, %.1f)" % (a.x, a.y, p3.x, p3.y, p3.z)) if rid in CHIMS else "NOT built — " + why))
     for n in rooms:
         b = bmesh.new(); rr = random.Random(n["id"])
         if n["pillars"]:                                                                      # 기둥 가장자리로 칸을 나눠, 기둥 칸만 빼고 상자를 놓는다 (2 cm 씩 겹쳐 한 덩어리로 합쳐진다)
@@ -1591,8 +1620,9 @@ def map4():
         for _ in range(max(1, int(n["w"] * n["d"] / 60))):                                      # 천장도 들쭉날쭉 (올리기만)
             cx_, cy_, br = n["x"] + rr.uniform(-hx, hx) * 0.7, n["y"] + rr.uniform(-hy, hy) * 0.7, (rr.uniform(1.5, 3.0), rr.uniform(1.5, 3.0), rr.uniform(0.5, 1.0))
             if not any(abs(cx_ - px_) < sx_ / 2 + br[0] and abs(cy_ - py_) < sy_ / 2 + br[1] for px_, py_, sx_, sy_ in n["pillars"]): blob(b, (cx_, cy_, n["z"] + h - 0.2), br, 2)   # 기둥 머리 둘레는 안 판다
-        for cx_, cy_, sx_, sy_, up_, tilt_ in CHIMNEY.get(n["id"], ()):                         # 천장에서 위로 뻗은 검은 틈 (괴물이 내려올 수 있는 곳 — 머리등이 끝에 안 닿는다)
-            box(b, (n["x"] + cx_, n["y"] + cy_, n["z"] + h + up_ / 2 - 0.4), (sx_, sy_, up_ + 0.8), Matrix.Rotation(tilt_, 3, "X"))
+        if n["id"] in CHIMS:                                                                  # 천장 구멍의 입 (세로 — 그 위 꺾인 두 토막은 방 공기 뒤에 따로, 좁게). 붕락 방은 무너져 올라간 구멍 속에서 시작한다
+            c0, p1, *_, sx_, sy_ = CHIMS[n["id"]]; z0_ = c0.z - 1.2 if n["id"] in FALL else n["z"] + h - 0.4
+            box(b, (c0.x, c0.y, (z0_ + p1.z + 0.3) / 2), (sx_, sy_, p1.z + 0.3 - z0_))
         if n["id"] in FALL:                                                                   # 붕락 구멍: 돌 더미 위 천장이 둥글게 떨어져 나갔다 (사용자 10-03 "붕락인데 위쪽 천장은 평평하고 깨끗하다").
             dx_, dy_, fr_, fh_ = FALL[n["id"]]                                                  #   레퍼런스(붕락 사진 다섯): 더미 바로 위 천장에 더미보다 조금 좁은 구멍, 가장자리가 층층이 깨져 들쭉날쭉(지층 판이 턱턱 떨어진다), 구멍 속은 방 천장보다 2~4 m 높다
             for k_, (sc_, zt_) in enumerate(((1.0, 0.35), (0.78, 0.62), (0.52, 0.84), (0.3, 1.0))):   # 둥근 공 하나면 물방울 같다 → 위로 갈수록 좁아지고 조금씩 돌아간 판 넷 (복셀 0.25 m 가 0.5~0.9 m 턱을 남긴다)
@@ -1601,6 +1631,9 @@ def map4():
             for k_ in range(7):                                                                 #   가장자리가 떨어져 나간 자리
                 a_ = rr.uniform(0, 6.28); blob(b, (n["x"] + dx_ + math.cos(a_) * fr_ * 0.9, n["y"] + dy_ + math.sin(a_) * fr_ * 0.72, n["z"] + h + rr.uniform(-0.1, 0.4)), (rr.uniform(0.8, 1.5), rr.uniform(0.8, 1.5), rr.uniform(0.5, 1.0)), 2)
         AIR.append((b, 0.45, None))
+        if n["id"] in CHIMS:                                                                  # 천장 구멍의 꺾인 두 토막: 기운 것 폭 0.9 · 수평 폭 0.7 (파는 깊이 0.05 — 벽 틈 뒤쪽과 같은 법)
+            c0, p1, p2, p3, d1, a, *_ = CHIMS[n["id"]]; b = bmesh.new(); box(b, (p1 - d1 * 0.25 + p2) / 2, (0.9, 0.9, 2.85), d1.to_track_quat("Z", "Y").to_matrix()); AIR.append((b, 0.05, None))
+            b = bmesh.new(); box(b, (p2 - a * 0.35 + p3) / 2, (3.35, 0.7, 0.8), Matrix.Rotation(math.atan2(a.y, a.x), 3, "Z")); AIR.append((b, 0.05, None))
     print("CHECK map4 closets %d · moved more than 3 m from the plan spot: %s" % (len(ALC), "; ".join("%s %.1f m" % (a[0], a[4]) for a in ALC if a[4] > 3.0) or "none"))
     # 펌프 자리(펌프실 남쪽 벽): 받침 가운데 = 벽에서 1.2 m, 소품 자리표의 +y 가 벽 쪽. 물구덩이는 그 빨아들이는 관 끝 밑 (props/pump_set.py station() 의 자리: 받침에서 (-2.567, -0.5))
     def wall_frame(key, back=0.0, along=0.0):                                                  # 벽 소품 자리표 (벽 평면 기준 — 바위는 놓을 때 잰다): 원점 = 벽에서 back 만큼 방 안, 벽 따라 along
@@ -1620,6 +1653,7 @@ def map4():
         b = bmesh.new(); rr = random.Random("face%d" % dx)
         blob(b, wall_ + Vector((rr.uniform(-0.8, -0.4), FACE_D + 0.1, 1.3)), (1.15, 0.8, 1.0), 2); blob(b, wall_ + Vector((rr.uniform(0.4, 0.8), FACE_D + 0.2, 1.6)), (1.0, 0.75, 0.8), 2)
         box(b, wall_ + Vector((0.1, FACE_D + 0.25, 0.27)), (2.7, 0.7, 0.55)); AIR.append((b, 0.3, None))
+    r_ = dict(N["E1"]); r_["x"] = HEAD["x"]; HEAD["wall"] = side_recess(r_, Vector((0, 1, 0)), HEAD["d"], HEAD["w"], HEAD["h"], 0.2)   # 선풍기 방 굴진 막장의 공기 (위 HEAD). 막장 면은 발파한 바위 면 그대로 (캐낸 자국을 안 판다 — 구멍 · 착암기는 소품 단계에서)
     FENCES = []
     for rid, gid in (("M", "GOAF_W"), ("E2", "GOAF_E")):                                       # 막아 둔 채굴적: 방 벽에서 2 m 파고 판자 울타리 (틈으로 어둠이 보인다, 못 들어감)
         r_, g = N[rid], N[gid]; d = Vector((g["x"] - r_["x"], g["y"] - r_["y"], 0)); f = Vector((1 if d.x > 0 else -1, 0, 0)) if abs(d.x) > abs(d.y) else Vector((0, 1 if d.y > 0 else -1, 0))
@@ -1845,6 +1879,75 @@ def map4():
                 p_ = a_ + d_ * float(t); h_ = rock(p_ + Vector((0, 0, 0.1)), (0, 0, 1), 3.0)
                 if h_: PU.box(P["iron"], (p_.x, p_.y, (p_.z + h_[0].z) / 2 + 0.05), (0.03, 0.03, h_[0].z - p_.z + 0.1)); PU.torus(P["iron"], p_, d_, r + 0.012, 0.012, 12, 5)
         return P.finish(name)
+    # ---- 막장 연장 도구 (사용자 10-03 판정 ③ "막장의 디테일 부족" · "바람 관이 무슨 의미인지" — 소품은 props/face_kit.py). 레퍼런스: 한국 탄광 막장 사진 둘 + 수기 "에어 틀고 물 뿌려"
+    #   (지역N문화 coalmine/story/3683) · 공기다리 착암기 사진 공통점 · 조사/01:26 · 03:29 · 11:23 · 12:26 · 12:63 · 12:68: 벽을 따라 관 두 줄(압축공기 · 물) → 끝 밸브 → 바닥을 기는 고무 호스 → 착암기
+    #   (정이 발파 구멍에 꽂힌 채) · 막장 면 발파 구멍 20~25 (가운데 몰림 + 둘레 + 바닥 줄) · 분필 X 와 숫자 · 발치에 쏟아진 버력 · 삽
+    HEAPTOP = {}                                                                              # 방 → 더미 윗면 높이 함수 (floor_at 은 소품을 뚫는다 — 붕락 방 천장 구멍 밑 돌을 더미 위에)
+    def node(nm, p): e_ = bpy.data.objects.new(nm, None); e_.location = Vector(p); sc.collection.objects.link(e_)   # 검사(map4_fan_ducts · map4_air_lines · map4_ceiling_holes)가 읽는 빈 노드
+    def pile_own(seed, *a):                                                                   # 새로 놓는 더미: pile() 은 전역 random 을 쓴다 — 뒤에 놓이는 것들의 모양이 안 바뀌게 그 상태를 되돌린다
+        st_ = random.getstate(); random.seed(seed); out_ = pile(*a); random.setstate(st_); return out_
+    def ground(x, y, z):                                                                      # 바닥 높이 = 바위 바닥이나 장면 바닥 판(FLOOR) — 채탄 막장은 바닥 판이 바위 위에 깔렸다 (floor_at 은 바위만 본다)
+        deps_ = bpy.context.evaluated_depsgraph_get(); o_ = Vector((x, y, z + 1.0))
+        for _ in range(6):
+            hit, loc, _n, _i, ob, _m = sc.ray_cast(deps_, o_, Vector((0, 0, -1)), distance=3.0)
+            if not hit: return z
+            if ob.name.startswith(("SHELL", "FLOOR")): return loc.z
+            o_ = loc - Vector((0, 0, 0.02))
+        return z
+    def first_hit(p, d, dist=4.0):                                                            # 아무것에나 처음 맞는 곳 (Fab 굴 조각의 덧댄 판처럼 바위 앞에 선 벽)
+        hit, loc, nor, _i, ob, _m = sc.ray_cast(bpy.context.evaluated_depsgraph_get(), Vector(p), Vector(d), distance=dist); return (loc, nor) if hit else None
+    def hug(a, b, z, f, gap=0.24, look=None):
+        """a → b (벽 앞 기준선 위 두 점 (x, y)) 를 따라 f 쪽 벽에 붙여 가는 관 점들: 3 m 토막마다 벽을 0.25 m 간격 · 두 높이(z 와 물 관 z − 0.2)로 재서 가장 나온 곳에서 gap 만큼 띄운다.
+        토막 사이 0.6 m 는 비스듬히 잇는다 (한 줄로 곧게 두면 바위가 물러난 곳에서 받침쇠가 벽에 안 닿는다 — 관은 이음마다 조금씩 꺾여 벽을 따른다)"""
+        look = look or (lambda p_, d_: rock(p_, d_, 4.0)); a, b, f = Vector((a[0], a[1], z)), Vector((b[0], b[1], z)), Vector(f); L = (b - a).length; d = (b - a) / L; n_ = max(1, round(L / 3.0)); out = []
+        def wall(s):
+            ds = [(h_[0] - q).dot(f) for q in (a + d * s, a + d * s - Vector((0, 0, 0.2))) for h_ in [look(q, f)] if h_]
+            return min(ds) if ds else 1.5
+        for k in range(n_):
+            s0, s1 = L * k / n_, L * (k + 1) / n_; dm = min(wall(s) for s in np.arange(max(0.0, s0 - 0.6), min(L, s1 + 0.6) + 1e-6, 0.25)) - gap
+            out += [a + d * (s0 + (0.3 if k else 0.0)) + f * dm, a + d * (s1 - (0.3 if k < n_ - 1 else 0.0)) + f * dm]
+        return out
+    def meet(A, B):                                                                           # 두 벽의 관 줄을 모퉁이에서 잇는다 (A 끝 줄과 B 첫 줄이 만나는 점)
+        p, d1 = A[-1], (A[-1] - A[-2]).normalized(); q, d2 = B[0], (B[1] - B[0]).normalized()
+        t = ((q.x - p.x) * d2.y - (q.y - p.y) * d2.x) / (d1.x * d2.y - d1.y * d2.x); return A[:-1] + [p + d1 * t] + B[1:]
+    def into_wall(p, d):                                                                      # 관 끝을 벽 속으로: p 에서 d 쪽 바위 겉면 너머 0.2 m (굴 한가운데서 끊기지 않게 — 사용자 10-03 "관이 양 끝에서 뚝 끊김")
+        d = Vector(d); h_ = rock(p, d, 4.0); return p + d * (((h_[0] - p).dot(d) if h_ else 0.3) + 0.2)
+    def drill_at(p, fwd, gz, seed=1):
+        """착암기를 막장에 세운 꼴 (구멍을 뚫다 멈춤): p = 정이 꽂힐 자리 (x, y, 바닥 짐작), fwd = 면 쪽. 정 높이 = 다리 발 밑 바닥 + 1.2 m, 면은 광선으로 잰다. → (자리표, 호스 꼭지 점들, 구멍 점)"""
+        fwd = Vector(fwd); ft = Vector((p[0], p[1], 0)) - fwd * 2.4; z_ = gz(ft.x, ft.y, p[2]) + face_kit.BODY_H
+        h_ = rock(Vector((p[0], p[1], z_)) - fwd * 1.5, fwd, 3.5); hp = h_[0] if h_ else Vector((p[0], p[1], z_))
+        jl, ends = face_kit.jackleg(PM, seed=seed); M = Matrix.Translation(hp) @ R(math.degrees(math.atan2(-fwd.y, -fwd.x))); PU.place(jl, M); return M, ends, hp
+    def face_holes(c, fwd, right, fz, w, h, n_, seed, keep=()):
+        """막장 면 발파 구멍 (face_kit.burn_pattern 자리): 면 앞 c(바닥 fz)에서 fwd 로 쏘아 실제 면 위 점 · 법선. 먼저 맞는 것이 바위가 아니면 (더미 · 착암기 · 동발에 가림) 그 구멍은 뺀다"""
+        bpy.context.view_layer.update(); deps_ = bpy.context.evaluated_depsgraph_get(); out_ = []
+        for u, v in face_kit.burn_pattern(w, h, n_, seed):
+            o_ = Vector((c.x, c.y, fz + h / 2 + v)) + Vector(right) * u; hit, loc, nor, _i, ob, _m = sc.ray_cast(deps_, o_, Vector(fwd), distance=4.0)
+            if hit and ob.name.startswith("SHELL") and all((loc - k).length > 0.18 for k in keep): out_.append((loc.copy(), nor.copy()))
+        return out_
+    def chalk_at(txt, p, fwd, size, seed):                                                    # 막장 면에 분필 (Rk08 "벽에 분필 X" · 조사/11:23 · 12:26) — 앞에서 fwd 로 쏘아 잰 면 위 점에, 면 앞에서 읽히게
+        fwd = Vector(fwd); h_ = rock(Vector(p) - fwd * 1.0, fwd, 3.0)
+        if h_: PU.place(face_kit.chalk(PM, txt, size, seed), Matrix.Translation(h_[0]) @ R(math.degrees(math.atan2(-fwd.y, -fwd.x)) + 90))
+    def air_line(tag, V, wall_side, tap_out, Mj, ends, way, gz, wside):
+        """압축공기 관(지름 0.1) + 그 0.2 m 밑 물 관(0.05 — 끝이 0.6 m 짧아 밸브 꼭지가 공기 관에 안 걸린다): 첫 끝은 벽 속, 다른 끝은 밸브 → 고무 호스가 바닥으로 내려와 way 를 지나 착암기 꼭지까지.
+        V = 공기 관 가운데 줄 (세계 · 첫 점이 벽 속 · 끝에서 둘째 점이 밸브), tap_out = 밸브에서 방 쪽, way = 바닥 경유 점 [(x, y)], wside = 물 호스를 공기 호스 옆으로 비키는 만큼 (x, y).
+        빈 노드 (검사 map4_air_lines): AIRP_<tag>_<00..> 관 줄 (3 m 안 간격) · VALVE_<tag>_0 공기 밸브 꼭지 · HOSEP_<tag>_<00..> 공기 호스 점 (00 = 밸브 쪽) · JACKLEG_<tag> 착암기 공기 꼭지"""
+        V = [Vector(p) for p in V]; _, taps = face_kit.air_pipe(PM, V, 0.1, valves=(len(V) - 2,), wall_side=wall_side)
+        dz = Vector((0, 0, 0.2)); dl = (V[-1] - V[-3]).normalized(); Ll = (V[-1] - V[-3]).length
+        Wv = [p - dz for p in V[:-2]] + [V[-3] - dz + dl * (Ll - 0.85), V[-3] - dz + dl * (Ll - 0.6)]; _, wtaps = face_kit.air_pipe(PM, Wv, 0.05, valves=(len(Wv) - 2,), wall_side=wall_side)
+        def drop(t, e, off, r):                                                               # 꼭지 → 바로 앞 바닥 → 경유 점 → 착암기 꼭지 (점마다 그 자리 바닥 높이, 1 m 안 간격)
+            q = t + Vector(tap_out) * 0.25; out_ = [t - Vector((0, 0, 0.7 * r)), Vector((q.x, q.y, gz(q.x, q.y, t.z - 1.5)))]
+            for x_, y_ in [(x_ + off[0], y_ + off[1]) for x_, y_ in way] + [(e.x, e.y)]:
+                a_ = out_[-1]; n_ = max(1, math.ceil(math.hypot(x_ - a_.x, y_ - a_.y) / 1.0))
+                for k in range(1, n_ + 1): cx_, cy_ = a_.x + (x_ - a_.x) * k / n_, a_.y + (y_ - a_.y) * k / n_; out_.append(Vector((cx_, cy_, gz(cx_, cy_, t.z - 1.5))))
+            out_[-1] = e.copy(); return out_
+        ho, wo = Mj @ ends["hose_out"], Mj @ ends["water_out"]; H_ = drop(taps[0], ho, (0, 0), 0.02)
+        face_kit.hose(PM, H_, 0.04, 1, "AIRHOSE_" + tag); face_kit.hose(PM, drop(wtaps[0], wo, wside, 0.01), 0.02, 2, "WATERHOSE_" + tag)
+        P_ = [V[0]]
+        for a_, b_ in zip(V, V[1:]): n_ = max(1, math.ceil((b_ - a_).length / 3.0)); P_ += [a_.lerp(b_, k / n_) for k in range(1, n_ + 1)]
+        for k, p in enumerate(P_): node("AIRP_%s_%02d" % (tag, k), p)
+        for k, p in enumerate(H_): node("HOSEP_%s_%02d" % (tag, k), p)
+        node("VALVE_%s_0" % tag, taps[0]); node("JACKLEG_%s" % tag, ho)
+        print("CHECK map4 air line %s: pipe %.1f m (%d points, into the rock at one end, valve at the other) · air hose %.1f m to the drill · water pipe and hose beside it" % (tag, sum((b_ - a_).length for a_, b_ in zip(V, V[1:])), len(P_), sum((b_ - a_).length for a_, b_ in zip(H_, H_[1:]))))
     for n in rooms:
         i = n["id"]; w, dd = n["w"], n["d"]; METAL["wet"] = i in ("P", "R1")
         if i == "P":                                                                          # 펌프실: 배수 펌프 한 벌 + 판자 덮은 물구덩이 (남쪽 벽)
@@ -1878,7 +1981,7 @@ def map4():
         elif i == "M":                                                                        # 옛 채굴 빈터: 무너진 돌 언덕 둘 + 모양 다른 석탄 기둥 둘 (돌며 눈을 끊는다)
             pile(n, -7, 4, "stone", 4.5, 3.8, 1.9, 100, 3, 9); pile(n, 6, -5, "stone", 4.0, 3.8, 1.9, 90, 3, 8)   # 무너진 돌 언덕 둘 — 선 사람이 가려지는 높이(1.9 m). 석탄 기둥 둘은 방 공기를 팔 때 남겼다 (PILLARS)
         elif i == "K":                                                                        # 붕락 방: 가운데 큰 돌 더미 + 쓰러진 둥근 동발 + 여럿이 같이 세울 새 동발 자리 (카드 14)
-            surf = pile(n, FALL["K"][0], FALL["K"][1], "stone", 6.6, 4.4, 2.6, 200, 3, 12)       # 천장 구멍(FALL) 바로 밑 — 떨어진 바위는 부풀어 구멍보다 넓게 퍼진다
+            surf = pile(n, FALL["K"][0], FALL["K"][1], "stone", 6.6, 4.4, 2.6, 200, 3, 12); HEAPTOP["K"] = surf   # 천장 구멍(FALL) 바로 밑 — 떨어진 바위는 부풀어 구멍보다 넓게 퍼진다
             for k, (dx_, dy_, yaw_, pt_) in enumerate(((-3.2, 1.2, 200, 28), (1.8, -2.4, 310, 35), (3.6, 1.6, 20, 22), (-0.8, 2.9, 100, 40), (-4.6, -1.8, 160, 18))):   # 더미에 묻힌 부러진 동발 (기획서 4절 "무너진 막장: 부러진 동발 · 돌무더기")
                 stuck_log(surf, n["x"] + dx_, n["y"] + dy_, yaw_, pt_, random.uniform(1.6, 2.4), 0.1, seed=k)
             for k in range(3): on_floor(timber_store.loose_log(PM, 2.3, 0.2, seed=k), n["x"] - 10.5 + k * 9.5, n["y"] + (6.4 if k % 2 else -6.5), n["z"], random.uniform(0, 180))
@@ -1915,15 +2018,44 @@ def map4():
             water_sheet("NOCOL_WATER", W(n, 0, 0, 0.19), w - 0.6, dd - 0.6)
             pump_here("pump_R1", -1.065, "abandoned", True, False)                               # 녹슨 펌프 한 벌 + 떼어 간 빈 받침. 내보내는 관은 온전히 천장까지 (옛 것은 가운데 토막이 빠져 벽에 관 토막 둘만 매달려 보였다)
             lp = WSPOT["pump_R1"][3] - WSPOT["pump_R1"][1] * 2.6; lamp_at(lp.x - 1.0, lp.y, n["z"], n["h"], "ZL_ffb070_%d", 50, (1.0, 0.69, 0.44))   # 펌프 위 작업등 하나 (불 없는 방이라 입구에서 펌프가 안 보였다 — 사용자 10-02 "무엇을 뜻하는지 확인이 안 된다")
-        elif i == "E1":                                                                       # 선풍기 방: 썰매 받침 위 국부 선풍기 → 천장에 매단 천 바람 관(끝은 찢겨 늘어짐) + 벽 개폐기
-            fx, fy = n["x"] - 6.0, n["y"] + dd / 2 - 1.7; fz = floor_at(fx, fy, n["z"]) - 0.01
-            oz = min(3.3, roof_at(fx + 1.95, fy, n["z"]) - fz - 0.6); Mf = Matrix.Translation((fx, fy, fz))
-            Mw, _, _ = at_wall("sw_E1", 0.4); PU.place(wall_props.switch_box(PM), Mw)
-            PU.place(fan_duct.fan(PM, outlet_z=oz, cable_to=tuple(Mf.inverted() @ (Mw @ Vector((-0.2, -0.12, 0.03))))), Mf)
-            pts = [(fx + 1.95, fy, fz + oz, roof_at(fx + 1.95, fy, n["z"]))]
-            for k in range(1, 6):
-                x_ = fx + 1.95 + k * 2.0; rz = roof_at(x_, fy, n["z"]); pts.append((x_, fy, max(pts[-1][2] - 0.12, min(pts[-1][2] + 0.12, rz - 0.6)), rz))
-            fan_duct.duct(PM, pts, torn_end=True, seed=3, floor_z=fz, torn_side=-1)
+        elif i == "E1":                                                                       # 선풍기 방 = 북쪽 벽 굴진 막장(HEAD)에 새 바람을 보내는 곳: 국부 선풍기 → 관 → 막장 · 벽 개폐기 · 압축공기 관 → 착암기
+            # 사용자 10-03 판정 ③ "바람 관이 무슨 의미인지 모르겠다. 방 하나에 선풍기 하나가 달랑 남아 있어서 무슨 기구인지 인지가 안 된다. 실제로 어떻게 쓰이는지 확인 후 배치와 모델링".
+            #   옛 것: 선풍기 → 방 안 10 m 천 관 → 찢긴 끝이 방 바닥에 누움 (바람이 갈 곳이 없었다). 레퍼런스 1~5 (보령석탄박물관 국부선풍기 · Sonderbewetterung 통기도 · La Mine Image · Idrija · Nowa Ruda 풍관):
+            #   선풍기는 새 바람이 오는 쪽(서쪽 바람문 굴)을 빨아들이는 입으로 보고 막다른 굴 입구 밖(9 m 넘게) 벽 앞에 · 관은 출구에서 올라가 북쪽 벽을 따라 동쪽으로 가다 굴 입구에서
+            #   북쪽으로 꺾여 굴 천장 동쪽 모서리(동발 캡 밑)에 매달려 막장 4~5 m 앞에서 열린 입으로 끝난다 (법: 풍관 끝은 막장에서 7 m 안 — 조사/09:642) · 통에 흰 페인트 번호
+            hx, hy0, hd = HEAD["x"], n["y"] + dd / 2, HEAD["d"]; Fh = Vector((0, 1, 0)); hwh = HEAD["w"] / 2; caps = []; yv = 0.7
+            while yv < hd - 1.3:                                                              # 동발 틀: 북쪽 막장 줄과 같은 법 (입구 0.7 m 안쪽부터 막장 1.3 m 앞까지 1 m 마다 · 1988 = 나무 동발 시대). 폭 2.5 — 기둥 바깥 벽 쪽으로 관 두 줄이 지난다
+                py = hy0 + yv; fz_ = floor_at(hx, py, n["z"]); rz = min(roof_at(hx + sx_, py, n["z"]) for sx_ in (-0.9, 0.0, 0.9))
+                PU.place(timber_sets.frame(PMD, width=2.5, height=rz - fz_ - FRAME_OVER, lean=0.13, lagging=4, seed=300 + int(yv), bay=1.0 if yv + 1.0 < hd - 1.3 else None), Matrix.Translation((hx, py, fz_ - 0.02)) @ R(90))
+                caps.append((py, rz - FRAME_OVER - 0.02)); yv += 1.0
+            fh_ = rock((hx, hy0 + hd - 2.0, n["z"] + 1.5), Fh, 6.0); HEAD["face"] = face_y = fh_[0].y if fh_ else hy0 + hd; fzf = floor_at(hx, face_y - 1.0, n["z"])   # 막장 면 (잰 곳)
+            node("DFACE_E1", (hx, face_y - 0.2, fzf + 1.5))
+            pile_own("E1 muck", dict(x=hx + 0.75, y=face_y - 0.6, z=n["z"]), 0, 0, "stone", 0.85, 0.65, 0.45, 22, 2, 5)   # 발파 뒤 발치에 쏟아진 버력 (조사/12:63) — 작은 더미 (착암기 옆을 비운다)
+            Mj, ends, hp = drill_at((hx - 0.45, face_y, n["z"]), Fh, floor_at, seed=1)        # 착암기: 정이 막장 면 구멍 하나에 꽂힌 채 (몸통이 서쪽 — 호스 꼭지는 동쪽으로 나온다)
+            face_kit.drill_holes(PM, face_holes(Vector((hx, face_y - 1.0, 0)), Fh, (1, 0, 0), fzf, 2.9, 2.9, 24, 1, keep=(hp,)) + [(hp, -Fh)])   # 굴진(바위) 막장 면의 발파 구멍 (조사/01:26 · 12:68)
+            chalk_at("X", (hx + 0.85, face_y, fzf + 2.2), Fh, 0.22, 1); chalk_at("12", (hx - 0.95, face_y, fzf + 2.45), Fh, 0.14, 2)
+            sx0, syc, sz0 = lib("uddjeelqx")[2]; sL = lib("uddjeelqx")[1]; sp = Vector((hx + 0.6, face_y - 2.3, 0))
+            put("uddjeelqx", Matrix.Translation((sp.x, sp.y, floor_at(sp.x, sp.y, n["z"]) + 0.01)) @ R(95) @ Matrix.Translation((-(sx0 + sL / 2), -syc, -sz0)))   # 삽 (버력 치우는)
+            zd = min(c_ for _, c_ in caps) - 0.40                                              # 관 가운데 높이 = 가장 낮은 캡 밑 − 0.4 (관 위 0.38 m 를 쇠줄이 지난다) — 방에서도 같은 높이 (꺾어 내리지 않는다)
+            fx, fy = n["x"] - 6.0, n["y"] + dd / 2 - 1.7; fz = floor_at(fx, fy, n["z"]) - 0.01; Mf = Matrix.Translation((fx, fy, fz))   # 선풍기 자리는 그대로 (북쪽 벽 1.7 m 앞 · 빨아들이는 입 = 서쪽)
+            Mw, _, _ = at_wall("sw_E1", 0.4); PU.place(wall_props.switch_box(PM), Mw)          # 개폐기 (정전 뒤 사람이 손으로 켠다 — 조사/09:771)
+            PU.place(fan_duct.fan(PM, outlet_z=zd - fz, cable_to=tuple(Mf.inverted() @ (Mw @ Vector((-0.2, -0.12, 0.03)))), number="3"), Mf)
+            dx_ = hx + 0.5; x0_ = fx + 1.95; k_ = max(2, round((dx_ - x0_) / 2.0)); end_y = face_y - 4.4
+            dp = [(x0_ + (dx_ - x0_) * j / k_, fy, zd, roof_at(x0_ + (dx_ - x0_) * j / k_, fy, n["z"])) for j in range(k_ + 1)]   # 방: 출구에서 북쪽 벽을 따라 동쪽으로, 2 m 마다 천장 걸이 · 마지막 점에서 북쪽으로 꺾인다 (쇠 굽은 토막)
+            ins = [c_ for c_ in caps if c_[0] < end_y + 0.5]; dp += [(dx_, py, zd, cz) for k2, (py, cz) in enumerate(ins) if k2 % 2 == 0 or k2 == len(ins) - 1]   # 굴: 동발 캡에 2 m 마다 건다 · 막장 4~5 m 앞에서 끝
+            _, dline = fan_duct.duct(PM, dp, end="open", seed=3, floor_z=[floor_at(p_[0], p_[1], n["z"]) for p_ in dp])
+            node("FAN_E1", dp[0][:3]); cum = [0.0]
+            for a_, b_ in zip(dline, dline[1:]): cum.append(cum[-1] + (b_ - a_).length)
+            nd_ = max(1, math.ceil(cum[-1] / 2.0))                                              # DUCTP = 관 가운데 줄을 2 m 안 간격으로 (굽은 곳도 그 줄 위)
+            for k2 in range(nd_ + 1): node("DUCTP_E1_%02d" % k2, dline[min(range(len(cum)), key=lambda q: abs(cum[q] - cum[-1] * k2 / nd_))])
+            print("CHECK map4 E1 fan duct: centre %.2f m · lowest underside %.2f m above the floor (with sag) · %.1f m long · open end %.1f m from the face · fan %.1f m from the face · frames %d" % (
+                zd, min(p_.z - floor_at(p_.x, p_.y, n["z"]) for p_ in dline) - 0.32, cum[-1], face_y - dline[-1].y, (Vector((x0_, fy, 0)) - Vector((hx, face_y, 0))).length, len(caps)))
+            zp = n["z"] + 2.0; xw = n["x"] - w / 2                                              # 압축공기 · 물 관 (높이 2.0 · 1.8 — 개폐기 1.65 위): 바람문 굴 입구 북쪽 서쪽 벽에서 나와 → 북쪽 벽 → 굴 서쪽 벽(동발 기둥 바깥)으로 막장 3 m 앞까지
+            Ln = meet(meet(hug((xw + 1.2, n["y"] + 2.9), (xw + 1.2, hy0 - 1.0), zp, (-1, 0, 0)), hug((xw + 1.0, hy0 - 1.0), (hx - hwh - 0.3, hy0 - 1.0), zp, (0, 1, 0))),
+                      hug((hx - hwh + 0.9, hy0 + 0.3), (hx - hwh + 0.9, face_y - 3.0), zp, (-1, 0, 0))); dl_ = (Ln[-1] - Ln[-2]).normalized()
+            air_line("E1", [into_wall(Ln[0], (-1, 0, 0))] + Ln[:-1] + [Ln[-1] - dl_ * 0.25, Ln[-1]], (-1, 1, 0), (1, 0, 0), Mj, ends, [(hx - 0.6, face_y - 2.75)], floor_at, (0, -0.12))
+            SHOTS.append(("heading_E1", (n["x"] - 3.5, n["y"] - 2.5, floor_at(n["x"] - 3.5, n["y"] - 2.5, n["z"]) + EYE), (n["x"] - 1.5, hy0, n["z"] + 2.0)))   # [ ] 자리: 방 남서쪽에서 선풍기 → 관 → 굴 입구가 한 화면에
+            SHOTS.append(("face_E1", (hx - 0.2, face_y - 6.5, floor_at(hx - 0.2, face_y - 6.5, n["z"]) + EYE), (hx, face_y, fzf + 1.3)))   # [ ] 자리: 굴 안에서 막장 면 (관 끝 · 착암기 · 발파 구멍 · 버력)
         elif i == "E4":                                                                       # 옛 권양기 방: 작은 권양기(감개 · 큰 톱니 · 전동기 · 제동 손잡이) — 끊어진 쇠줄은 바닥에
             # 사용자 10-03 "권양기 방이 무엇을 뜻하는지 모르겠다": 옛 것은 방 한쪽에 감개만 덩그러니 — 줄이 어디로 가는지, 무엇을 끄는지가 없었다.
             #   권양기 = 쇠줄로 광차를 비탈 위로 끌어올리는 감개 (레퍼런스: 직접 끄는 줄 운반 — 감개는 비탈 머리에, 줄은 레일 사이로 비탈을 내려간다). 이 방은 막아 둔 채굴적 입구(E2)에서 올라오는 비탈의 머리다.
@@ -1978,7 +2110,39 @@ def map4():
                 surf = pile(dict(x=wall.x, y=wall.y + FACE_D - 0.5, z=n["z"]), 0, 0, "coal", 1.6, 1.3, 0.8, 34, 2, 5)   # 막장 벽 발치에 기댄 탄 더미 (옛 것은 벽 0.7 m 앞 통로 가운데)
                 sx0, syc, sz0 = lib("uddjeelqx")[2]; sL = lib("uddjeelqx")[1]; sp = Vector((wall.x - 1.0 + k_ * 0.4, wall.y + FACE_D - 2.3, 0))
                 put("uddjeelqx", Matrix.Translation((sp.x, sp.y, floor_at(sp.x, sp.y, n["z"]) + 0.01)) @ R(70 + k_ * 40) @ Matrix.Translation((-(sx0 + sL / 2), -syc, -sz0)))   # 삽 (막장 앞에 누움)
+                # 막장 연장 (사용자 10-03 판정 ③ "막장의 디테일 부족"): 면마다 발파 구멍 + 분필 X · 막장 번호 · 가운데 막장에 착암기를 세우고(관 · 호스는 아래) · 동쪽 막장엔 뉘어 둔 착암기 (정을 빼서 옆에)
+                fy_ = wall.y + FACE_D; fzf = floor_at(wall.x, fy_ - 1.5, n["z"]); hp_ = ()
+                if dx_ == 0: Mj2, ends2, hpj = drill_at((wall.x + 0.2, fy_, n["z"]), (0, 1, 0), floor_at, seed=2); hp_ = (hpj,)
+                if dx_ == 8: on_floor(face_kit.jackleg_lying(PM, seed=2), wall.x - 0.4, wall.y + 2.2, n["z"], 75)
+                face_kit.drill_holes(PM, face_holes(Vector((wall.x, fy_ - 1.0, 0)), (0, 1, 0), (1, 0, 0), fzf, 3.0, 2.5, 22, 10 + k_, keep=hp_) + [(p_, Vector((0, -1, 0))) for p_ in hp_])
+                chalk_at("X", (wall.x - 0.85, fy_, fzf + 1.9), (0, 1, 0), 0.2, 10 + k_); chalk_at(str(k_ + 1), (wall.x + 0.95, fy_, fzf + 2.15), (0, 1, 0), 0.15, 20 + k_)
+            wl = FACES[1][0]; yw = n["y"] + dd / 2                                             # 가운데 막장의 압축공기 · 물 관: 동쪽 막장과 사이 벽에서 나와 북쪽 벽을 따라 가운데 막장 입구 옆 밸브까지 → 호스가 바닥을 기어 막장 속 착암기로 (사진 "바닥에 검은 고무 호스가 막장까지")
+            Ln = hug((wl.x + 5.4, yw - 1.0), (wl.x + 2.05, yw - 1.0), n["z"] + 2.0, (0, 1, 0)); dl_ = (Ln[-1] - Ln[-2]).normalized()
+            air_line("N2", [into_wall(Ln[0], (0, 1, 0))] + Ln[:-1] + [Ln[-1] - dl_ * 0.25, Ln[-1]], (0, 1, 0), (0, -1, 0), Mj2, ends2, [(wl.x + 1.15, yw - 0.25), (wl.x + 1.0, yw + 1.0), (wl.x + 0.9, yw + 3.0)], floor_at, (0.12, 0))
     METAL["wet"] = False
+    # ---- 채탄 막장(②) 연장 (사용자 10-03 판정 ③ "막장의 디테일 부족"): 곁굴(Fab 나무 버팀) 서쪽 벽을 따라 압축공기 · 물 관 → 밸브 → 호스가 옛 호스 길로 막장 앞 착암기까지 · 막장 면 발파 구멍 · 분필.
+    #   옛 호스(장면 ②)는 양 끝이 바닥에서 뚝 끊겨 있었다. 장면 좌표(S2: +x = 막장 쪽) → 세계
+    T2 = zi["z2"]["T"]; a2_ = 3.054 + 2.811; tun2 = a2_ + 15.0; z2f = T2.translation.z; S2 = lambda x_, y_, z_=0.0: T2 @ Vector((x_, y_, z_)); D2 = lambda x_, y_: T2.to_3x3() @ Vector((x_, y_, 0))
+    Fw, Fs = D2(1, 0), D2(0, -1)                                                                  # 막장 쪽 · 곁굴 서쪽 벽 쪽 (세계)
+    Mj3, ends3, hp3 = drill_at(tuple(S2(tun2, 0.3)), Fw, ground, seed=3)                        # 착암기: 막장 면의 캐낸 자국 둘 사이에 정을 꽂은 채
+    fz3 = ground(S2(tun2 - 1.2, 0.0).x, S2(tun2 - 1.2, 0.0).y, z2f)
+    face_kit.drill_holes(PM, face_holes(S2(tun2 - 0.55, 0.0), Fw, Fs, fz3, 4.6, 2.2, 24, 3, keep=(hp3,)) + [(hp3, -Fw)])
+    chalk_at("X", tuple(S2(tun2, -1.5, fz3 - z2f + 1.65)), Fw, 0.2, 3); chalk_at("7", tuple(S2(tun2, 1.6, fz3 - z2f + 1.85)), Fw, 0.15, 4)
+    Ln = hug(tuple(S2(0.6, -0.2))[:2], tuple(S2(4.1, -0.2))[:2], z2f + 1.9, Fs, gap=0.15, look=first_hit); dl_ = (Ln[-1] - Ln[-2]).normalized()   # 관은 곁굴 덧댄 판 0.15 m 앞 (판 너머 바위로 들어가 끝난다)
+    air_line("z2", [into_wall(Ln[0], Fs)] + Ln[:-1] + [Ln[-1] - dl_ * 0.25, Ln[-1]], Fs, D2(0, 1), Mj3, ends3,
+             [tuple(S2(x_, y_))[:2] for x_, y_ in ((a2_ - 1.0, -0.95), (a2_ + 1.5, -0.6), (a2_ + 4, -0.3), (a2_ + 7, -0.55), (a2_ + 10, -0.2), (tun2 - 2.9, -0.2))], ground, tuple(D2(0, 0.12))[:2])
+    # 채탄 막장 바람 관 (막장 앞 방 F 의 선풍기 → 곁굴 → 막장 천장 서쪽 모서리, 지름 0.45): 사용자 지시 "천장이 낮아 숙임 검사를 못 넘으면 빼고 이유를 적는다" — 먼저 재 본다.
+    #   매단 관 밑 = 머리 위 가장 낮은 것(Fab 굴 갓목 · 통나무 갓목 · 바위 천장, 세운 기둥은 비켜 간다) − (걸이 쇠줄 0.305 + 반지름 0.225 + 테 0.02 + 처짐 0.055)
+    deps_ = bpy.context.evaluated_depsgraph_get(); worst = (9.0, 0.0)
+    for x_ in np.arange(0.5, tun2 - 6.5, 0.5):
+        q = S2(x_, -0.8 if x_ < a2_ else -2.55); g_ = ground(q.x, q.y, z2f); o_ = Vector((q.x, q.y, g_ + 0.3)); top = None
+        for _ in range(6):
+            hit, loc, _n, _i, ob, _m = sc.ray_cast(deps_, o_, Vector((0, 0, 1)), distance=6.0)
+            if not hit: break
+            if "tgnidj2fa" not in ob.name and loc.z - g_ > 1.2: top = loc.z; break
+            o_ = loc + Vector((0, 0, 0.02))
+        if top is not None and top - g_ - 0.605 < worst[0]: worst = (top - g_ - 0.605, x_)
+    print("CHECK map4 z2 fan duct %s: a 0.45 m duct hung along the west roof corner would hang %.2f m above the floor at %.1f m in (crouch line 1.85 m, wanted > 2.0)" % ("NOT built" if worst[0] < 2.0 else "would fit — not built", *worst))
     def choke(wall, f, d0, d1, width, z0, seed):
         """무너져 막힌 굴: 벽에서 d0 m 안쪽 바닥에서 시작해 d1 에서 천장에 닿는 돌 비탈(약 38°) + 그 겉에 묻힌 덩이 + 부러진 동발. 굴 폭보다 넓게 깔아 옆 틈이 없다.
         막아 둔 채굴적 울타리 틈으로 보이는 것 = "쓰지 않는 갱도"가 무너져 있다 (설계 map4_plan.json: 울타리 틈으로 무너진 채굴적 덩어리가 보인다)"""
@@ -2004,12 +2168,16 @@ def map4():
         F = Matrix.Translation(wall + f * 1.5) @ Matrix.Rotation(math.atan2(f.y, f.x), 4, "Z"); u = Vector((-f.y, f.x, 0))
         choke(wall, f, 4.4, 8.2, 3.6, z0, k_f)
         boxes("FENCE", M_FENCE, [(F @ Vector((0, -1.6 + k * 0.4, 1.18)), (0.05, 0.28, 2.4), F.to_3x3()) for k in range(9)] + [(F @ Vector((-0.06, 0, z_)), (0.05, 3.9, 0.12), F.to_3x3()) for z_ in (0.6, 1.8)])
-        PU.place(wall_props.no_entry_plate(PM), F @ Matrix.Translation((-0.027, 0, 1.3)) @ Matrix.Rotation(math.radians(-90), 4, "Z"))   # 판자에 못 박은 흰 판 + 빨간 글씨 (옛 것: 허공의 글씨)
-        red = (wall - Vector((N["E2"]["x"], N["E2"]["y"], 0))).to_2d().length < 20
+        red = (wall - Vector((N["E2"]["x"], N["E2"]["y"], 0))).to_2d().length < 20             # 동쪽 = 막아 둔 채굴적(E2) = 가스 · 서쪽 = 옛 채굴 빈터(M) = 붕락
+        # 막은 까닭을 나눠 보이게 (사용자 10-03 판정 ③ "출입금지 구역의 이유 디테일 부족"). 레퍼런스: 1964 광산보안법 시행규칙 제156조(쓰지 않는 갱도 = 출입 금지 경표 + 책위) · 제67조(유해 가스 = 경표 + 책위,
+        #   허락 없이 걷어 내지 못함) · 메탄 1.5 % 넘으면 전기를 끊고 2 % 넘으면 통행을 막는다 · 붕락 신호 '이슬이 온다 · 짐이 온다' (조사/07:139-151 · 02:9 · 03:21 · 09:655) · 기획서:566 "판자로 막고 분필로 '출입금지'".
+        #   판자에 못 박은 까닭 적은 흰 판 (옛 것: "출입금지" 한 줄 판) + 위 가로대 위 판자에 분필
+        PU.place(wall_props.danger_board(PM, ("출입금지", "유해가스 발생" if red else "붕락 위험", "허가 없이 들어가지 말 것")), F @ Matrix.Translation((-0.027, 0, 1.3)) @ Matrix.Rotation(math.radians(-90), 4, "Z"))
+        PU.place(wall_props.chalk_on_boards(PM, "출입금지 가스!" if red else "붕락 위험", 2.6, 0.36, seed=k_f, x0=0.0), F @ Matrix.Translation((-0.025, 0, 2.12)) @ Matrix.Rotation(math.radians(-90), 4, "Z"))
         if red:                                                                               # 가스 검정판 (사용자 10-02 "출입 금지 앞에 떠 있는 물체는 무엇을 의미하는지 모르겠음" — 벽에서 4 m 떨어진 허공의 판 + 흰 네모 둘이었다).
-            gp = wall + u * 2.55 - f * 0.55; gz = floor_at(gp.x, gp.y, z0)                     # 레퍼런스 공통점: 막은 곳 바로 옆 기둥에 철사로 건 파란 판 — 표(가스 · 측정값 · 날짜 · 검정자)에 분필 글씨. 눈금 바늘이 아니다
-            PU.place(wall_props.gas_board(PM, h=roof_at(gp.x, gp.y, z0) - gz + 0.04), Matrix.Translation((gp.x, gp.y, gz - 0.02)) @ Matrix.Rotation(math.atan2(f.y, f.x) - math.pi / 2, 4, "Z"))
-        lamp_at((wall - f * 0.3).x, (wall - f * 0.3).y, z0, 3.0, "ZL_ff1a0d_%d" if red else "ZL_ff7a1a_%d", 40, (1.0, 0.1, 0.05) if red else (1.0, 0.48, 0.1))
+            gp = wall + u * 2.55 - f * 0.55; gz = floor_at(gp.x, gp.y, z0)                     # 레퍼런스 공통점: 막은 곳 바로 옆 기둥에 철사로 건 판 — 표(가스 · 측정값 · 날짜 · 검정자)에 분필 글씨. 10-03 판정 ③: 날마다 한 줄씩 오르는 메탄 값 · 마지막 2.3 % 에 빨간 동그라미 · 분필 "출입금지" (장면카드 "점검표의 가스 숫자가 날마다 오르다가")
+            PU.place(wall_props.gas_board(PM, h=roof_at(gp.x, gp.y, z0) - gz + 0.04, warn=True), Matrix.Translation((gp.x, gp.y, gz - 0.02)) @ Matrix.Rotation(math.atan2(f.y, f.x) - math.pi / 2, 4, "Z"))
+        lamp_at((wall - f * 0.3).x, (wall - f * 0.3).y, z0, 3.0, "ZL_ff1a0d_%d", 40, (1.0, 0.1, 0.05))   # 두 곳 다 위험 빨강 한 값 (옛 서쪽 것은 주황 ff7a1a) — 설계 map4_plan.json:151 "붉은 등" · 제158조 "위험한 곳에는 적색 전등"
     # ---- 그것의 굴(⑨): 남은 바위 기둥 셋 · 무너진 돌 언덕 · 넘어진 광차 (장면 좌표 → 세계). 사용자 10-03 "큰 빈터에서의 광차의 위치 · 돌 무더기 큰 암석의 모델링이 어색"
     T9 = zi["z9"]["T"]; n9 = lambda lx, ly: (lambda v: dict(x=v.x, y=v.y, z=v.z))(T9 @ Vector((lx, ly, 0)))
     for k_, (c_, r_) in enumerate(Z9_COLUMNS): rock_column(c_[0], c_[1], r_, -1.0, 19.0, T9, "ROCKCOL_%d" % k_)      # 벽과 같은 법으로 감싼 기둥 (사진도 벽과 같이 — 아래 tex1_paint)
@@ -2035,6 +2203,37 @@ def map4():
         for nm_, pt_ in (("MGAP", w0), ("MGAPIN", w0 + f * 1.0), ("MGAPMID", path[1][0].lerp(path[1][1], 0.55)), ("MGAPEND", path[2][0].lerp(path[2][1], 0.86))):
             e_ = bpy.data.objects.new("%s_%s" % (nm_, rid), None); e_.location = Vector((pt_.x, pt_.y, z0 + 1.2)); sc.collection.objects.link(e_)
         SHOTS.append(("gap_%s" % rid, tuple(w0 - f * 4.0 + u * 0.8 + Vector((0, 0, EYE))), tuple(w0 + f * 1.0 + Vector((0, 0, 1.4)))))
+    # ---- 천장 구멍 꾸밈 (사용자 10-03 판정 ③ ⓑ — 벽 틈처럼 "저기로 드나든다"로 읽히게, 벽 틈 꾸밈과 같은 법): 입 둘레 천장에 누워 구멍 쪽을 가리키는 긁힌 자국 여섯 군데 × 네 줄
+    #   + 목 안쪽 세로 자국 + 밑에 떨어진 돌 5~7 (붕락 방은 돌 더미 윗면 위, 옛 채굴 빈터는 무너진 돌 언덕을 비켜 바닥에). 벽에서 구멍까지 이어지는 자국은 넣지 않았다 (지적 밖 — 물어본다).
+    #   빈 노드 CHIM(입 가운데, 천장 높이) · CHIMP1 · CHIMP2(꺾는 점) · CHIMEND(끝 0.4 m 앞) _<방> = 검사 map4_ceiling_holes
+    for rid, (c0, p1, p2, p3, d1, a, sx_, sy_) in CHIMS.items():
+        rnd = random.Random("chim" + rid); items = []; zlo = min(c0.z - 1.6, N[rid]["z"] + N[rid]["h"] - 0.5)
+        for k in range(6):
+            t_ = math.radians(60 * k + rnd.uniform(-12, 12)); u_ = Vector((math.cos(t_), math.sin(t_), 0)); v_ = Vector((-u_.y, u_.x, 0))
+            re = min(sx_ / 2 / max(abs(u_.x), 1e-6), sy_ / 2 / max(abs(u_.y), 1e-6)) + rnd.uniform(0.12, 0.3)   # 입 가장자리에서 조금 밖
+            for j in range(4):
+                Lg = rnd.uniform(0.45, 0.75); o_ = c0 + u_ * re + v_ * ((j - 1.5) * 0.085 + rnd.uniform(-0.01, 0.01))
+                hs = [rock(Vector((q.x, q.y, zlo)), (0, 0, 1), 4.0) for q in (o_, o_ + u_ * Lg)]
+                if not all(hs) or any(abs(h_[0].z - c0.z) > 1.2 or h_[1].z > -0.3 for h_ in hs): continue   # 입 둘레 천장(아래를 보는 면)에 닿은 것만
+                e0, e1 = hs[0][0], hs[1][0]; x_ = (e1 - e0).normalized(); nz = (hs[0][1] + hs[1][1]).normalized(); z_ = (nz - x_ * nz.dot(x_)).normalized()
+                items.append(((e0 + e1) / 2 + z_ * 0.008, ((e1 - e0).length, 0.05, 0.012), Matrix((x_, z_.cross(x_), z_)).transposed()))
+        for k in range(4):                                                                    # 목 안쪽 세로 자국 (입 벽)
+            dv = Matrix.Rotation(math.radians(90 * k + rnd.uniform(-20, 20)), 3, "Z") @ Vector((1, 0, 0))
+            for j in range(2):
+                q = c0 + Vector((0, 0, 0.35 + 0.3 * j)); h_ = rock(q, dv, 2.5)
+                if not h_ or (h_[0] - q).length > 2.0: continue
+                items.append((h_[0] - dv * 0.008 + Vector((-dv.y, dv.x, 0)) * (0.07 * (j - 0.5)), (0.05, 0.012, rnd.uniform(0.45, 0.7)), Matrix.Rotation(math.atan2(dv.y, dv.x) - math.pi / 2, 3, "Z") @ Matrix.Rotation(rnd.uniform(-0.25, 0.25), 3, "Y")))
+        if items: boxes("NOCOL_CHGOUGE_" + rid, M_GOUGE, items)
+        surf_ = HEAPTOP.get(rid); nst = rnd.randint(5, 7)                                       # 떨어진 돌: 구멍 바로 밑 1.1 m 안 (붕락 방 = 더미 윗면 위 · 옛 채굴 빈터 = 무너진 돌 언덕 둘레를 비켜 바닥에)
+        for j in range(nst):
+            for _ in range(30):
+                a_, r_ = rnd.uniform(0, 6.28), rnd.uniform(0.2, 1.1); q = Vector((c0.x + math.cos(a_) * r_, c0.y + math.sin(a_) * r_, 0))
+                if surf_ or all(((q.x - hc.x) / hrx) ** 2 + ((q.y - hc.y) / hry) ** 2 > 1.3 for _k, hc, hrx, hry, _h in HEAPS): break
+            sc_ = rnd.uniform(2.5, 5.0); zq = (surf_(q.x, q.y) if surf_ else floor_at(q.x, q.y, N[rid]["z"])) - sh0 * sc_ * 0.3
+            put("stone", Matrix.Translation((q.x, q.y, zq)) @ R(rnd.uniform(0, 360)) @ Matrix.Diagonal((sc_, sc_, sc_, 1)) @ Matrix.Translation((-sxc, -syc, -sz0)))
+        for nm_, pt_ in (("CHIM", c0), ("CHIMP1", p1), ("CHIMP2", p2), ("CHIMEND", p2 + a * 2.6)): node("%s_%s" % (nm_, rid), pt_)
+        e_ = {"K": (-52.0, -34.5), "M": (-80.0, -66.0)}[rid]; SHOTS.append(("chim_%s" % rid, (e_[0], e_[1], floor_at(e_[0], e_[1], N[rid]["z"]) + EYE), tuple(c0 + Vector((0, 0, 1.0)))))   # [ ] 자리 (j2 캡처와 같은 눈 자리, 위를 본다)
+        print("CHECK map4 ceiling chimney %s dressing: gouge strips %d · fallen stones %d" % (rid, len(items), nst))
     for nm, c, f, iron, moved, wide in ALC:
         plank_door(c, f, nm, iron)
         if len(wide) > 3:                                                                     # 화약고 방 안: 화약 상자 (옛 코드는 방 목록에 없어 한 번도 안 놓였다)
@@ -2048,7 +2247,8 @@ def map4():
         elif n.get("lit"): lamp_grid(n, max(1, round(n["w"] / 7)), max(1, round(n["d"] / 7)), "L%d")
     # 안 켜진 방 = 작업등. 사용자 10-01 "전등을 1.5배로 — 넓은 곳은 머리등으로는 멀리 안 보인다" → 넓은 방부터 칸 수를 늘린다 (R1 · E3 · E2 · MAG 는 어둡게 둔다 — 괴물 굴 쪽)
     WORK = {"M": (4, 3), "K": (3, 2), "V": (3, 2), "W1": (4, 1), "N1": (2, 2), "N2": (3, 1), "E1": (2, 1), "K2": (2, 1)}   # 방 → (가로 칸, 세로 칸)
-    for rid, (nx, ny) in WORK.items(): lamp_grid(N[rid], nx, ny, "ZL_ffb070_%d", energy=50, col=(1.0, 0.69, 0.44))
+    MOVE = {"E1": {(0, 0): (N["E1"]["x"] - 4.0, N["E1"]["y"] + 3.3)}}                          # 선풍기 방 남서쪽 작업등 (42, −6) → 선풍기 · 관 출구 앞 (사용자 10-03 판정 ③ 선풍기 방 — 굴 입구는 북동쪽 작업등이 비춘다). 전등 수는 그대로 (fps 를 깎는 것이 벽 전등 그림자)
+    for rid, (nx, ny) in WORK.items(): lamp_grid(N[rid], nx, ny, "ZL_ffb070_%d", move=MOVE.get(rid), energy=50, col=(1.0, 0.69, 0.44))
     for rid in ("W2", "F", "E4", "X", "N0", "N3", "R2", "LD"):                                    # 작은 방 = 하나 (가운데를 비켜서)
         n = N[rid]; lamp_at(n["x"] + n["w"] * 0.2, n["y"] + n["d"] * 0.15, n["z"], n["h"], "ZL_ffb070_%d", 50, (1.0, 0.69, 0.44))
     bm = bmesh.new()                                                                           # ⑨ 그것의 굴 (40 × 26, 천장 12~16 m): 바닥에 세운 작업등 넷 — 계단 밑 · 가운데 북쪽 · 기둥 사이 · 큰 틈 앞
@@ -2232,6 +2432,9 @@ def map4():
                         ("z6", 1.4, [(-8, 1, 0), (-1.5, 1.2, 0), (1.5, 1.2, 0), (8, -1, 0)]), ("z6", 1.4, [(1.2, 1.2, 0), (1.25, -3.0, 0), (0.0, -4.4, 0), (0.0, -20, 0)])) + tuple(Z9_WALKS):
         if zn in zi: WALKS.append((zn, hw, [zi[zn]["T"] @ Vector(p_) for p_ in pts]))
     for n in rooms: AREAS.append((n["id"], Vector((n["x"], n["y"], n["z"])), n["w"], n["d"], 0.0))
+    e1 = N["E1"]; hy_ = e1["y"] + e1["d"] / 2                                                  # 선풍기 방 굴진 막장 (방 넓이 밖): 사람이 막장 면을 보러 걸어 들어가는 길 + 그 바닥 전체 — 동발 · 관 · 관 받침이 저절로 숙이게 하지 않나 (map4_no_auto_crouch · map4_walk_through)
+    WALKS.append(("E1~heading", 1.0, [Vector((HEAD["x"], hy_ - 1.0, e1["z"])), Vector((HEAD["x"], hy_, e1["z"])), Vector((HEAD["x"], HEAD["face"] - 3.4, e1["z"]))]))
+    AREAS.append(("E1head", Vector((HEAD["x"], hy_ + HEAD["d"] / 2, e1["z"])), HEAD["w"], HEAD["d"], 0.0))
     for zn, c_, w_, d_ in (("z6", (0, 0, 0), 16, 10), ("z1", (0, 0, 0), 24, 10), ("z2", (a8 + 7.5, 0, 0), 15, 6), ("z9", (0, 0, 0), 40, 26)):
         if zn in zi: AREAS.append((zn, zi[zn]["T"] @ Vector(c_), w_, d_, next(s_["yaw"] for s_ in plan["scenes"] if s_["scene"] == zn)))
     for k_, (nm, hw, pts) in enumerate(WALKS): print("CHECK map4 walk %02d %s half width %.1f m, %d points, %.0f m" % (k_, nm, hw, len(pts), sum((b_ - a_).length for a_, b_ in zip(pts, pts[1:]))))

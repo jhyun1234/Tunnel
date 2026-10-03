@@ -6,8 +6,10 @@
   - 떠 있는 것이 없어야 한다: 모든 덩어리는 바닥 · 벽 · 다른 덩어리에 닿는다. 선만 있고 면이 없는 그물(원 테두리)은 게임에 안 나온다 — 쓰지 않는다.
   - 걸어 지나는 자리 위 2.3 m 아래에는 부딪힘 있는 것을 두지 않는다 (바닥에 선 장애물은 된다).
 """
-import bpy, bmesh, math
+import bpy, bmesh, math, os
 from mathutils import Vector, Matrix
+
+FONT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "Assets", "Fonts", "BMEULJIROTTF.ttf"))   # 모든 글자 = 인트로 글씨체 배민 을지로체 (사용자 10-03 "표지의 글씨는 인트로 폰트를 사용해라. 모든 것들을"). 맑은 고딕보다 한 글자 폭이 16 % 좁다
 
 MAT_KEYS = {  # 이름 → 미리보기 색 (맵에서는 scene_mock.py 가 사진 재질로 바꿔 끼운다)
     "steel_paint": (0.20, 0.27, 0.23),   # 칠한 쇠 (바랜 회녹색)
@@ -93,11 +95,17 @@ def obj(name, bm, mat, smooth=False, per_m=0.8):
     box_uv(me, per_m)
     o = bpy.data.objects.new(name, me); bpy.context.scene.collection.objects.link(o); return o
 
-def text_mesh(name, body, loc, size, mat, rot=(math.radians(90), 0, 0), font="C:/Windows/Fonts/malgunbd.ttf", extrude=0.002):
-    """판에 쓴 글자 (그물로 바꿔 돌려준다 — glTF 는 글꼴 곡선을 못 담는다). 기본 방향 = −y 쪽에서 읽힌다"""
-    cu = bpy.data.curves.new(name, "FONT"); cu.body = body; cu.size = size; cu.align_x = "CENTER"; cu.extrude = extrude; cu.font = bpy.data.fonts.load(font, check_existing=True)
+def thin(me, deg=25):
+    """글자 그물 줄이기: 을지로체는 맑은 고딕보다 곡선 점이 다섯 배 많다 (resolution 2 로도 "출입금지" 한 줄이 삼각형 1,019) → 거의 곧게 이어진 테두리 점을 녹이고 다시 삼각형으로
+    (substation._text 와 같은 법. 25도 = 30 cm 앞에서 보면 동그라미가 조금 각질 뿐, 2 m 앞에서는 원래 글자와 구별 안 된다)"""
+    bm = bmesh.new(); bm.from_mesh(me); bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(deg), verts=bm.verts, edges=bm.edges); bmesh.ops.triangulate(bm, faces=bm.faces); bm.to_mesh(me); bm.free(); return me
+
+def text_mesh(name, body, loc, size, mat, rot=(math.radians(90), 0, 0), font=FONT, extrude=0.002):
+    """판에 쓴 글자 (그물로 바꿔 돌려준다 — glTF 는 글꼴 곡선을 못 담는다). 기본 방향 = −y 쪽에서 읽힌다. 곡선은 성기게(resolution 2 — 기본 12 는 한글 한 자가 수백 삼각형) + thin"""
+    cu = bpy.data.curves.new(name, "FONT"); cu.body = body; cu.size = size; cu.align_x = "CENTER"; cu.extrude = extrude; cu.resolution_u = 2; cu.font = bpy.data.fonts.load(font, check_existing=True)
     t = bpy.data.objects.new(name + "_c", cu); t.location = loc; t.rotation_euler = rot; bpy.context.scene.collection.objects.link(t); bpy.context.view_layer.update()
-    me = bpy.data.meshes.new_from_object(t.evaluated_get(bpy.context.evaluated_depsgraph_get())); me.transform(t.matrix_world); bpy.data.objects.remove(t, do_unlink=True)
+    me = bpy.data.meshes.new_from_object(t.evaluated_get(bpy.context.evaluated_depsgraph_get())); me.transform(t.matrix_world); bpy.data.objects.remove(t, do_unlink=True); thin(me)
     me.materials.clear(); me.materials.append(mat); o = bpy.data.objects.new(name, me); bpy.context.scene.collection.objects.link(o); return o
 
 def place(objs, M):

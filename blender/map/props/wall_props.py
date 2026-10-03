@@ -1,25 +1,23 @@
 """벽 소품 묶음: 가스 검정판(기둥에 삐딱하게) · 출입금지 판 · 갱내 전화 · 게시판(+ 번호표 걸이) · 구급함(+ 들것) · 기동기 상자.
 벽 소품 약속: 벽면 = y 0, 소품은 −y 로 튀어나온다, x = 벽을 따라, 원점 = 벽 위 바닥 높이(z 0). 글자는 −y 쪽에서 읽힌다.
 레퍼런스 공통점(R2_gas_steps 조사): 검정판은 계기가 아니라 '줄 친 양식' — 파란 판 · 흰 테두리 줄 · 왼쪽 인쇄 칸 · 오른쪽 검은 칸에 분필 글씨, 못에 철사로 걸려 삐딱하다."""
-import math, os
+import math, random
 import bpy, bmesh
 from mathutils import Vector, Matrix
-from _util import box, cyl, sweep, torus, obj
-
-_HAND = "C:/Windows/Fonts/Inkfree.ttf"   # 분필 손글씨 (없으면 기본 글꼴)
+from _util import box, cyl, sweep, torus, obj, text_mesh, thin, FONT   # FONT = 을지로체 — 분필 글씨도 (사용자 10-03 "모든 것들을", 옛 분필 = Ink Free)
 _T = lambda x=0, y=0, z=0: Matrix.Translation((x, y, z))
 
 class _P:
     """재질마다 그물 하나로 모은다 (물체 수를 줄인다). p("iron") → bmesh. smooth = 둥근 것, nocol = 부딪힘 없음"""
     def __init__(s, mats, pre): s.m, s.pre, s.b, s.txt = mats, pre, {}, []
     def __call__(s, key, smooth=False, nocol=False): return s.b.setdefault((key, smooth, nocol), bmesh.new())
-    def text(s, body, loc, size, key, tilt=0.0, hand=False):
-        """글자: _util.text_mesh 와 같은 방향(−y 에서 읽힘)이되 곡선을 성기게(resolution 2) · 두께 없이 — 한글 한 자가 수백 삼각형이 되는 것을 막는다"""
-        name = "NOCOL_%s_T%d" % (s.pre, len(s.txt)); f = _HAND if hand and os.path.exists(_HAND) else "C:/Windows/Fonts/malgunbd.ttf"
-        cu = bpy.data.curves.new(name, "FONT"); cu.body = body; cu.size = size; cu.align_x = "CENTER"; cu.resolution_u = 2; cu.font = bpy.data.fonts.load(f, check_existing=True)
+    def text(s, body, loc, size, key, tilt=0.0):
+        """글자: _util.text_mesh 와 같은 방향(−y 에서 읽힘) · 같은 을지로체 · 곡선을 성기게(resolution 2 + thin)이되 두께 없이 — 한글 한 자가 수백 삼각형이 되는 것을 막는다. 만든 물체를 돌려준다"""
+        name = "NOCOL_%s_T%d" % (s.pre, len(s.txt))
+        cu = bpy.data.curves.new(name, "FONT"); cu.body = body; cu.size = size; cu.align_x = "CENTER"; cu.resolution_u = 2; cu.font = bpy.data.fonts.load(FONT, check_existing=True)
         t = bpy.data.objects.new(name + "_c", cu); t.location = loc; t.rotation_euler = (math.pi / 2, tilt, 0); bpy.context.scene.collection.objects.link(t); bpy.context.view_layer.update()
-        me = bpy.data.meshes.new_from_object(t.evaluated_get(bpy.context.evaluated_depsgraph_get())); me.transform(t.matrix_world); bpy.data.objects.remove(t, do_unlink=True)
-        me.materials.clear(); me.materials.append(s.m[key]); o = bpy.data.objects.new(name, me); bpy.context.scene.collection.objects.link(o); s.txt.append(o)
+        me = bpy.data.meshes.new_from_object(t.evaluated_get(bpy.context.evaluated_depsgraph_get())); me.transform(t.matrix_world); bpy.data.objects.remove(t, do_unlink=True); thin(me)
+        me.materials.clear(); me.materials.append(s.m[key]); o = bpy.data.objects.new(name, me); bpy.context.scene.collection.objects.link(o); s.txt.append(o); return o
     def done(s, M=None):
         out = [obj("%s%s_%s%s" % ("NOCOL_" if n else "", s.pre, k, "_r" if sm else ""), bm, s.m[k], smooth=sm) for (k, sm, n), bm in s.b.items()] + s.txt
         if M is not None:
@@ -52,9 +50,11 @@ def _elbow(x, y, z, n=3, deep=0.12):
     return [(x, -R * math.cos(a), z - R + R * math.sin(a)) for a in (math.pi / 2 * i / n for i in range(n + 1))] + [(x, deep, z)]
 
 # ───────────────────────── 1) 가스 검정판 + 통나무 기둥 ─────────────────────────
-def gas_board(mats, label_text=True, h=2.3):
+def gas_board(mats, label_text=True, h=2.3, rows=None, warn=False):
     """원점 = 기둥 발. 기둥(굵기 0.16, 높이 2.3) 앞(−y)에 판(0.42 x 0.32, 가운데 1.45 m)이 4도 삐딱하게 걸린다.
-    label_text=False 면 왼쪽 칸 글자를 흰 띠로 바꾼다 (삼각형 아끼기). h = 기둥 높이 = 놓는 자리의 천장 높이 (머리 판이 천장에 닿아야 동발로 읽힌다)"""
+    label_text=False 면 왼쪽 칸 글자를 흰 띠로 바꾼다 (삼각형 아끼기). h = 기둥 높이 = 놓는 자리의 천장 높이 (머리 판이 천장에 닿아야 동발로 읽힌다)
+    rows = [(날짜, 시각, 측정값), …] 을 주면 판이 날마다 한 줄씩 적은 기록이 된다 (_gas_log). warn=True = 날마다 오르는 기록(rows 를 안 주면 _GAS_RISE) + 마지막 줄에 빨간 동그라미 · 분필 "출입금지".
+    rows · warn 둘 다 없으면 옛 판 그대로 (어제 · 오늘 두 칸)"""
     p = _P(mats, "GASBD")
     # 기둥: 껍질 벗긴 통나무, 위가 조금 가늘고 살짝 기운다. 발 받침 판 + 쐐기, 머리 판 + 쐐기 (동발 고정 방식)
     cyl(p("timber", smooth=True), (0, 0, 0.05), (0.012, 0.004, h - 0.08), 0.085, 10, r1=0.075)
@@ -65,25 +65,27 @@ def gas_board(mats, label_text=True, h=2.3):
     out = p.done()
     # 판: 판 자리표(가운데 = 0, 뒷면 y 0)로 만든 뒤 4도 돌려 기둥 앞에 붙인다
     b = _P(mats, "GASBD_PLATE")
-    _rect(b("steel_blue"), 0, 0, 0.42, 0.32, -0.002, 0.004)
-    W = b("white")
-    for cx, cz, w, h in ((0, 0.143, 0.392, 0.006), (0, -0.143, 0.392, 0.006), (-0.193, 0, 0.006, 0.292), (0.193, 0, 0.006, 0.292)): _rect(W, cx, cz, w, h, -0.005)   # 흰 테두리 줄
-    b.text("가스 검정", (0, -0.0065, 0.082), 0.05, "white")
-    _rect(W, 0, 0.068, 0.38, 0.004, -0.005)
-    top, rh = 0.065, 0.041; rows = [top - rh * (i + 0.5) for i in range(5)]
-    _rect(b("black"), 0.085, top - rh * 2.5, 0.21, rh * 5, -0.005)           # 오른쪽 검은 분필 칸
-    for i in range(1, 5): _rect(W, 0, top - rh * i, 0.38, 0.003, -0.007)     # 가로 줄 (양식)
-    _rect(W, -0.02, top - rh * 2.5, 0.003, rh * 5, -0.007); _rect(W, 0.085, top - rh * 2.5, 0.003, rh * 5, -0.007)   # 세로 줄: 칸 나눔 · 이틀 치 두 칸
-    for z, lab in zip(rows, ("가스 CH4", "측정값 %", "날짜", "시각", "검정자")):
-        if label_text: b.text(lab, (-0.105, -0.0065, z - 0.009), 0.024, "white")
-        else: _rect(W, -0.105, z, 0.11 if len(lab) > 3 else 0.06, 0.009, -0.005)
-    # 분필 글씨: 어제 칸 · 오늘 칸 (숫자 · 날짜 · 시각 · 휘갈긴 서명)
-    C = b("chalk")
-    for cx, vals, tl in ((0.0325, ("0.2", "10.1", "6:40"), 0.10), (0.1375, ("0.3", "10.2", "7:10"), -0.07)):
-        _stroke(C, [(cx - 0.02, rows[0] + 0.002), (cx - 0.008, rows[0] - 0.012), (cx + 0.022, rows[0] + 0.014)], -0.008)   # 확인 표시
-        for z, v in zip(rows[1:4], vals): b.text(v, (cx, -0.0095, z - 0.011), 0.032, "chalk", tilt=tl, hand=True)
-        s = [(-0.04, -0.008), (-0.028, 0.012), (-0.02, -0.01), (-0.008, 0.01), (0.0, -0.008), (0.012, 0.004), (0.02, -0.006), (0.042, 0.002 + tl * 0.05)]
-        _stroke(C, [(cx + x, rows[4] + z) for x, z in s], -0.008, 0.0035)
+    if rows or warn: _gas_log(b, list(rows or _GAS_RISE), warn, label_text)
+    else:
+        _rect(b("steel_blue"), 0, 0, 0.42, 0.32, -0.002, 0.004)
+        W = b("white")
+        for cx, cz, w, h in ((0, 0.143, 0.392, 0.006), (0, -0.143, 0.392, 0.006), (-0.193, 0, 0.006, 0.292), (0.193, 0, 0.006, 0.292)): _rect(W, cx, cz, w, h, -0.005)   # 흰 테두리 줄
+        b.text("가스 검정", (0, -0.0065, 0.082), 0.05, "white")
+        _rect(W, 0, 0.068, 0.38, 0.004, -0.005)
+        top, rh = 0.065, 0.041; rows = [top - rh * (i + 0.5) for i in range(5)]
+        _rect(b("black"), 0.085, top - rh * 2.5, 0.21, rh * 5, -0.005)           # 오른쪽 검은 분필 칸
+        for i in range(1, 5): _rect(W, 0, top - rh * i, 0.38, 0.003, -0.007)     # 가로 줄 (양식)
+        _rect(W, -0.02, top - rh * 2.5, 0.003, rh * 5, -0.007); _rect(W, 0.085, top - rh * 2.5, 0.003, rh * 5, -0.007)   # 세로 줄: 칸 나눔 · 이틀 치 두 칸
+        for z, lab in zip(rows, ("가스 CH4", "측정값 %", "날짜", "시각", "검정자")):
+            if label_text: b.text(lab, (-0.105, -0.0065, z - 0.009), 0.024, "white")
+            else: _rect(W, -0.105, z, 0.11 if len(lab) > 3 else 0.06, 0.009, -0.005)
+        # 분필 글씨: 어제 칸 · 오늘 칸 (숫자 · 날짜 · 시각 · 휘갈긴 서명)
+        C = b("chalk")
+        for cx, vals, tl in ((0.0325, ("0.2", "10.1", "6:40"), 0.10), (0.1375, ("0.3", "10.2", "7:10"), -0.07)):
+            _stroke(C, [(cx - 0.02, rows[0] + 0.002), (cx - 0.008, rows[0] - 0.012), (cx + 0.022, rows[0] + 0.014)], -0.008)   # 확인 표시
+            for z, v in zip(rows[1:4], vals): b.text(v, (cx, -0.0095, z - 0.011), 0.032, "chalk", tilt=tl)
+            s = [(-0.04, -0.008), (-0.028, 0.012), (-0.02, -0.01), (-0.008, 0.01), (0.0, -0.008), (0.012, 0.004), (0.02, -0.006), (0.042, 0.002 + tl * 0.05)]
+            _stroke(C, [(cx + x, rows[4] + z) for x, z in s], -0.008, 0.0035)
     M = _T(0, -0.083, 1.45) @ Matrix.Rotation(math.radians(4), 4, "Y")
     out += b.done(M)
     # 굽은 못 + 철사 고리 (판 위 두 구멍 → 못). 판이 돌아서 철사 두 가닥 길이가 다르다
@@ -92,6 +94,30 @@ def gas_board(mats, label_text=True, h=2.3):
     h1, h2 = (M @ Vector((-0.15, -0.006, 0.145)), M @ Vector((0.15, -0.006, 0.145)))
     sweep(n("bare", nocol=True), [h1, (0.008, -0.108, 1.713), (0.016, -0.108, 1.713), h2], 0.003, 5)
     return out + n.done()
+
+_GAS_RISE = (("10.1", "6:40", "0.4"), ("10.2", "6:50", "0.7"), ("10.3", "7:05", "1.1"), ("10.4", "6:45", "1.6"), ("10.5", "7:10", "2.3"))   # 날마다 오르는 메탄 % (1.5 넘으면 전기를 끊고 2 넘으면 사람을 내보내고 통행을 막는다)
+def _gas_log(b, rows, warn, label_text):
+    """gas_board(rows=…) 의 판: 머리 줄(날짜 · 시각 · CH4 % · 비고) 아래 검은 분필 칸에 하루 한 줄. 판 위 끝(0.16)은 옛 판과 같고(철사 고리 자리) 줄이 많으면 아래로 늘어난다 (다섯 줄 = 0.42 x 0.35).
+    warn = 마지막 줄 측정값에 빨간 동그라미(위험 빨강 한 값 = "red") + 비고 칸에 분필 "출입금지". 분필 글자 기울기는 random.Random("gas_board")"""
+    n = len(rows); rh, hd, top = 0.041, 0.03, 0.065; z0 = top - hd; bot = z0 - rh * n; pb = min(-0.16, bot - 0.02); zb = pb + 0.017   # z0 = 머리 줄 아래 · bot = 마지막 줄 아래 · pb = 판 아래 끝
+    _rect(b("steel_blue"), 0, (0.16 + pb) / 2, 0.42, 0.16 - pb, -0.002, 0.004)
+    W = b("white")
+    for cx, cz, w, h in ((0, 0.143, 0.392, 0.006), (0, zb, 0.392, 0.006), (-0.193, (0.143 + zb) / 2, 0.006, 0.149 - zb), (0.193, (0.143 + zb) / 2, 0.006, 0.149 - zb)): _rect(W, cx, cz, w, h, -0.005)   # 흰 테두리 줄
+    b.text("가스 검정", (0, -0.0065, 0.082), 0.05, "white"); _rect(W, 0, 0.068, 0.38, 0.004, -0.005)
+    xs = (-0.19, -0.105, -0.02, 0.07, 0.19); cs = [(a + c) / 2 for a, c in zip(xs, xs[1:])]   # 칸 경계 · 칸 가운데
+    _rect(b("black"), 0, (z0 + bot) / 2, 0.38, z0 - bot, -0.005)                              # 검은 분필 칸
+    for i in range(n + 1): _rect(W, 0, z0 - rh * i, 0.38, 0.003, -0.007)                         # 가로 줄
+    for x in xs[1:4]: _rect(W, x, (top + bot) / 2, 0.003, top - bot, -0.007)                     # 세로 줄
+    for x, lab in zip(cs, ("날짜", "시각", "CH4 %", "비고")):
+        if label_text: b.text(lab, (x, -0.0065, z0 + hd / 2 - 0.008), 0.022, "white")
+        else: _rect(W, x, z0 + hd / 2, 0.05, 0.008, -0.005)
+    rnd = random.Random("gas_board")
+    for i, r in enumerate(rows):
+        for x, v in zip(cs, r): b.text(v, (x, -0.0095, z0 - rh * (i + 0.5) - 0.011), 0.03, "chalk", tilt=rnd.uniform(-0.08, 0.08))
+    if warn:
+        z, x = z0 - rh * (n - 0.5), cs[2]
+        _stroke(b("red"), [(x + 0.042 * math.cos(a), z + 0.002 + 0.018 * math.sin(a)) for a in (math.radians(110 + 30 * k) for k in range(14))], -0.0105, 0.004)   # 빨간 동그라미: 한 바퀴 넘게 그어 끝이 겹친다
+        b.text("출입금지", (cs[3], -0.0095, z - 0.011), 0.03, "chalk", tilt=rnd.uniform(-0.06, 0.06))
 
 # ───────────────────────── 2) 출입금지 판 ─────────────────────────
 def no_entry_plate(mats):
@@ -105,6 +131,57 @@ def no_entry_plate(mats):
     _bolts(p("iron"), nails, -0.005, -0.012, 0.009)
     for (x, z), L in zip(nails[1::2], (0.07, 0.045)): _rect(p("rust"), x + 0.002, z - 0.012 - L / 2, 0.007, L, -0.0065, 0.001)   # 못 아래 녹물 자국
     return p.done()
+
+def _fit(o, cz, wmax):
+    """글자 물체의 가운데 높이를 cz 에 맞추고, 너비가 wmax 보다 길면 그만큼 줄인다 (x 0 = 가운데)"""
+    co = [v.co for v in o.data.vertices]; x0, x1, z0, z1 = min(c.x for c in co), max(c.x for c in co), min(c.z for c in co), max(c.z for c in co); k = min(1.0, wmax / (x1 - x0)); m = (z0 + z1) / 2
+    for c in co: c.x *= k; c.z = cz + (c.z - m) * k
+
+def danger_board(mats, lines=("출입금지",)):
+    """막아 둔 까닭을 적은 출입금지 판 (no_entry_plate 의 여러 줄 판). 원점 = 판 뒷면 한가운데, 0.60 x (0.36 + 0.075 x (줄 수 − 1)) — 세 줄 = 0.60 x 0.51.
+    흰 바탕 · 빨간 테 · 빨간 글씨(위험 빨강 한 값 = "red", no_entry_plate 와 같다). 첫 줄 = 크게(0.125), 다음 줄들 = 작게(0.055). 판 안쪽(0.48)보다 긴 줄은 그 줄만 줄인다.
+    레퍼런스: 1964 광산보안법 시행규칙 제156조(쓰지 않는 갱도 = 출입 금지 경표 + 책위) · 제67조(유해 가스가 난 곳 = 경표 + 책위, 허락 없이 걷어 내지 못함).
+    보기: ("출입금지", "유해가스 발생", "허가 없이 들어가지 말 것") · ("출입금지", "붕락 위험", "허가 없이 들어가지 말 것")
+      — "허가 없이 들어가지 말 것" 은 제67조의 뜻을 판 글로 Claude 가 정한 문구다 (옛 경표의 실제 글이 아니다)"""
+    n = len(lines); H = 0.36 + 0.075 * (n - 1); e = H / 2 - 0.04; zt = (H - 0.21) / 2
+    p = _P(mats, "DANGER")
+    _rect(p("white"), 0, 0, 0.60, H, -0.003, 0.006)
+    R = p("red")
+    for cx, cz, w, h in ((0, e, 0.52, 0.012), (0, -e, 0.52, 0.012), (-0.26, 0, 0.012, 2 * e + 0.012), (0.26, 0, 0.012, 2 * e + 0.012)): _rect(R, cx, cz, w, h, -0.007)
+    for i, s in enumerate(lines): _fit(p.text(s, (0, -0.0085, 0), 0.125 if i == 0 else 0.055, "red"), zt - 0.075 if i == 0 else zt - 0.15 - 0.075 * (i - 0.5), 0.48)
+    nails = [(sx * 0.282, sz * (H / 2 - 0.018)) for sx in (-1, 1) for sz in (-1, 1)]
+    _bolts(p("iron"), nails, -0.005, -0.012, 0.009)
+    for (x, z), L in zip(nails[1::2], (0.07, 0.045)): _rect(p("rust"), x + 0.002, z - 0.012 - L / 2, 0.007, L, -0.0065, 0.001)   # 못 아래 녹물 자국
+    return p.done()
+
+def chalk_on_boards(mats, text, w, h, seed=0, pitch=0.4, board=0.28, x0=0.0):
+    """판자 울타리 앞면에 분필로 휘갈긴 큰 글씨 (보기 "출입금지" · "가스!" · "붕락") — 흰 분필("chalk"), 부딪힘 없음(NOCOL_), 물체 하나.
+    원점 = 글씨 칸 한가운데, 판자 앞면 = y 0 (−y 에서 읽힌다). 글씨를 w x h 칸을 넘지 않는 가장 큰 크기로 맞춘다 (한 줄 — 보통 h 가 크기를 정한다). 글자마다 조금씩 기울고 크기 · 높이가 오르내리며 줄 전체가 살짝 비탈지고, 판자마다 1~2 cm 어긋난다.
+    판자 사이 틈에 걸린 획은 잘라 낸다 (허공에 뜬 분필이 안 생기게): 판자 가운데 = x0 + k·pitch, 너비 board. 기본값 = scene_mock 울타리 FENCE(0.4 간격 · 0.28 너비, 가운데 판자가 x 0) · pitch=None = 통판.
+    울타리 가로대(z 0.54~0.66 · 1.74~1.86)가 판자 앞에 있어 그 높이의 글씨는 가려진다. 흔들림 = random.Random("chalk_on_boards <seed>")"""
+    rnd = random.Random("chalk_on_boards %d" % seed); bm = bmesh.new(); x = 0.0
+    for ch in text:
+        if ch == " ": x += 0.35 * h; continue
+        o = text_mesh("CHALK_TMP", ch, (0, 0, 0), h, mats["chalk"], extrude=0.0); co = [v.co for v in o.data.vertices]
+        a, c = min(q.x for q in co), max(q.x for q in co); zc = (min(q.z for q in co) + max(q.z for q in co)) / 2; k = rnd.uniform(0.88, 1.1)
+        o.data.transform(_T(x + (c - a) * k / 2, 0, rnd.uniform(-0.07, 0.07) * h) @ Matrix.Rotation(rnd.uniform(-0.12, 0.12), 4, "Y") @ Matrix.Scale(k, 4) @ _T(-(a + c) / 2, 0, -zc))
+        bm.from_mesh(o.data); x += (c - a) * k + 0.08 * h; me = o.data; bpy.data.objects.remove(o, do_unlink=True); bpy.data.meshes.remove(me)
+    bmesh.ops.transform(bm, matrix=Matrix.Rotation(rnd.uniform(-0.05, 0.05), 4, "Y"), verts=bm.verts)          # 줄이 살짝 비탈진다
+    lo, hi = [Vector([f(v.co[i] for v in bm.verts) for i in range(3)]) for f in (min, max)]; m = (lo + hi) / 2
+    bmesh.ops.transform(bm, matrix=_T(0, -0.002, 0) @ Matrix.Scale(min(w / (hi.x - lo.x), h / (hi.z - lo.z)), 4) @ _T(-m.x, -m.y, -m.z), verts=bm.verts)   # 칸에 꽉 차게 · 판자 앞 2 mm
+    if pitch:
+        L, Rx = min(v.co.x for v in bm.verts), max(v.co.x for v in bm.verts)
+        for k in range(math.floor((L - x0) / pitch) - 1, math.ceil((Rx - x0) / pitch) + 2):
+            for ex in (x0 + k * pitch - board / 2, x0 + k * pitch + board / 2):
+                if L < ex < Rx: bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=(ex, 0, 0), plane_no=(1, 0, 0))
+        kof = lambda x_: round((x_ - x0) / pitch)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if abs(f.calc_center_median().x - x0 - kof(f.calc_center_median().x) * pitch) > board / 2], context="FACES")   # 틈에 걸린 조각
+        dz = {}
+        for v in bm.verts: v.co.z += dz.setdefault(kof(v.co.x), rnd.uniform(-0.04, 0.04) * h)   # 판자마다 조금 어긋난다 (분필이 판자 턱에서 튄다)
+    me = bpy.data.meshes.new("NOCOL_CHALKBD_TEXT"); bm.to_mesh(me); bm.free(); me.materials.append(mats["chalk"])
+    for p_ in me.polygons:
+        if p_.normal.y > 0: p_.flip()                                                                     # 앞(−y)을 보게
+    o = bpy.data.objects.new(me.name, me); bpy.context.scene.collection.objects.link(o); return [o]
 
 # ───────────────────────── 3) 갱내 전화 ─────────────────────────
 def phone(mats):

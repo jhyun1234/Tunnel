@@ -1,12 +1,12 @@
 """국부 선풍기 + 바람 관 (풍관). 레퍼런스 공통점: 썰매 받침 위 굵은 쇠 통 · 나팔 입 + 둥근 철망 · 속에 날개,
 옆구리 방폭 접속함, 쇠 굽은 관으로 천장 높이까지 올라가 노란 주름 천 관이 쇠줄(메신저 와이어)에 고리로 매달려 간다. 끝 한 토막은 찢겨 빈 소매처럼 늘어진다.
   fan(mats)  : 원점 = 선풍기 가운데 아래 바닥. 축 = X, 바람은 +X 로. 천 관은 FAN_OUTLET 에서 시작.
-  duct(mats, pts) : pts = [(x, y, z, 천장 z)] 관 가운데 선 (부르는 쪽 좌표 그대로).
+  duct(mats, pts, end="torn"|"open", dia=0.6) : pts = [(x, y, z, 천장 z)] 관 가운데 선 (부르는 쪽 좌표 그대로). 돌려주는 값 = (물체 목록, 관 가운데 줄).
   build(mats) : 본보기 = 선풍기 + 4 m 관 + 찢긴 끝 (천장 3.2 m)."""
 import math, random
 import bmesh
 from mathutils import Vector, Matrix
-from _util import box, cyl, tube, torus, sweep, obj
+from _util import box, cyl, tube, torus, sweep, obj, text_mesh
 
 AX = 0.65                         # 통을 빚는 축 높이 (키우기 전)
 KY = 1.2                          # 통 굵기 배율: 지름 0.66 → 0.79 (0.6 m 관을 미는 기계가 관보다 가늘어 보이지 않게)
@@ -38,8 +38,8 @@ def _bolts(bm, x, R, n, z0, r=0.016, h=0.03):
         cyl(bm, (x - h / 2, R * math.cos(a), z0 + R * math.sin(a)), (x + h / 2, R * math.cos(a), z0 + R * math.sin(a)), r, seg=6)
 
 
-def fan(mats, outlet_z=FAN_OUTLET[2], cable_to=(1.9, -0.75, 0.02)):
-    """국부 선풍기. outlet_z = 천 관 높이 (기본 FAN_OUTLET), cable_to = 케이블이 끝나는 곳 (벽 개폐기 자리를 주면 거기까지)"""
+def fan(mats, outlet_z=FAN_OUTLET[2], cable_to=(1.9, -0.75, 0.02), number=None):
+    """국부 선풍기. outlet_z = 천 관 높이 (기본 FAN_OUTLET), cable_to = 케이블이 끝나는 곳 (벽 개폐기 자리를 주면 거기까지), number = 통 옆 흰 페인트 번호 (예: "3", 안 주면 없음)"""
     out = []; c = 0.006
     # 썰매 받침: ㄷ 형강 두 줄 + 끝이 들린 썰매 코 + 가로대 + 안장 판 두 장 (통이 얹힌다)
     bm = bmesh.new()
@@ -102,59 +102,109 @@ def fan(mats, outlet_z=FAN_OUTLET[2], cable_to=(1.9, -0.75, 0.02)):
     for z in (A + Rb + 0.02, 1.55, zt - Rb - 0.02): tube(bm, (xr, 0, z - 0.03), (xr, 0, z + 0.03), DUCT_R + 0.014, DUCT_R - 0.01, seg=14)   # 마디 띠 (검은 쇠 — 밝은 띠는 머리등에서 튄다)
     tube(bm, (ox - 0.07, 0, zt), (ox - 0.01, 0, zt), DUCT_R + 0.014, DUCT_R - 0.01, seg=14)
     out.append(obj("FAN_BANDS", bm, mats["iron"], smooth=True))
+    if number is not None:                                                                   # 흰 페인트 번호: 이름판 위 비스듬한 면 (16 각 통의 한 면, 2 mm 띄움) — 양 옆 다 (어느 쪽에서 보아도)
+        a = 0.33 * KY * math.cos(math.pi / 16) + 0.002
+        for sy in (-1, 1):
+            n = Vector((0, sy * math.cos(math.radians(33.75)), math.sin(math.radians(33.75)))); c = Vector((-0.22, 0, AXN)) + n * a
+            o = text_mesh("NOCOL_FAN_NUMBER", str(number), c, 0.16, mats["white"], rot=(math.radians(56.25), 0, math.pi if sy > 0 else 0), extrude=0.0)
+            co = [v.co for v in o.data.vertices]
+            if co: o.data.transform(Matrix.Translation(c - (Vector([min(v[i] for v in co) for i in range(3)]) + Vector([max(v[i] for v in co) for i in range(3)])) / 2))   # 글씨체가 바뀌어도 글자 가운데를 면 가운데에
+            out.append(o)
     return out
 
 
-def duct(mats, pts, torn_end=True, seed=0, floor_z=0.0, torn_side=-1):
-    """주름 천 관 + 쇠줄 + 고리 + 천장 걸이. 점마다 천장까지 걸이가 올라간다. torn_end: 마지막 토막(pts[-2] → pts[-1])은 고리에서 떨어져 바닥까지 늘어진다 (쇠줄은 끝까지 간다). torn_side: 바닥에 누운 끝의 입이 도는 쪽 (−1 = 가는 방향의 오른쪽, +1 = 왼쪽, 0 = 곧게)"""
-    rnd = random.Random(seed); out = []; R = DUCT_R
-    P = [Vector(p[:3]) for p in pts]; ceil = [p[3] for p in pts]
-    W = [p + Z * (R + 0.08) for p in P]                                    # 쇠줄: 관 위 8 cm, 걸이 사이 곧게
-    main = P[:-1] if torn_end else P
-    seg_len = [(b - a).length for a, b in zip(main, main[1:])]; total = sum(seg_len); sag = [0.04 + 0.05 * rnd.random() for _ in seg_len]
+def duct(mats, pts, torn_end=True, seed=0, floor_z=0.0, torn_side=-1, end=None, dia=2 * DUCT_R, name="DUCT"):
+    """주름 천 관 + 쇠줄 + 고리 + 천장 걸이. pts = [(x, y, 관 가운데 z, 그 자리 천장 z)] — 점마다 천장까지 걸이가 올라간다.
+    end: "torn" = 마지막 토막(pts[-2] → pts[-1])은 고리에서 떨어져 바닥까지 늘어진다 (쇠줄은 끝까지 간다) · "open" = 온전한 끝 (검은 테 + 속이 어두운 열린 입). 안 주면 torn_end 를 따른다 (옛 부름).
+    torn_side: 바닥에 누운 끝의 입이 도는 쪽 (−1 = 가는 방향의 오른쪽, +1 = 왼쪽, 0 = 곧게). dia = 관 지름 (좁은 막장 0.45). floor_z = 바닥 z 하나 또는 점마다 목록. name = 물체 이름 머리.
+    이웃 토막 사이가 20° 넘게 꺾이면 쇠 굽은 토막(팔꿈치: 굽이 반지름 = 지름, 마디 22.5°)으로 돌아가고, 그 앞뒤 끝에 걸이가 선다.
+    돌려주는 값 = (물체 목록, 관 가운데 줄): 줄 = 매달린 관 가운데 점들 (10 cm 간격, 굽은 곳 펼침 · 처짐 포함, pts 와 같은 좌표 · 찢긴 토막은 빼고)"""
+    end = end or ("torn" if torn_end else ""); torn = end == "torn"
+    rnd = random.Random(seed); out = []; R = dia / 2
+    P = [Vector(p[:3]) for p in pts]; ceil = [p[3] for p in pts]; FZ = list(floor_z) if isinstance(floor_z, (list, tuple)) else [floor_z] * len(P)
+    main = P[:-1] if torn else P
+    # 걸이 자리 st = [(점, 천장 z)] · arcs[k] = 걸이 k → k+1 사이 굽은 토막의 점들 (그 밖은 곧은 천 토막)
+    st = [(main[0], ceil[0])]; arcs = {}
+    for i in range(1, len(main) - 1):
+        a, b, c = main[i - 1], main[i], main[i + 1]; u, v = (b - a).normalized(), (c - b).normalized(); g = u.angle(v)
+        if g <= math.radians(20): st.append((b, ceil[i])); continue
+        la, lc = (b - a).length, (c - b).length; t = min(dia * math.tan(g / 2), 0.45 * la, 0.45 * lc); rb = t / math.tan(g / 2)
+        w = (v - u * u.dot(v)).normalized(); o = b - u * t + w * rb; k = max(2, math.ceil(g / math.radians(22.5) - 1e-6))
+        arc = [o + (u * math.sin(g * j / k) - w * math.cos(g * j / k)) * rb for j in range(k + 1)]; arcs[len(st)] = arc
+        st += [(arc[0], ceil[i] + (ceil[i - 1] - ceil[i]) * t / la), (arc[-1], ceil[i] + (ceil[i + 1] - ceil[i]) * t / lc)]
+    if len(main) > 1: st.append((main[-1], ceil[len(main) - 1]))
+    sg = [0.0 if k in arcs else 0.03 + 0.02 * rnd.random() for k in range(len(st) - 1)]   # 걸이 사이 처짐 3~5 cm (굽은 쇠 토막은 안 처진다)
 
-    def at(s, wire=False):
-        """관 길이 s 자리의 가운데 점 (걸이 사이 처짐 포함) 또는 쇠줄 점"""
-        for i, L in enumerate(seg_len):
-            if s <= L or i == len(seg_len) - 1:
-                u = min(max(s / L, 0), 1); p = main[i].lerp(main[i + 1], u)
-                return p + Z * (R + 0.08) if wire else p - Z * sag[i] * math.sin(math.pi * u)
+    def span(k):
+        """걸이 k → k+1 의 가운데 점들 (끝점 빼고). 천 토막 = 10 cm 간격 짝수 개 (주름이 이어진다) + 처짐"""
+        if k in arcs: return arcs[k][:-1]
+        a, b = st[k][0], st[k + 1][0]; n = max(2, int(round((b - a).length / 0.10))); n += n % 2
+        return [a.lerp(b, j / n) - Z * sg[k] * math.sin(math.pi * j / n) for j in range(n)]
+
+    def along(pl, s):
+        """꺾인 선 pl 의 길이 s 자리"""
+        for a, b in zip(pl, pl[1:]):
+            L = (b - a).length
+            if s <= L: return a.lerp(b, s / L) if L > 1e-9 else a.copy()
             s -= L
+        return pl[-1].copy()
 
-    low = min(p.z for p in main) - R - 0.07 - floor_z if len(main) > 1 else 9
-    pre = "NOCOL_" if low >= 2.3 else ""                                   # 밑면이 2.3 m 위면 부딪힘 없음
-    if len(main) > 1:
-        n = max(2, int(round(total / 0.10))); n += n % 2
-        bm = bmesh.new(); sweep(bm, [at(total * i / n) for i in range(n + 1)], R, seg=12, r_fn=lambda i: R - 0.012 * rnd.random() if i % 2 == 0 else R - 0.035 - 0.012 * rnd.random())   # 20 cm 마다 살(나선 철사) 주름, 고르지 않게
-        out.append(obj(pre + "DUCT_TUBE", bm, mats["cloth_yellow"], smooth=True))
-        # 이음 테: 시작 · 5 m 마다 · 끝. 조임 볼트 귀가 아래에 붙는다
-        bm = bmesh.new(); k = max(1, int(round(total / 5.0)))
-        for j in range(k + 1):
-            s = total * j / k; a, b = at(max(s - 0.06, 0)), at(min(s + 0.06, total)); cyl(bm, a, b, R + 0.02, seg=12)
-            box(bm, (a + b) / 2 - Z * (R + 0.035), (0.05, 0.05, 0.05))
-        out.append(obj(pre + "DUCT_COLLAR", bm, mats["iron"], smooth=True))                # 검은 조임 띠 (녹 색은 머리등에서 살색으로 뜬다)
-    # 쇠줄 · 걸이 (천장 볼트 판까지) · 고리 (75 cm 마다 쇠줄 → 관 등)
+    line = [q for k in range(len(st) - 1) for q in span(k)] + [st[-1][0].copy()] if len(st) > 1 else []
+    low = min(p.z - f for p, f in zip(main, FZ)) - R - 0.07 if len(main) > 1 else 9
+    pre = "NOCOL_" if low >= 2.3 else ""                                   # 밑면이 바닥에서 2.3 m 위면 부딪힘 없음
+    if len(st) > 1:
+        runs = [[]]                                                        # 곧은 천 토막 묶음 (굽은 토막에서 끊긴다)
+        for k in range(len(st) - 1):
+            if k in arcs: runs.append([])
+            else: runs[-1].append(k)
+        bm = bmesh.new(); bc = bmesh.new()                                 # bc = 이음 테 (검은 쇠)
+        for r in [r for r in runs if r]:
+            pl = [q for k in r for q in span(k)] + [st[r[-1] + 1][0]]; mouth = end == "open" and r[-1] == len(st) - 2
+            rg = sweep(bm, pl, R, seg=12, caps=not mouth, r_fn=lambda i: R - 0.012 * rnd.random() if i % 2 == 0 else R - 0.035 - 0.012 * rnd.random())   # 20 cm 마다 살(나선 철사) 주름, 고르지 않게
+            if mouth: bm.faces.new(rg[0][::-1])                            # 열린 입: 끝 뚜껑 없이
+            # 이음 테: 시작 · 5 m 마다 · 끝. 조임 볼트 귀가 아래에 붙는다 (열린 입은 아래 끝 테가 대신)
+            L = sum((b - a).length for a, b in zip(pl, pl[1:])); kk = max(1, int(round(L / 5.0)))
+            for j in range(kk + 1 - mouth):
+                s = L * j / kk; a, b = along(pl, max(s - 0.06, 0)), along(pl, min(s + 0.06, L)); cyl(bc, a, b, R + 0.02, seg=12)
+                box(bc, (a + b) / 2 - Z * (R + 0.035), (0.05, 0.05, 0.05))
+        out.append(obj(pre + name + "_TUBE", bm, mats["cloth_yellow"], smooth=True))
+        if arcs:                                                           # 굽은 쇠 토막: 마디마다 용접 띠, 두 끝은 천 관 테와 이어진 띠
+            be = bmesh.new()
+            for arc in arcs.values():
+                sweep(be, arc, R + 0.012, seg=12, caps=False)
+                for j in range(1, len(arc) - 1): t = (arc[j + 1] - arc[j - 1]).normalized(); cyl(bc, arc[j] - t * 0.012, arc[j] + t * 0.012, R + 0.022, seg=12)
+                for q, q2 in ((arc[0], arc[1]), (arc[-1], arc[-2])): cyl(bc, q, q + (q2 - q).normalized() * 0.06, R + 0.02, seg=12)
+            out.append(obj(pre + name + "_ELBOW", be, mats["rust"], smooth=True))
+        if end == "open":                                                  # 열린 입: 끝 테 (속 벽이 보인다) + 10 cm 안쪽 어둠
+            q, t = line[-1], (line[-1] - line[-2]).normalized(); tube(bc, q - t * 0.12, q + t * 0.01, R + 0.02, R - 0.03, seg=12)
+            bm = bmesh.new(); cyl(bm, q - t * 0.11, q - t * 0.09, R - 0.025, seg=12); out.append(obj("NOCOL_" + name + "_DARK", bm, mats["black"]))
+        out.append(obj(pre + name + "_COLLAR", bc, mats["iron"], smooth=True))   # 검은 조임 띠 (녹 색은 머리등에서 살색으로 뜬다)
+    # 쇠줄 (굽은 곳은 굽은 토막을 따라) · 걸이 (천장 볼트 판까지) · 고리 (75 cm 마다 쇠줄 → 관 등)
+    sw = st + ([(P[-1], ceil[-1])] if torn and len(P) > 1 else []); lift = Z * (R + 0.08)
+    W = [q for k, (p, _) in enumerate(sw) for q in [p + lift] + ([a + lift for a in arcs[k][1:-1]] if k in arcs else [])]
     bm = bmesh.new(); sweep(bm, W, 0.01, seg=5)
-    for w, cz in zip(W, ceil):
+    for k, (p, cz) in enumerate(sw):
+        w = p + lift
         if cz > w.z:                                                       # 걸이: 천장 볼트 판 + 볼트 머리 + 굵은 고리 쇠 → 쇠줄
             cyl(bm, w - Z * 0.01, (w.x, w.y, cz), 0.015, seg=6); box(bm, (w.x, w.y, cz - 0.012), (0.16, 0.16, 0.024)); cyl(bm, (w.x, w.y, cz - 0.05), (w.x, w.y, cz - 0.02), 0.035, seg=6)
-            torus(bm, w, (0, 1, 0) if abs((W[1] - W[0]).normalized().y) < 0.7 else (1, 0, 0), 0.035, 0.012, seg=8, sub=4)
-    if len(main) > 1:
-        m = max(1, int(total / 0.75))
+            ax = Z.cross(sw[min(k + 1, len(sw) - 1)][0] - sw[max(k - 1, 0)][0]); torus(bm, w, ax.normalized() if ax.length > 1e-6 else X, 0.035, 0.012, seg=8, sub=4)
+    for k in range(len(st) - 1):
+        if k in arcs: continue
+        a, b = st[k][0], st[k + 1][0]; m = max(1, int((b - a).length / 0.75))
         for j in range(m):
-            s = total * (j + 0.5) / m; cyl(bm, at(s, True) + Z * 0.01, at(s) + Z * (R - 0.02), 0.012, seg=5)
-    if torn_end and len(P) > 1:
-        L = (P[-1] - P[-2]).length
+            u = (j + 0.5) / m; q = a.lerp(b, u); cyl(bm, q + lift + Z * 0.01, q + Z * (R - 0.02 - sg[k] * math.sin(math.pi * u)), 0.012, seg=5)
+    if torn and len(P) > 1:
+        L = (P[-1] - P[-2]).length; w0, w1 = P[-2] + lift, P[-1] + lift
         for j in range(max(1, int(L / 0.75))):                              # 관이 떨어져 나간 빈 고리
-            w = W[-2].lerp(W[-1], (j + 0.6) / max(1, int(L / 0.75))); cyl(bm, w + Z * 0.01, w - Z * (0.10 + 0.08 * rnd.random()), 0.012, seg=5)
-    out.append(obj("NOCOL_DUCT_WIRE", bm, mats["iron"]))
-    if torn_end and len(P) > 1: out += _torn(mats, P[-2], P[-1] - P[-2], floor_z, rnd, torn_side)
-    return out
+            w = w0.lerp(w1, (j + 0.6) / max(1, int(L / 0.75))); cyl(bm, w + Z * 0.01, w - Z * (0.10 + 0.08 * rnd.random()), 0.012, seg=5)
+    out.append(obj("NOCOL_" + name + "_WIRE", bm, mats["iron"]))
+    if torn and len(P) > 1: out += _torn(mats, P[-2], P[-1] - P[-2], FZ[-2], rnd, torn_side, R, name)
+    return out, line
 
 
-def _torn(mats, p0, d, floor_z, rnd, side=-1):
+def _torn(mats, p0, d, floor_z, rnd, side=-1, R=DUCT_R, name="DUCT"):
     """찢겨 떨어진 토막: 살(나선 철사)이 남아 둥근 채로 굽어 내려와 바닥에 눕고, 끝은 옆으로 돌아 너덜너덜한 입 속이 검게 들여다보인다 (천이라 부딪힘 없음)"""
-    R = DUCT_R; d = Vector((d.x, d.y, 0)); d = d.normalized() if d.length > 1e-4 else X.copy(); s0 = Z.cross(d)
+    d = Vector((d.x, d.y, 0)); d = d.normalized() if d.length > 1e-4 else X.copy(); s0 = Z.cross(d)
     zc = floor_z + R - 0.01; R1 = R2 = min(0.6, max(0.2, (p0.z - zc) / 2)); raw = []
     for i in range(9): t = math.pi / 2 * i / 8; raw.append(p0 + d * R1 * math.sin(t) - Z * R1 * (1 - math.cos(t)))          # 고리에서 떨어져 꺾여 내려온다
     c = Vector((p0.x, p0.y, zc + R2)) + d * (R1 + R2)
@@ -182,18 +232,24 @@ def _torn(mats, p0, d, floor_z, rnd, side=-1):
     for A, B in zip(rings, rings[1:]):
         for j in range(12): bm.faces.new((A[j], A[(j + 1) % 12], B[(j + 1) % 12], B[j]))
     bm.faces.new(rings[0][::-1]); bm.faces.new(rings[-1])
-    out = [obj("NOCOL_DUCT_TORN", bm, mats["cloth_yellow"], smooth=True)]
-    bm = bmesh.new(); p, t = fr[n - 2][0], fr[n - 2][1]; cyl(bm, p - t * 0.01, p + t * 0.01, R - 0.05, seg=12); out.append(obj("NOCOL_DUCT_TORN_DARK", bm, mats["black"]))   # 속 어둠
-    bm = bmesh.new(); cyl(bm, p0 - d * 0.06, p0 + d * 0.06, R + 0.02, seg=12); out.append(obj("NOCOL_DUCT_TORN_COLLAR", bm, mats["iron"], smooth=True))
+    out = [obj("NOCOL_" + name + "_TORN", bm, mats["cloth_yellow"], smooth=True)]
+    bm = bmesh.new(); p, t = fr[n - 2][0], fr[n - 2][1]; cyl(bm, p - t * 0.01, p + t * 0.01, R - 0.05, seg=12); out.append(obj("NOCOL_" + name + "_TORN_DARK", bm, mats["black"]))   # 속 어둠
+    bm = bmesh.new(); cyl(bm, p0 - d * 0.06, p0 + d * 0.06, R + 0.02, seg=12); out.append(obj("NOCOL_" + name + "_TORN_COLLAR", bm, mats["iron"], smooth=True))
     return out
 
 
 def build(mats):
     """본보기: 선풍기 + 4 m 관 + 찢긴 끝 (천장 3.2 m). 미리보기 옵션 '{"_ceil": 3.2}'. 길면 미리보기 눈이 너무 멀어져 짧게 둔다 — 맵에서는 pts 를 길게 준다"""
     x0, y0, z0 = FAN_OUTLET
-    return fan(mats) + duct(mats, [(x0 + 2.0 * i, y0, z0, 3.2) for i in range(4)], torn_end=True)
+    return fan(mats) + duct(mats, [(x0 + 2.0 * i, y0, z0, 3.2) for i in range(4)], torn_end=True)[0]
 
 
 def torn_demo(mats):
     """찢긴 끝만 가까이 보는 본보기 (미리보기: 함수 이름 torn_demo, 옵션 '{"_ceil": 3.2}')"""
-    return duct(mats, [(2.0 * i, 0, 2.65, 3.2) for i in range(3)], torn_end=True)
+    return duct(mats, [(2.0 * i, 0, 2.65, 3.2) for i in range(3)], torn_end=True)[0]
+
+
+def bend_demo(mats):
+    """방에서 굴로 ㄱ자로 꺾어 들어가 막장 앞에서 열린 입으로 끝나는 관 + 번호 단 선풍기 (미리보기: 함수 이름 bend_demo, 옵션 '{"_ceil": 3.2}')"""
+    x0, y0, z0 = FAN_OUTLET
+    return fan(mats, number="3") + duct(mats, [(x0, y0, z0, 3.2), (x0 + 2.0, y0, z0, 3.2), (x0 + 4.0, y0, z0, 3.2), (x0 + 4.0, y0 - 2.0, z0, 3.2), (x0 + 4.0, y0 - 4.0, z0, 3.2)], end="open")[0]

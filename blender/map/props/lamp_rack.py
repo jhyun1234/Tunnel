@@ -17,7 +17,7 @@ counter(): 원점 = 가운데 바닥. 긴 쪽 = x. 판자로 막은 앞 = −y (
 import math, random
 import bpy, bmesh
 from mathutils import Vector, Matrix
-from _util import box, cyl, tube, sweep, obj
+from _util import box, cyl, tube, sweep, obj, thin, FONT
 
 DEP = 0.34       # 틀 깊이 (앞면 y = −DEP)
 SHELF0 = 0.53    # 맨 아래 선반 윗면 높이
@@ -97,12 +97,12 @@ def _angle(bm, x, y, sx, sy, z0, z1, w=0.06, t=0.006):
 
 def _numbers(mats, items):
     """번호 글자를 그물 하나로 모은다 (납작한 홑면 — 앞(−y)만 보이면 된다).
-    _util.text_mesh 와 같은 방법이지만 곡선을 성기게(resolution 2) 굽는다 — 기본값 12 로는 번호 30 개에 삼각형 7,800 이 든다"""
-    bm = bmesh.new(); font = bpy.data.fonts.load("C:/Windows/Fonts/malgunbd.ttf", check_existing=True)
+    _util.text_mesh 와 같은 방법(곡선을 성기게 resolution 2 + thin — 기본값 12 로는 번호 30 개에 삼각형 7,800 이 든다)이되 번호 전부를 물체 하나로"""
+    bm = bmesh.new(); font = bpy.data.fonts.load(FONT, check_existing=True)   # 을지로체 (_util.FONT)
     for body, loc, size in items:
         cu = bpy.data.curves.new("LAMPRACK_NUM_TMP", "FONT"); cu.body = body; cu.size = size; cu.align_x = "CENTER"; cu.resolution_u = 2; cu.font = font
         t = bpy.data.objects.new("LAMPRACK_NUM_TMP", cu); t.location = loc; t.rotation_euler = (math.radians(90), 0, 0); bpy.context.scene.collection.objects.link(t); bpy.context.view_layer.update()
-        me = bpy.data.meshes.new_from_object(t.evaluated_get(bpy.context.evaluated_depsgraph_get())); me.transform(t.matrix_world); bm.from_mesh(me)
+        me = bpy.data.meshes.new_from_object(t.evaluated_get(bpy.context.evaluated_depsgraph_get())); me.transform(t.matrix_world); bm.from_mesh(thin(me))
         bpy.data.meshes.remove(me); bpy.data.objects.remove(t, do_unlink=True); bpy.data.curves.remove(cu)
     o = obj("NOCOL_LAMPRACK_NUMBERS", bm, mats["black"])
     for p in o.data.polygons:
