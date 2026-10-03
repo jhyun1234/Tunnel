@@ -11,17 +11,17 @@
     "homewater": {"wall": 3,  "floor": 4,  "band": 0.9, "name": "집 물가"},
     "road":      {"wall": 3,  "dim": 1, "floor": 6,  "name": "큰 길 (벽 ② = ③ 과 같은 사진을 더 어둡게 — dim)"},
     "rock":      {"wall": 4,  "floor": 12, "name": "바위 굴"},
-    "yard":      {"wall": 4,  "floor": 7,  "name": "레일 마당"},
+    "yard":      {"wall": 4,  "floor": 7,  "coalband": [0.6, 1.6], "name": "레일 마당"},
     "oldwest":   {"wall": 6,  "floor": 7,  "name": "옛 굴 서쪽"},
-    "oldeast":   {"wall": 6,  "floor": 12, "name": "옛 굴 동쪽"},
-    "oldend":    {"wall": 6,  "floor": 10, "name": "옛 굴 끝 (물가로 가는 길)"},
+    "oldeast":   {"wall": 6,  "floor": 12, "coalband": [0.6, 1.6], "name": "옛 굴 동쪽"},
+    "oldend":    {"wall": 6,  "floor": 10, "coalband": [0.6, 1.6], "name": "옛 굴 끝 (물가로 가는 길)"},
     "seam":      {"wall": 11, "floor": 10, "coalband": [0.6, 1.6], "name": "탄층 가까움"},
     "coalface":  {"wall": 7,  "roof": 8, "floor": 2, "name": "석탄 면"},
     "fault":     {"wall": 8,  "floor": 7,  "name": "단층"},
     "fall":      {"wall": 3,  "dim": 1, "floor": 7,  "name": "무너짐 (벽 ② = ③ 을 어둡게 — 사용자 10-03 판정 ③ \"회색 벽이 콘크리트처럼 보인다\" · 옛 벽 ⑤)"},
     "lair":      {"wall": 9,  "floor": 6,  "name": "그것의 굴 (6 m 아래)"},
     "lairhigh":  {"wall": 10, "floor": 6,  "name": "그것의 굴 (6 m 위)"},
-    "sump":      {"wall": 9,  "floor": 4,  "band": 0.9, "name": "물 고인 곳"}
+    "sump":      {"wall": 9,  "floor": 4,  "band": 0.9, "coalband": [0.6, 1.6], "name": "물 고인 곳"}
   },
   "room": {
     "R0": "home", "L": "home", "H": "home", "P": "homewater",

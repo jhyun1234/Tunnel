@@ -23,6 +23,9 @@ public class Stalker : MonoBehaviour
     public Vector3 restartPos;                     // 잡힌 뒤 플레이어가 서는 자리 (복도 시작점)
     public Vector3 homePos;                        // 잡힌 뒤 괴물이 돌아가는 자리 (북쪽 끝)
     public Vector3[] cracks = new Vector3[0];      // 갈라진 틈 — 철수 뒤 재등장 자리
+    [System.NonSerialized] public bool hasAnchor;  // GAME-1: 배회 가운데를 감독이 정한다 (집 · 마지막으로 일한 자리). 없으면 제 자리 둘레 (옛 동작)
+    [System.NonSerialized] public Vector3 anchor;
+    [System.NonSerialized] public bool held;       // GAME-1: 감독이 숨은 굴에 넣어 둔 상태 — 꺼낼 때까지 안 나온다
 
     // 실행 중 조정·검사용 (씬에 안 굽는다)
     [System.NonSerialized] public float earMul = Tuning.STALKER_EAR_MUL;
@@ -177,7 +180,7 @@ public class Stalker : MonoBehaviour
                 if (!hasTarget)
                 {
                     if (pause > 0f) pause -= dt;
-                    else SetTarget(RandomNear(transform.position, Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL));
+                    else SetTarget(RandomNear(hasAnchor ? anchor : transform.position, Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL));
                 }
                 else if (MoveTo(Tuning.STALKER_SPEED_WANDER, dt))
                 {
@@ -365,6 +368,7 @@ public class Stalker : MonoBehaviour
     // 숨어서 회복. 끝나면 플레이어에서 먼 틈에서 체력 100 으로 배회
     void UpdateHidden(float dt)
     {
+        if (held) return;                          // 감독이 꺼낸다 (Release)
         hiddenLeft -= dt;
         if (hiddenLeft > 0f)
             return;
@@ -528,6 +532,25 @@ public class Stalker : MonoBehaviour
         spots.Clear();
         state = State.Wander;
     }
+
+    // GAME-1 감독: 아무도 못 볼 때 벽 속(숨은 굴)으로 들어간다 — 몸 · 충돌을 끄고 Release 까지 기다린다
+    public void Hold()
+    {
+        state = State.Hidden; held = true; hasTarget = false; lightChase = false; spots.Clear();
+        cc.enabled = false;
+        foreach (var r in renderers) r.enabled = false;
+    }
+
+    // 감독이 출구 앞에 꺼낸다 (아무도 그 자리를 못 볼 때만 부른다) — 배회로 시작, 체력은 그대로
+    public void Release(Vector3 pos, float yaw)
+    {
+        held = false;
+        foreach (var r in renderers) r.enabled = true;
+        Teleport(pos, yaw);
+    }
+
+    // 감독이 보낸 자리를 살피러 간다 — 소리를 들은 것과 같은 길 (조사 → 수색 → 배회)
+    public void SendTo(Vector3 at, float speed) => StartInvestigate(at, speed, false);
 
     void SetTarget(Vector3 t)
     {

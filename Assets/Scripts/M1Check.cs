@@ -83,7 +83,7 @@ public partial class M1Check : MonoBehaviour
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = -1;
         var hud = GetComponent<DevHud>();
-        if (hud != null && only != "map4human") hud.enabled = false;   // 글자가 밝기·구조 값에 섞이지 않게 (map4human: 사람 길 — DevHud.Start 가 새 맵을 놓고 스스로 꺼진다)
+        if (hud != null && only != "map4human" && only != "map4play" && only != "map4meet") hud.enabled = false;   // 글자가 밝기·구조 값에 섞이지 않게 (map4human: 사람 길 — DevHud.Start 가 새 맵을 놓고 스스로 꺼진다)
 
         volume.profile.TryGet(out VolumetricFogVolumeComponent fog);
         if (sabotage == "floor")
@@ -367,7 +367,7 @@ public partial class M1Check : MonoBehaviour
         Check("booth_scene_loaded", SceneManager.GetActiveScene().name == Tuning.BOOTH_SCENE && NavMesh.CalculateTriangulation().indices.Length > 0,
             $"scene {SceneManager.GetActiveScene().name} (from intro start: {only == ""}) · navmesh tris {NavMesh.CalculateTriangulation().indices.Length / 3}");
         yield return new WaitForSeconds(1.5f);
-        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4" && only != "map4human" && only != "map4shots" && only != "map4geo")
+        if (only != "repair" && only != "art" && only != "ore" && only != "hudfit" && only != "sizes" && only != "glare" && only != "tour" && only != "fabtest" && only != "fabvideo" && only != "fabtuner" && only != "map4" && only != "map4human" && only != "map4shots" && only != "map4geo" && only != "map4play" && only != "map4meet")
             yield return BoothStage(cc);
         if (only == "map4geo")                                  // MAP4 모양 검사 (10-02): 찢어진 바위 · 떠 있는 물체 · 홀로 선 문 · 광차와 레일 · 저절로 숙임 · 굴마다 걸어 지나기 (M1CheckMap4Geo.cs)
             yield return Map4GeoStage();
@@ -379,6 +379,10 @@ public partial class M1Check : MonoBehaviour
             yield return FabVideoStage();
         if (only == "map4")                                     // MAP4 1편 전체 (10-01) — 장면 자리마다 서서 찍고 바닥에 서 있나 · fps
             yield return Map4Stage();
+        if (only == "map4play")                                 // GAME-1 MAP4 에서 놀기 (10-03): 사람 길로 들어와 석탄 · 출구 · 감독 단계 · 나오기 · 이동 시간 (M1CheckMap4Play.cs)
+            yield return Map4PlayStage();
+        if (only == "map4meet")                                 // GAME-1 첫 마주침 재기 (판마다 씬을 다시 불러 여러 판, 오래 걸려 따로)
+            yield return Map4MeetStage();
         if (only == "map4human")                                // 사람 길 (인트로 → 시작 → DevHud 가 새 맵을 놓음) 으로 들어와 한 장 — 검사 길(Map4Stage 가 직접 놓음)과 다르다
             yield return Map4HumanStage();
         if (only == "fabtest")                                  // 엔진 확인 (09-30) — Fab 갱도를 게임에 넣어 Blender 시안과 같은 자리에서 찍고 fps 를 잰다

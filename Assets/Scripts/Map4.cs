@@ -19,6 +19,22 @@ public class Map4 : MonoBehaviour
     public static readonly Vector3 Offset = new Vector3(0f, -200f, 0f);
     public static bool HumanCheck => System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "map4human") >= 0;   // 검사 -only map4human: 사람 길(인트로 → 시작 → DevHud 가 놓는다)을 봇이 그대로 지난다
     public static bool Requested => System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-map4") >= 0 || HumanCheck;
+    // GAME-1 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md, 사용자 승인 10-03): 플래그 없이 "시작" = MAP4 에서 놀기 (괴물 · 석탄 · 감독). 검사 -only map4play 는 사람 길로 들어와 같은 것을 탄다
+    static bool Arg(string a) => System.Array.IndexOf(System.Environment.GetCommandLineArgs(), a) >= 0;
+    public static bool PlayCheck => Arg("map4play") || Arg("map4meet");
+    public static bool Game => Tuning.MAP4_GAME && !Requested && !FabTest.Requested && !Arg("-fabvideo") && (!Arg("-check") || PlayCheck) && !Arg("startbooth");   // 사보타주 startbooth = 옛 부스 맵 그대로
+    public static int Seed() { var a = System.Environment.GetCommandLineArgs(); int i = System.Array.IndexOf(a, "-seed"); return i >= 0 && i + 1 < a.Length && int.TryParse(a[i + 1], out int s) ? s : System.Environment.TickCount; }
+    public static bool Sab(string name) { var a = System.Environment.GetCommandLineArgs(); int i = System.Array.IndexOf(a, "-sabotage"); return i >= 0 && i + 1 < a.Length && a[i + 1] == name; }   // 검사 사보타주 — 인자에서 바로 (DevHud.Start 가 M1Check.Start 보다 먼저 돌 수 있다)
+    public static bool SabNoOre => Sab("noore"); public static bool SabSameSeed => Sab("sameseed"); public static bool SabNoNav => Sab("nonav");
+    // 방 가운데 · 넓이: 굽기가 넣은 빈 노드 AREA_<방>_<가로 × 10>_<세로 × 10> (map4geo 와 같은 것). 없으면 설계 파일 좌표로
+    public Transform Area(string id) => GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name.StartsWith("AREA_" + id + "_") && t.name.Split('_').Length == 4);
+    public bool InArea(string id, Vector3 p, float margin)
+    {
+        var a = Area(id); if (a == null) return false; var q = a.name.Split('_'); float w = int.Parse(q[2]) / 10f, d = int.Parse(q[3]) / 10f; Vector3 v = p - a.position;
+        return Mathf.Abs(Vector3.Dot(v, a.right)) <= w / 2 + margin && Mathf.Abs(Vector3.Dot(v, a.forward)) <= d / 2 + margin && Mathf.Abs(v.y) < 6f;
+    }
+    public static readonly string[] LitRooms = { "P", "R0", "L", "S1", "H", "z6" };   // 불 켜진 방(집) — 괴물 출구를 안 뚫는다 (사용자 10-03 "안 뚫는다")
+    [System.NonSerialized] public bool judge;                    // -map4 판정 모드: 장면 자리 · 밝기 · 재질 키와 왼쪽 아래 글. 게임에선 끈다 (DevHud 키와 부딪힌다)
     public Player player; public Camera cam;
     public Transform[] spots; int spot;
     [System.NonSerialized] public float power = Tuning.FAB_LIGHT_ENERGY, range = Tuning.FAB_LIGHT_RANGE, fill = Tuning.FAB_AMBIENT_FILL;
@@ -57,12 +73,86 @@ public class Map4 : MonoBehaviour
         foreach (var r in go.GetComponentsInChildren<Renderer>().Where(r => r.name.Contains("vgyidfpaw") || r.name.StartsWith("NOCOL_LAMPCORD")))
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         if (Tuning.FAB_COLOR_GRADE) FabTest.Grade();
-        var m = go.AddComponent<Map4>(); m.player = player; m.cam = cam; m.lamps = lamps; m.zone = zone.ToArray();
-        m.Rocks(go); m.Apply();
+        var m = go.AddComponent<Map4>(); m.player = player; m.cam = cam; m.lamps = lamps; m.zone = zone.ToArray(); m.judge = Requested;
+        m.Axes(); m.Rocks(go); m.Apply();
         m.spots = go.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("CAM_")).OrderBy(t => t.name == "CAM_start" ? "" : t.name).ToArray();
         m.Go(0);
         return m;
     }
+
+    // Blender(설계 파일 · scene_mock.py) 좌표 → 게임 자리. glTF 를 읽는 쪽이 x 나 z 를 뒤집는다 — 아는 빈 노드 둘(펌프실 TEX_P_ = (-14, -3) · CAM_start = (0, 2))로 부호를 맞춘다 (Map4ShotsStage 와 같은 법)
+    float sx = -1f, sz = 1f;
+    void Axes()
+    {
+        var tp = GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name.StartsWith("TEX_P_")); var cs = FabTest.Node(gameObject, "CAM_start");
+        if (tp == null || cs == null) { Debug.Log("MAP4 no TEX_P_ / CAM_start node — plan axes guessed"); return; }
+        sx = -Mathf.Sign(transform.InverseTransformPoint(tp.position).x); sz = Mathf.Sign(transform.InverseTransformPoint(cs.position).z);
+    }
+    public Vector3 Plan(float x, float y, float z = 0f) => transform.TransformPoint(new Vector3(sx * x, z, sz * y));
+
+    // ---- GAME-1 석탄: 구역 넷(북 N · 서 W · 남 S · 동 E)의 후보 SLOT_Pocket_<구역>_<번호> (벽 겉) · SLOTOUT_<구역>_<번호> (0.8 m 바깥) · 탄층 조각 NOCOL_ORE_<구역>_<번호>_Face · _Loose · _Gap (scene_mock.py)
+    public class Spot { public string name, area; public int index; public Transform slot, outT, face, loose, gap; public OrePocket pocket; public bool open; }
+    [System.NonSerialized] public List<Spot> coal = new List<Spot>();
+    [System.NonSerialized] public string rich = "";
+    [System.NonSerialized] public int seed;
+    UnityEngine.AI.NavMeshDataInstance nav;
+
+    // 판마다 열 자리: 좋은 광맥 구역 하나(COAL_OPEN_RICH 곳) + 나머지 구역은 COAL_OPEN_POOR 곳씩. 씨앗이 같으면 같은 판
+    public static (string rich, HashSet<string> open) PickOpen(IEnumerable<string> names, int seed)
+    {
+        var rnd = new System.Random(SabSameSeed ? 1 : seed);
+        string rich = Tuning.COAL_AREAS[rnd.Next(Tuning.COAL_AREAS.Length)];
+        var open = new HashSet<string>();
+        foreach (var a in Tuning.COAL_AREAS)
+        {
+            var list = names.Where(n => n.Split('_')[2] == a).OrderBy(n => n).ToList();
+            foreach (var n in list.OrderBy(_ => rnd.Next()).Take(a == rich ? Tuning.COAL_OPEN_RICH : Tuning.COAL_OPEN_POOR)) open.Add(n);
+        }
+        return (rich, open);
+    }
+
+    // 게임 시작: 괴물이 걸을 바닥(Map4_NavMesh — Assets/Editor/BuildMap4.cs 가 굽는다) · 석탄 열기 · 감독
+    public Director StartGame(Stalker s, int seed)
+    {
+        var nd = Resources.Load<UnityEngine.AI.NavMeshData>("Map4_NavMesh");
+        if (nd != null && !SabNoNav) nav = UnityEngine.AI.NavMesh.AddNavMeshData(nd);
+        else Debug.Log("MAP4 no Map4_NavMesh in Resources — the monster has no floor (bake: Unity -executeMethod BuildMap4.Bake)");
+        var all = GetComponentsInChildren<Transform>(true); var by = all.GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
+        coal.Clear();
+        foreach (var t in all.Where(t => t.name.StartsWith("SLOT_Pocket_")))
+        {
+            var p = t.name.Split('_'); if (p.Length < 4) continue;
+            var c = new Spot { name = t.name, area = p[2], index = int.Parse(p[3]), slot = t }; string k = "NOCOL_ORE_" + p[2] + "_" + p[3] + "_";
+            by.TryGetValue("SLOTOUT_" + p[2] + "_" + p[3], out c.outT); by.TryGetValue(k + "Face", out c.face); by.TryGetValue(k + "Loose", out c.loose); by.TryGetValue(k + "Gap", out c.gap);
+            coal.Add(c);
+        }
+        OpenCoal(seed);
+        var d = gameObject.AddComponent<Director>(); d.Begin(this, s, player, cam);
+        return d;
+    }
+
+    void OpenCoal(int sd)
+    {
+        var (r, open) = PickOpen(coal.Select(c => c.name), sd); rich = r; seed = sd;
+        foreach (var c in coal)
+        {
+            c.open = open.Contains(c.name) && !SabNoOre;
+            foreach (var t in new[] { c.face, c.loose, c.gap }) if (t != null) t.gameObject.SetActive(c.open);   // 닫힌 자리 = 띠만 칠한 벽
+            if (!c.open || c.loose == null) continue;
+            Vector3 o = c.outT != null ? c.outT.position - c.slot.position : Vector3.zero; o.y = 0f;
+            if (o.sqrMagnitude < 1e-4f && UnityEngine.AI.NavMesh.SamplePosition(c.slot.position, out var h, 4f, UnityEngine.AI.NavMesh.AllAreas)) { o = h.position - c.slot.position; o.y = 0f; }
+            o.Normalize();
+            var go = new GameObject("OrePocket_" + c.area + "_" + c.index); go.SetActive(false);   // 꺼 둔 채 붙여 Awake 가 mesh 를 받은 뒤 돈다
+            go.transform.SetParent(transform, true);
+            go.transform.SetPositionAndRotation(c.slot.position + o * Tuning.POCKET_WALL_OUT, Quaternion.LookRotation(o.sqrMagnitude > 0f ? o : Vector3.forward));
+            go.AddComponent<SphereCollider>().radius = Tuning.POCKET_RADIUS;
+            var pk = go.AddComponent<OrePocket>(); c.loose.SetParent(go.transform, true); pk.mesh = c.loose; pk.outDir = o; c.pocket = pk;
+            go.SetActive(true);
+        }
+        Debug.Log($"MAP4 coal: seed {sd} · good seam {rich} · open {coal.Count(c => c.open)} of {coal.Count} ({string.Join(" ", coal.Where(c => c.open).Select(c => c.area + c.index))})");
+    }
+
+    void OnDestroy() { if (nav.valid) UnityEngine.AI.NavMesh.RemoveNavMeshData(nav); }
 
     // RK_ 재질 칸 → 부스 바위 재질(MineRock) 사본. 같은 이름은 사본 하나를 같이 쓴다. 부스 재질 자체는 안 건드린다
     void Rocks(GameObject go)
@@ -177,6 +267,7 @@ public class Map4 : MonoBehaviour
     {
         // 머리 위가 선 몸(BODY_HEIGHT + 15 cm)보다 낮으면 저절로 숙인다 — Ctrl 을 떼도 천장 속으로 서지 않게 (공은 내 몸 캡슐 안 0.5 m 에서 출발해 제 몸은 안 맞는다, 공 꼭대기 0.75 m → 1.95 m)
         player.forceCrouch = LowAbove(player.transform.position, out _);
+        if (!judge) return;                                                   // 게임(GAME-1): 판정 키 없음 — DevHud · 감독 키와 부딪힌다
         var k = UnityEngine.InputSystem.Keyboard.current; if (k == null || k.shiftKey.isPressed) return;
         bool paint = false;
         if (k.rightBracketKey.wasPressedThisFrame) Go(spot + 1);
@@ -222,6 +313,7 @@ public class Map4 : MonoBehaviour
 
     void OnGUI()
     {
+        if (!judge) return;
         if (spots.Length > 0) GUI.Label(new Rect(10, Screen.height - 28, 900, 24), $"MAP4  spot {spot + 1}/{spots.Length} {spots[spot].name.Substring(4)}   [ ] = prev / next spot");
         GUI.Label(new Rect(10, Screen.height - 52, 1100, 24), $"lamp power {power:0} [1 2]   reach {range:0} m [3 4]   soft fill {fill:0.00} [9 0]   B = judged values ({Tuning.FAB_LIGHT_ENERGY:0} / {Tuning.FAB_LIGHT_RANGE:0} m / {Tuning.FAB_AMBIENT_FILL:0.00})   lamps {lamps.Length + zone.Length}");
         if (picks.Length == 0) return;

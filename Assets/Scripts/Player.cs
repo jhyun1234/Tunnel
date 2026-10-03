@@ -17,6 +17,7 @@ public class Player : MonoBehaviour
     [System.NonSerialized] public int ore; // 캔 광석 수
     [System.NonSerialized] public bool frozen; // 잡힌 동안 — 입력·시점 잠금 (Stalker 가 켜고 끈다)
     [System.NonSerialized] public int steps;       // 낸 발걸음 수 (검사용)
+    [System.NonSerialized] public float runMul = 1f;         // 사보타주 fastrun (GAME-1 map4play_move 가 하한에 걸리는지)
     [System.NonSerialized] public float stepNoiseMul = 1f;   // 사보타주 quietfeet: 0 이면 발소리 반경 0 = 소음 아님
     [System.NonSerialized] public bool stagger = true;        // 사보타주 nostagger 가 끈다 — 탈진해도 자세 없는(옛) 상태
     [System.NonSerialized] public bool snapDown = true;       // 사보타주 nosnap 이 끈다 — 비탈을 내려가며 떴다 붙었다 하던(옛) 상태
@@ -201,7 +202,7 @@ public class Player : MonoBehaviour
         else
             velocity.y = -2f;              // 바닥에 붙여 둬야 isGrounded 가 유지된다
 
-        float speed = stance == "crouch" ? Tuning.CROUCH_SPEED : stance == "run" ? Tuning.RUN_SPEED : Tuning.WALK_SPEED;
+        float speed = stance == "crouch" ? Tuning.CROUCH_SPEED : stance == "run" ? Tuning.RUN_SPEED * runMul : Tuning.WALK_SPEED;
         Vector3 wish = (transform.rotation * new Vector3(input.x, 0f, input.y)).normalized * speed;
         float rate = input != Vector2.zero ? Tuning.Accel : Tuning.Decel;
         if (!grounded)

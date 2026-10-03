@@ -24,6 +24,7 @@ public class DevHud : MonoBehaviour
     public Pickaxe pickaxe;
     public RepairDirector repairs;                         // REP-1 (부스 맵만)
     public PlayerBody body;                                // 3D-P 내 몸 (1인칭 팔)
+    [System.NonSerialized] public Director director;       // GAME-1 감독 (MAP4 게임일 때만)
     GameObject stood;                                      // Shift+7 로 세운 남의 몸
 
     VolumetricFogVolumeComponent fog;
@@ -56,6 +57,13 @@ public class DevHud : MonoBehaviour
             if (stalker != null) stalker.gameObject.SetActive(false);
             enabled = false;                                    // 밝기 판정 키(1 2 3 4 9 0 B)가 DevHud 키와 부딪힌다 (-fabvideo 와 같음)
         }
+        // GAME-1 (사용자 승인 10-03): 판정 플래그 없이 "시작" = MAP4 에서 놀기 — 괴물 · 석탄 · 감독. 옛 부스 맵(위 200 m)은 -map4 판정 때와 똑같이 둔다 —
+        // 끄면 그 맵에 붙은 바위 재질 · 빛 손잡이(ArtLook)가 같이 꺼져 판정받은 모습과 달라질 수 있다. 판 중에 옛 맵 고칠 곳이 망가지는 것만 끈다
+        if (Map4.Game && Map4.Spawn(player, pickaxe.cam.GetComponent<Camera>()) is Map4 game)
+        {
+            if (repairs != null) repairs.enabled = false;
+            director = game.StartGame(stalker != null && stalker.gameObject.activeSelf ? stalker : null, Map4.Seed());
+        }
         // 영상 재현 판정(09-30): -fabvideo — FabVideo.glb 에서 시작, 키로 빛 · 화각 (FabVideoTuner). 이 모드에선 DevHud 를 끈다 (판정 키가 부딪힌다)
         if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-fabvideo") >= 0 && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-check") < 0
             && FabTest.Spawn("FabVideo", new Vector3(0f, -160f, 0f)) is GameObject vid)
@@ -83,6 +91,7 @@ public class DevHud : MonoBehaviour
         var kb = Keyboard.current;
         if (kb == null || fog == null)
             return;
+        if (kb.altKey.isPressed) return;                                         // Alt+숫자 = 감독 판정 키 (GAME-1, Director.Keys)
         if (kb.vKey.wasPressedThisFrame) fog.enabled.value = !fog.enabled.value;
         if (kb.rightBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed && !Map4.Requested) fog.density.value *= 1.5f;   // Shift+[ ] 는 콱 크기 (SND-P) · -map4 에선 장면 자리 옮기기
         if (kb.leftBracketKey.wasPressedThisFrame && !kb.shiftKey.isPressed && !Map4.Requested) fog.density.value /= 1.5f;
@@ -370,7 +379,7 @@ public class DevHud : MonoBehaviour
             $"{fps:0} fps  {Screen.width}x{Screen.height}\n" +
             $"volumetric fog {(fog.enabled.value ? "ON" : "OFF")}  density {fog.density.value:0.#####}   [V] [ [ ] ]\n" +
             $"lamp {(lamp.lampOn ? "ON" : "OFF")}  intensity {lamp.energy:0.#}   [F] [ - = ]   dark adapt {lamp.adapt:0.00}  DARK_ADAPT_AMBIENT {lamp.darkAdaptAmbient:0.##}   [ 1 2 ]   near x{lamp.nearDim:0.00} · sees signs/bodies x{Headlamp.probeDim:0.0} (LAMP_PROBE_DIM {Tuning.LAMP_PROBE_DIM:0.0}) [Shift+PgDn PgUp]\n" +
-            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + BodyLine() + HitLine() + OreLine() + BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine() + monster;
+            $"{player.stance}  stamina {player.stamina:0}{(player.exhausted ? " EXHAUSTED" : "")}  nod x{(player.stamina <= Tuning.STAMINA_SOON ? Tuning.LAMP_BOB_SOON_MUL : 1f):0}   [ 5 6 ]   ore {player.ore}  noise {(miningHud == null ? "-" : $"{miningHud.LastKind} {miningHud.LastRadius:0} m {miningHud.Left:0.0} s")}   pick {(pickaxe == null ? "-" : $"{pickaxe.durability:0}/{Tuning.PICK_DURABILITY_MAX:0} {(pickaxe.hasPick ? "held" : pickaxe.Broken ? "BROKEN" : "thrown [E]")}")}   [ 3 4 ]   [F1] hide" + MineLine() + BodyLine() + HitLine() + OreLine() + (director != null ? director.Line() : BoothLine() + RepairLine() + ArtLook.Line() + CreviceLine()) + monster;   // MAP4 게임: 옛 부스 맵 줄(전등 · 고칠 곳 · 바위 · 틈) 대신 감독 줄
         var box = new Rect(10, 10, 1100, 390);
         TextHeight = GUI.skin.label.CalcHeight(new GUIContent(text), box.width);
         LastText = text;

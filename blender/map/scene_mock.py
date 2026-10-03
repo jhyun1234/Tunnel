@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "pro
 import _util as PU, pump_set, fan_duct, timber_store, staging as staging_, wall_props, cloth as cloth_, machines, cc0_models
 import timber_sets, lamp_rack, chute, substation, store_stalls                                   # 10-03 판정 ② 뒤 더한 소품: 둥근 동발 틀 · 램프 충전대 · 광차 싣는 곳 홈통
 import face_kit                                                                                   # 10-03 판정 ③ 뒤: 착암기 · 압축공기 관 · 호스 · 발파 구멍 · 분필 (막장 연장)
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "art"))
+import ore_kit, mine_props                                                                        # GAME-1: MAP4 석탄 자리의 탄층 조각 (부스 ORE-1 과 같은 도형 · 같은 석탄 재질)
 PMATS = None                                                              # 소품 재질 (이름 → 재질, map4() 가 사진 재질로 채운다)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1489,6 +1491,10 @@ def map4():
     #   모양 = 기획서 4절 "그것이 드나드는 큰 틈: 높이 2.6 · 폭 1.35 m": 입(폭 1.35 · 깊이 1.7 m)은 사람이 설 수 있고, 그 뒤는 폭 0.5 m 로 좁아지며 꺾여 6 m 넘게 어둠 속으로 — 사람은 못 들어가고 머리등이 끝에 안 닿는다.
     #   지금 빌드에는 괴물이 없다(모양만). 괴물이 여기로 드나드는 동작은 다음 번호(바위 틈 드나들기 MR1 R3)
     CRACK_WANT = (("W2", "W", 0.0), ("M", "N", -9.0), ("K", "W", 1.0), ("E2", "S", -5.5), ("V", "W", 0.0), ("N3", "W", 0.0), ("E3", "N", 0.0))   # (방, 벽, 벽 가운데에서 세계 좌표 +x · +y 쪽으로 m)
+    # GAME-1 (제안서 3절 "석탄 자리마다 25 m 안에 출구 하나", 불 켜진 방 · 승강장 안은 안 뚫는다): 북쪽 막장 줄 남쪽 벽 · 막장 앞 방 서쪽 벽 · 선로 끝 방 북쪽 벽 · 물 고인 옛 펌프장 북쪽 벽 ·
+    #   사다리 굴 동쪽 벽(조차장 남쪽 벽 석탄 — 조차장은 불 켜진 방) · 권양기 방 남쪽 벽. 아래 석탄 자리 고르기가 25 m 를 잰다 (CHECK map4 exits)
+    CRACK_WANT += (("N2", "S", -4.0), ("F", "W", -1.0), ("R2", "N", 3.5), ("R1", "N", -2.5), ("LD", "E", 0.0), ("E4", "S", -2.0))
+    assert not any(N[r_].get("lit") for r_, _, _ in CRACK_WANT), "monster crack in a lit room"
     CRACKS = []
     def crack_path(w0, f, bend):                                                              # 틈 가운데 줄 (벽 점에서 바위 속으로): 입 1.7 m → 28° 꺾어 2.6 m → 55° 꺾어 3 m
         d1 = Matrix.Rotation(math.radians(28 * bend), 3, "Z") @ f; d2 = Matrix.Rotation(math.radians(55 * bend), 3, "Z") @ f
@@ -1662,7 +1668,9 @@ def map4():
         for k_, (a_, b_, wd, hh) in enumerate(crack_path(w0, f, bend)):
             d_ = (b_ - a_); L_ = d_.length; b = bmesh.new(); F_ = Matrix.Translation((a_ + b_) / 2) @ Matrix.Rotation(math.atan2(d_.y, d_.x), 4, "Z")
             if k_ == 0:                                                                        # 입: 층층이 좁아지며 한쪽으로 기운 틈 (발치 1.35 m → 머리 위 3.3 m 에서 0.3 m)
-                for z0_, z1_, w_, off in ((0.0, 1.05, 1.35, 0.0), (0.95, 1.85, 1.1, 0.1), (1.75, 2.6, 0.9, 0.18), (2.5, 3.4, 0.38, 0.36)): box(b, (0, off * bend, (z0_ + z1_) / 2), (L_, w_, z1_ - z0_))
+                for z0_, z1_, w_, off in ((0.0, 1.05, 1.35, 0.0), (0.95, 1.85, 1.1, 0.1), (1.75, 2.6, 0.9, 0.18), (2.5, 3.4, 0.38, 0.36)):
+                    if z1_ > N[rid]["h"]: z1_ = N[rid]["h"] - 0.1                              # 천장이 3.4 m 밑인 방(북쪽 막장 줄 3.2 m): 맨 위 가는 틈이 천장을 뚫지 않게
+                    box(b, (0, off * bend, (z0_ + z1_) / 2), (L_, w_, z1_ - z0_))
             else: box(b, (0, 0, hh / 2), (L_, wd, hh))
             b.transform(F_); AIR.append((b, 0.3 if k_ == 0 else 0.05, None))
     lw, n2 = N["LW"], N["N2"]                                                                  # 서쪽 모임터 → 북쪽 막장 줄 6 m 세로 구멍 (사다리 오르기는 아직 없다 — 위에서 뛰어내리는 지름길)
@@ -2438,6 +2446,125 @@ def map4():
     for zn, c_, w_, d_ in (("z6", (0, 0, 0), 16, 10), ("z1", (0, 0, 0), 24, 10), ("z2", (a8 + 7.5, 0, 0), 15, 6), ("z9", (0, 0, 0), 40, 26)):
         if zn in zi: AREAS.append((zn, zi[zn]["T"] @ Vector(c_), w_, d_, next(s_["yaw"] for s_ in plan["scenes"] if s_["scene"] == zn)))
     for k_, (nm, hw, pts) in enumerate(WALKS): print("CHECK map4 walk %02d %s half width %.1f m, %d points, %.0f m" % (k_, nm, hw, len(pts), sum((b_ - a_).length for a_, b_ in zip(pts, pts[1:]))))
+    # ---- GAME-1 석탄 자리 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md 2절): 구역 넷(북 N · 서 W · 남 S · 동 E)마다 7 곳 = 28. 판마다 좋은 광맥 구역 5 곳 + 나머지 구역 1 곳씩 열린다 (Map4.cs PickOpen)
+    #   자리 = 원하는 점에서 벽 쪽으로 쏜 광선이 처음 맞은 바위 벽 (안 되면 벽을 따라 0.25 m 씩 비켜서 다시 · 다 안 되면 그 구역의 다음 후보). 소품을 다 놓은 뒤에 잰다. 규칙:
+    #   소품이 아닌 바위 · 거의 선 벽(법선 z < 0.35) · 바닥 위 0.9~1.4 m · 그 벽에 석탄이 칠해짐(탄층 띠 · 석탄 면 사진 · 석탄 기둥 — tex1_paint 와 같은 식) · 다른 자리와 2.5 m ·
+    #   굴 입구 · 홈 · 문 칸 · 벽 소품 · 괴물 틈 · 천장 구멍 가장자리에서 1.5 m · 0.8 m 앞 1.6 m 밑에 설 바닥(바위 · 바닥 판 · 더미) · 앞 1 m 가 빔 · 괴물 출구(틈 입 · 천장 구멍 입) 25 m 안.
+    #   빈 노드 SLOT_Pocket_<구역>_<번호> = 벽 겉 점 · SLOTOUT_<구역>_<번호> = 벽 면에서 0.8 m 바깥 (캐는 사람이 서는 쪽 — 게임은 길찾기 바닥으로 다시 잰다)
+    bpy.context.view_layer.update(); dg = bpy.context.evaluated_depsgraph_get(); ST = T1["S"]
+    EXITS = [("MGAP_" + rid, w0 + Vector((0, 0, 1.2))) for rid, f, w0, bend in CRACKS] + [("CHIM_" + rid, v_[0]) for rid, v_ in CHIMS.items()]   # 게임의 출구 빈 노드 자리
+    def seg_d(p, a, b):
+        ab, ap = (b - a).to_2d(), (p - a).to_2d(); t = max(0.0, min(1.0, ap.dot(ab) / max(ab.length_squared, 1e-9))); return (ap - ab * t).length
+    side_ = lambda f: Vector((-f.y, f.x, 0))
+    FEAT = []                                                                                   # 비켜설 것 (이름, 끝 a, 끝 b, 바닥 높이, 더 띄울 m) — 벽 위 토막은 양 끝, 점은 a = b
+    for rid, ms in MOUTH.items(): FEAT += [("mouth %s-%s" % (rid, oth), pt - side_(f) * hw, pt + side_(f) * hw, N[rid]["z"], 0.0) for (f, t), hw, pt, oth, *_ in ms]
+    for rid, rs in REC.items(): FEAT += [("recess %s" % rid, wall_pt(N[rid], f, t) - side_(f) * hw, wall_pt(N[rid], f, t) + side_(f) * hw, N[rid]["z"], 0.0) for (f, t), hw in rs]   # 막장 · 울타리 홈 · 괴물 틈 · 굴진 막장
+    for rid, ts in TAKEN.items(): FEAT += [("wall prop %s" % rid, wall_pt(N[rid], f, t) - side_(f) * h_, wall_pt(N[rid], f, t) + side_(f) * h_, N[rid]["z"], 0.0) for f, t, h_ in ts]
+    FEAT += [("door %s" % nm, c - side_(f) * 0.6, c + side_(f) * 0.6, c.z, 0.0) for nm, c, f, *_ in ALC]
+    FEAT += [("crack %s" % rid, w0, w0, w0.z, 0.7) for rid, f, w0, bend in CRACKS] + [("chimney %s" % rid, v_[0], v_[0], N[rid]["z"], max(v_[6], v_[7]) / 2) for rid, v_ in CHIMS.items()]
+    FEAT += [("scene mouth %s.%s" % (sn, pn), P(sn + "." + pn), P(sn + "." + pn), P(sn + "." + pn).z, 1.5) for sn in PORT if sn in zi for pn in PORT[sn]]
+    FEAT.append(("ladder passage LW", W(N["LW"], 0, 0, N["N2"]["z"] - N["LW"]["z"]), W(N["N2"], 0, 0), N["N2"]["z"], 1.3))   # 사다리 구멍 → 북쪽 막장 줄 굴 (굴 목록에 없어 입구가 안 잡힌다)
+    def near_feat(p, fz):
+        return next((nm for nm, a, b, z_, ex in FEAT if abs(fz - z_) < 2.5 and seg_d(p, a, b) - ex < 1.5), None)
+    def below(q, dist):
+        """q 에서 아래로: (처음 맞은 것 — 부딪힘 없는 NOCOL_ 은 지나침, 바위 · 바닥 판 높이)"""
+        o_, first = q.copy(), None
+        for _ in range(10):
+            hit, loc, nor, _i, ob, _m = sc.ray_cast(dg, o_, Vector((0, 0, -1)), distance=max(0.01, dist - (q.z - o_.z)))
+            if not hit: return first, None
+            if not ob.name.startswith("NOCOL_"):
+                first = first or (loc.copy(), nor.copy(), ob.name)
+                if ob.name.startswith(("SHELL", "FLOOR")): return first, loc.z
+            o_ = loc - Vector((0, 0, 0.01))
+        return first, None
+    def coal_at(p, hgt):
+        """그 점 벽에 칠해지는 석탄 0~1 (tex1_paint 와 같은 식): 석탄 면 사진(⑦) · 석탄 기둥 옆면은 통째로, 아니면 탄층 띠(띠 없는 환경에서 3 m 흐려짐). 벽 아래 진흙 띠에 덮이면 그만큼 뺀다"""
+        r = T1["kd"].find_n(p, 4); w = np.array([1.0 / (d + 0.5) for _, _, d in r]); ix = [i for _, i, _ in r]; w /= w.sum(); s0 = ST[ix[0]]; c = np.array([p[:]])
+        mud = min(1.0, max(0.0, 1 - (hgt - (ST[ix, 8] @ w) * (0.4 + 0.9 * fbm3(c * np.array([1 / 1.3, 1 / 1.3, 1 / 0.5]))[0])) / 0.25))
+        if s0[3] == 7 or any(abs(p.x - px_) < sx_ / 2 + 0.9 and abs(p.y - py_) < sy_ / 2 + 0.9 for px_, py_, sx_, sy_ in T1["pillars"]): return 1 - mud
+        zw = p.z - s0[6] + 0.5 * (fbm3(c * np.array([1 / 6.0, 1 / 6.0, 1 / 2.0]) + 31.7)[0] - 0.5)
+        fade = min(1.0, max(0.0, (T1["noseam"].find(p)[2] - T1["seam"].find(p)[2]) / 3.0))
+        return min(1.0, max(0.0, min(zw - s0[10], s0[11] - zw) / 0.08 + 0.5)) * (s0[11] > s0[10]) * fade * (1 - mud)
+    def probe(o, d):
+        """o 에서 수평 d 로 벽을 잰다 → ((벽 점, 바깥, 바닥 위 높이, 바닥 높이), "") 또는 (None, 까닭)"""
+        hit, p_, n_, _i, ob, _m = sc.ray_cast(dg, o, d, distance=3.5)
+        if not hit: return None, "no wall"
+        if not ob.name.startswith("SHELL"): return None, "prop in the way"
+        if abs(n_.z) >= 0.35: return None, "not upright"
+        hs = [sc.ray_cast(dg, o + side_(d) * k_, d, distance=3.5) for k_ in (-0.4, 0.4)]             # 벽 면 방향 = 양옆 0.4 m 두 점을 잇는 선 (한 점 법선은 잔굴곡에 흔들린다)
+        if not all(h_[0] and h_[4].name.startswith("SHELL") for h_ in hs): return None, "wall edge"
+        al = hs[1][1] - hs[0][1]; out = Vector((-al.y, al.x, 0)).normalized(); out = -out if out.dot(d) > 0 else out
+        if -out.dot(d) < 0.6: return None, "oblique wall"
+        first, fz = below(p_ + out * 0.8, 3.0)
+        if first is None or fz is None or (p_ + out * 0.8).z - first[0].z > 1.6 or first[1].z < 0.6 or first[0].z - fz > 0.7: return None, "no floor in front"
+        h = p_.z - fz
+        if not 0.9 <= h <= 1.4: return None, "height"
+        for o2, L2, rock_ok in ((p_ + out * 0.08, 0.92, False), (Vector((p_.x, p_.y, fz + 0.45)) + out * 0.3, 0.7, True), (Vector((p_.x, p_.y, fz + 1.7)) + out * 0.3, 0.7, True)):   # 앞 1 m: 그 높이 · 무릎 · 머리
+            hb = sc.ray_cast(dg, o2, out, distance=L2)
+            if hb[0] and not (rock_ok and hb[4].name.startswith("SHELL")): return None, "blocked in front"
+        return (p_, out, h, fz), ""
+    def find(wp, d, half, taken):
+        why = {}
+        for s in sorted(np.arange(-half, half + 1e-6, 0.25), key=abs):
+            b_ = wp - d * 1.5 + side_(d) * float(s); fz0 = ground(b_.x, b_.y, wp.z)
+            for hh in (1.1, 1.0, 1.25, 1.35, 0.95):                                           # 띠 가운데 1.1 m 부터 (진흙 띠가 높은 물가 방은 위로)
+                r_, w_ = probe(Vector((b_.x, b_.y, fz0 + hh)), d)
+                if r_:
+                    p_, out, h, fz = r_; nf = near_feat(p_, fz); ex = min(((p_ - e_).length, nm) for nm, e_ in EXITS); c_ = coal_at(p_, h)
+                    w_ = "near " + nf if nf else "within 2.5 m of another spot" if any((p_ - q).length < 2.5 for q in taken) else "no coal painted" if c_ < 0.9 else "exit %.0f m" % ex[0] if ex[0] > 25.0 else ""
+                    if not w_: return (p_, out, h, c_, ex), why
+                why[w_] = why.get(w_, 0) + 1
+        return None, why
+    m_, n2_ = N["M"], N["N2"]
+    pa, pb = [Vector((m_["x"] + a_, m_["y"] + b_, m_["z"])) for a_, b_, c_, d_ in PILLARS["M"]]; (_, _, ax_, ay_), (_, _, bx_, by_) = PILLARS["M"]
+    fc = [w_ + Vector((0, FACE_D, 0)) for w_, dx in FACES]                                     # 북쪽 막장 셋의 끝 벽 (석탄 면 · 발치 탄 더미 위에 선다)
+    WANT = {                                                                                    # 구역 → 후보 (이름, 원하는 벽 점, 벽 쪽 방향, 벽 따라 비킬 반폭 m). 앞 7 개가 본 자리, 그 뒤는 본 자리가 안 될 때만
+        "N": [("N2 face W", fc[0], (0, 1), 1.1), ("N2 face E", fc[2], (0, 1), 1.1), ("N2 face mid", fc[1] - Vector((1.0, 0, 0)), (0, 1), 1.1),
+              ("N2 south", W(n2_, -11, -6), (0, -1), 2.0), ("N2 east", W(n2_, 14, -1.5), (1, 0), 2.0), ("N3 north", W(N["N3"], -4.8, 5), (0, 1), 1.0), ("N3 north", W(N["N3"], -2.2, 5), (0, 1), 1.0),
+              ("N2 west", W(n2_, -14, 2.5), (-1, 0), 2.0), ("N2 south", W(n2_, 10, -6), (0, -1), 2.0), ("N3 west", W(N["N3"], -6, 3.2), (-1, 0), 1.0)],   # 단층 방은 서쪽 반(띠 0.5~1.5 m)만
+        "W": [("M pillar A north", pa + Vector((0, ay_ / 2, 0)), (0, -1), 1.2), ("M pillar A east", pa + Vector((ax_ / 2, 0, 0)), (-1, 0), 1.0),
+              ("M pillar B east", pb + Vector((bx_ / 2, 0, 0)), (-1, 0), 1.2), ("M pillar B south", pb - Vector((0, by_ / 2, 0)), (0, 1), 1.0),
+              ("z2 west", S2(a2_ + 2.6, -3.0), tuple(D2(0, -1))[:2], 1.5), ("z2 east", S2(a2_ + 5.6, 3.0), tuple(D2(0, 1))[:2], 1.5), ("F west", W(N["F"], -4, 2.3), (-1, 0), 0.6),
+              ("z2 west", S2(a2_ + 5.6, -3.0), tuple(D2(0, -1))[:2], 1.5), ("M pillar A west", pa - Vector((ax_ / 2, 0, 0)), (1, 0), 1.0), ("M pillar B north", pb + Vector((0, by_ / 2, 0)), (0, -1), 1.0)],   # 채탄 막장은 앞쪽 반(막장 앞 방 틈에서 25 m)
+        "S": [("R2 south", W(N["R2"], -4.8, -4), (0, -1), 1.0), ("R2 south", W(N["R2"], -2.2, -4), (0, -1), 1.0), ("R2 south", W(N["R2"], 0.4, -4), (0, -1), 1.0),
+              ("R1 west", W(N["R1"], -8, -1.5), (-1, 0), 2.0), ("R1 east", W(N["R1"], 8, -1.5), (1, 0), 2.0), ("S1 south", W(N["S1"], -7, -15), (0, -1), 2.5), ("S1 south", W(N["S1"], 7, -15), (0, -1), 2.5),
+              ("R1 west", W(N["R1"], -8, -4.5), (-1, 0), 1.0), ("R1 east", W(N["R1"], 8, -4.5), (1, 0), 1.0), ("LD west", W(N["LD"], -4, -1), (-1, 0), 1.5), ("R2 south", W(N["R2"], 3.0, -4), (0, -1), 1.0)],
+        "E": [("V east", W(N["V"], 14, 3.5), (1, 0), 1.5), ("V east", W(N["V"], 14, -0.5), (1, 0), 1.5), ("E2 north", W(N["E2"], -3, 6), (0, 1), 2.0), ("E2 north", W(N["E2"], 2.5, 6), (0, 1), 2.0),
+              ("E4 north", W(N["E4"], -2.5, 5), (0, 1), 1.5), ("E4 north", W(N["E4"], 2, 5), (0, 1), 1.5), ("E3 east", W(N["E3"], 4, -0.5), (1, 0), 2.0),
+              ("E2 north", W(N["E2"], 6.5, 6), (0, 1), 1.5), ("E4 north", W(N["E4"], 4.5, 5), (0, 1), 1.0), ("V east", W(N["V"], 14, -4), (1, 0), 1.0), ("E3 west", W(N["E3"], -4, -2.5), (-1, 0), 1.0)]}
+    SLOTS = []
+    for R_, wants in WANT.items():
+        got = []
+        for lab, wp, d_, half in wants:
+            if len(got) == 7: break
+            r_, why = find(wp, Vector((d_[0], d_[1], 0)).normalized(), half, [s_[3] for s_ in SLOTS] + [g_[1] for g_ in got])
+            if r_: got.append((lab, *r_))
+            else: print("CHECK map4 coal candidate %s %s at (%.1f, %.1f) not used — %s" % (R_, lab, wp.x, wp.y, " · ".join("%s %d" % kv for kv in sorted(why.items(), key=lambda kv: -kv[1]))))
+        assert len(got) == 7, "FAIL: coal spots in area %s: %d of 7" % (R_, len(got))
+        SLOTS += [(R_, i_ + 1, *g_) for i_, g_ in enumerate(got)]
+    for R_, i_, lab, p_, out, h, c_, (ed, en) in SLOTS:
+        node("SLOT_Pocket_%s_%d" % (R_, i_), p_); node("SLOTOUT_%s_%d" % (R_, i_), p_ + out * 0.8)
+        print("CHECK map4 coal spot SLOT_Pocket_%s_%d %s at (%.1f, %.1f, %.2f) facing (%+.2f, %+.2f) · %.2f m above the floor · coal %.2f · nearest exit %s %.1f m" % (R_, i_, lab, p_.x, p_.y, p_.z, out.x, out.y, h, c_, en, ed))
+    assert len(SLOTS) == 28, "FAIL: coal spots %d" % len(SLOTS)
+    far_ = max((ed, "SLOT_Pocket_%s_%d" % (R_, i_)) for R_, i_, lab, p_, out, h, c_, (ed, en) in SLOTS)
+    print("CHECK map4 exits: %d cracks + %d chimneys · every coal spot within 25 m: %s (worst %s %.1f m)" % (len(CRACKS), len(CHIMS), "yes" if far_[0] <= 25.0 else "no", far_[1], far_[0]))
+    assert far_[0] <= 25.0, "FAIL: coal spot farther than 25 m from a monster exit"
+    # 탄층 조각 (ORE-1 과 같은 것 — blender/art/ore_kit.py): 자리마다 결 덩이 무리 · 캘 덩이 · 틈. 홀수 자리 = 한국식(kr) · 짝수 = 네모식(grid). 바위 굴 BVH 에 광선을 쏴 벽에 붙인다
+    #   (make_ore GAME=1 과 같은 법: 0.6 m 바깥에서 벽 쪽으로, 자리 평면 ±0.35 m 안의 벽만). NOCOL_ = 게임에서 부딪힘 없음 (사람 · 길찾기 바닥을 안 막는다). 닫힌 자리는 게임이 끈다
+    GM = mine_props.game_materials(ROOT); bvh = T1["bvh"]; ores, ost = [], []
+    for R_, i_, lab, p_, out, *_ in SLOTS:
+        def surf(c, out=out):
+            hit = bvh.ray_cast(c + out * 0.6, -out, 1.5)
+            return hit[0] if hit[0] is not None and abs((hit[0] - c).dot(out)) < 0.35 else None
+        kind = "kr" if i_ % 2 else "grid"; bm, lb, gb = bmesh.new(), bmesh.new(), bmesh.new()
+        cl, gc, placed, skipped = ore_kit.place(bm, lb, gb, kind, p_, Vector((-out.y, out.x, 0)), out, surf, random.Random("ore%s%d" % (R_, i_)))
+        nm = "NOCOL_ORE_%s_%d_" % (R_, i_); objs = [ore_kit.mk(nm + "Face", bm, GM["coal_lump"], p_), ore_kit.mk(nm + "Loose", lb, GM["coal_fresh"], cl), ore_kit.mk(nm + "Gap", gb, GM["coal"], gc)]
+        for o in objs: mine_props.box_uv(o.data, 1.0 / o.data.materials[0]["uv_m"])
+        ores += objs; ost.append((R_, i_, kind, placed, skipped))
+    otri = ore_kit.tris(ores); few = ["%s%d %d" % (s_[0], s_[1], s_[3]) for s_ in ost if s_[3] < 25]
+    print("CHECK map4 ore chunks: %d spots · kr %d grid %d · tris %d (<= 60000) · face blocks per spot %d~%d · rays missed %d · few blocks (< 25) %s" % (len(ost), sum(s_[2] == "kr" for s_ in ost), sum(s_[2] == "grid" for s_ in ost),
+          otri, min(s_[3] for s_ in ost), max(s_[3] for s_ in ost), sum(s_[4] for s_ in ost), few or "none"))
+    assert otri <= 60000 and not few, "FAIL: ore chunks"
     tiles = split_tiles(SHELL)
     print("CHECK map4 shell tiles %d  tris %d  all tris %d" % (len(tiles), sum(len(t.data.polygons) for t in tiles), sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")))
     # ---- 찢어진 바위 (사용자 10-02 "굴 위의 모델링이 끊어져 있음"): 복셀 0.25 m 그물에서 변이 0.75 m 넘게 늘어난 면 = 겉면이 접힌 곳. 10-01 굽기는 큰 빈터 여섯 칸에서 6,792 개 · 가장 긴 변 2.27 m, 나머지 칸은 0 개 · 0.59 m

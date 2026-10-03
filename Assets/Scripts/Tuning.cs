@@ -673,6 +673,25 @@ public static class Tuning
     public static float RepairTime(string kind) => kind switch { "timber" => 8f, "rail" => 6f, "drain" => 6f, "vent" => 5f, "panel" => 4f, "hose" => 3f, "lamp" => 3f, _ => 5f };
     public static float RepairNoise(string kind) => kind switch { "timber" => 25f, "rail" => 20f, "drain" => 12f, "vent" => 6f, "panel" => 20f, "hose" => 6f, "lamp" => 4f, _ => 6f };
 
+    // GAME-1 MAP4 에서 놀기 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md, 사용자 승인 10-03 "출발값으로"). 봇으로 맞춘 뒤 판정 키(DevHud Alt+숫자)로 고른다
+    public const bool MAP4_GAME = true;                       // 인트로 "시작" = MAP4 승강장 (false = 옛 부스 맵 MAP2). -map4 는 괴물 없는 구조 · 재질 판정 그대로
+    public const int BOOTH_QUOTA = 6;                         // 몫 = 석탄 덩이 (광차 · 나르기는 BOOTH-2). 단계 게이지는 이것으로 나눈다 — 봇 결과에 따라 8 까지
+    public static readonly string[] COAL_AREAS = { "N", "W", "S", "E" };   // 구역 넷 = 북 · 서 · 남 · 동 (SLOT_Pocket_<구역>_<번호>, scene_mock.py)
+    public const int COAL_OPEN_RICH = 5, COAL_OPEN_POOR = 1;  // 판마다 좋은 광맥 구역은 5곳, 나머지 구역은 1곳씩 연다
+    public const float GAUGE_STEP = 25f;                      // 게이지 100 = 몫을 깔끔하게 다 채움. 이만큼마다 한 단계
+    public const float GAUGE_STRIKE_REF_M = 18f;              // 깔끔한 덩이 하나 = 콱 3번 × 6 m. 소리 하나 = 덩이 값 × 반경 ÷ 이것 (숙여서 콱 5번 = 1.67배 · '쨍' 25 m = +1.39)
+    public const float GAUGE_LAND_LUMPS = 0.5f;               // 던진 곡괭이 착지 = 덩이 반 개
+    public static readonly float[] STAGE_EVERY_S = { 0f, 120f, 90f, 60f, 45f, 30f };   // 단계별 괴물이 오는 간격 (0 단계 = 안 온다, 5 = "하나만 더")
+    public static readonly float[] STAGE_EXIT_M = { 0f, 60f, 40f, 25f, 0f, 0f };       // 마지막으로 일한 자리에서 나오는 출구까지 굴 길이 상한 (0 = 가장 가까운 출구)
+    public const float EXIT_MIN_PLAYER_M = 8f;                // 사람에게서 이보다 가까운 출구로는 안 나온다 (눈앞에서 튀어나오지 않게)
+    public const float EXIT_SEEN_M = 60f;                     // 이 안에서 화면에 들고 가리는 것이 없으면 "보인다"
+    public const float TUNNEL_SPEED = 5f;                     // m/s, 숨은 굴 (아무도 못 보는 동안) 빠르기 — 걷기 1.85 보다 빠르고 추격 6.5 보다 느리다
+    public const float EMERGE_WARN_S = 4f;                    // s, 나오기 전 그 출구에서 돌가루가 떨어지는 시간
+    public const float LINGER_S = 20f;                        // s, 나와서 못 찾은 채 이만큼 지나면 가까운 출구로 돌아 들어간다
+    public const float EXIT_NEAR_SPOT_M = 25f;                // 석탄 자리마다 굴 길이로 이 안에 출구 (검사 map4play_exits)
+    public const float MAP4_STALKER_R = 0.45f;                // m, MAP4 괴물 부딪힘 둘레 반지름 = 길찾기 바닥 몸 (BuildMap4). 0.6(부스)이면 동발 틀 · 바람문 · 광차 사이를 못 지나 승강장에서 방 14곳에 길이 없었다 (10-03 진단: 0.45 = 굴진 막장 끝 6 m 만 빼고 다 이어짐). 사람 몸 0.4
+    public const float QUOTA_FLOOR_S = 150f;                  // 가장 빠른 이동 방식으로도 몫이 이보다 빨리 끝나면 몫을 올린다 (검사 map4play_move)
+
     public static float Accel => WALK_SPEED / TIME_TO_TOP_SPEED;
     public static float Decel => WALK_SPEED / TIME_TO_STOP;
     public static float JumpVelocity => Mathf.Sqrt(2.0f * GRAVITY * JUMP_HEIGHT);
