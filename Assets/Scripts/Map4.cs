@@ -34,7 +34,7 @@ public class Map4 : MonoBehaviour
         return Mathf.Abs(Vector3.Dot(v, a.right)) <= w / 2 + margin && Mathf.Abs(Vector3.Dot(v, a.forward)) <= d / 2 + margin && Mathf.Abs(v.y) < 6f;
     }
     public static readonly string[] LitRooms = { "P", "R0", "L", "S1", "H", "z6" };   // 불 켜진 방(집) — 괴물 출구를 안 뚫는다 (사용자 10-03 "안 뚫는다")
-    [System.NonSerialized] public bool judge;                    // -map4 판정 모드: 장면 자리 · 밝기 · 재질 키와 왼쪽 아래 글. 게임에선 끈다 (DevHud 키와 부딪힌다)
+    [System.NonSerialized] public bool judge;                    // 판정 모드(-map4 · 검사가 놓은 맵): 장면 자리 · 밝기 · 재질 키와 왼쪽 아래 글. 게임(StartGame)에선 끈다 (DevHud · 감독 키와 부딪힌다)
     public Player player; public Camera cam;
     public Transform[] spots; int spot;
     [System.NonSerialized] public float power = Tuning.FAB_LIGHT_ENERGY, range = Tuning.FAB_LIGHT_RANGE, fill = Tuning.FAB_AMBIENT_FILL;
@@ -73,7 +73,7 @@ public class Map4 : MonoBehaviour
         foreach (var r in go.GetComponentsInChildren<Renderer>().Where(r => r.name.Contains("vgyidfpaw") || r.name.StartsWith("NOCOL_LAMPCORD")))
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         if (Tuning.FAB_COLOR_GRADE) FabTest.Grade();
-        var m = go.AddComponent<Map4>(); m.player = player; m.cam = cam; m.lamps = lamps; m.zone = zone.ToArray(); m.judge = Requested;
+        var m = go.AddComponent<Map4>(); m.player = player; m.cam = cam; m.lamps = lamps; m.zone = zone.ToArray(); m.judge = true;
         m.Axes(); m.Rocks(go); m.Apply();
         m.spots = go.GetComponentsInChildren<Transform>().Where(t => t.name.StartsWith("CAM_")).OrderBy(t => t.name == "CAM_start" ? "" : t.name).ToArray();
         m.Go(0);
@@ -114,6 +114,7 @@ public class Map4 : MonoBehaviour
     // 게임 시작: 괴물이 걸을 바닥(Map4_NavMesh — Assets/Editor/BuildMap4.cs 가 굽는다) · 석탄 열기 · 감독
     public Director StartGame(Stalker s, int seed)
     {
+        judge = false;
         var nd = Resources.Load<UnityEngine.AI.NavMeshData>("Map4_NavMesh");
         if (nd != null && !SabNoNav) nav = UnityEngine.AI.NavMesh.AddNavMeshData(nd);
         else Debug.Log("MAP4 no Map4_NavMesh in Resources — the monster has no floor (bake: Unity -executeMethod BuildMap4.Bake)");

@@ -1492,8 +1492,8 @@ def map4():
     #   지금 빌드에는 괴물이 없다(모양만). 괴물이 여기로 드나드는 동작은 다음 번호(바위 틈 드나들기 MR1 R3)
     CRACK_WANT = (("W2", "W", 0.0), ("M", "N", -9.0), ("K", "W", 1.0), ("E2", "S", -5.5), ("V", "W", 0.0), ("N3", "W", 0.0), ("E3", "N", 0.0))   # (방, 벽, 벽 가운데에서 세계 좌표 +x · +y 쪽으로 m)
     # GAME-1 (제안서 3절 "석탄 자리마다 25 m 안에 출구 하나", 불 켜진 방 · 승강장 안은 안 뚫는다): 북쪽 막장 줄 남쪽 벽 · 막장 앞 방 서쪽 벽 · 선로 끝 방 북쪽 벽 · 물 고인 옛 펌프장 북쪽 벽 ·
-    #   사다리 굴 동쪽 벽(조차장 남쪽 벽 석탄 — 조차장은 불 켜진 방) · 권양기 방 남쪽 벽 · 창고 칸 줄 동쪽 벽(동벽 석탄이 서벽 틈에서 길로 27 m — map4play_exits 10-03). 아래 석탄 자리 고르기가 25 m 를 잰다 (CHECK map4 exits)
-    CRACK_WANT += (("N2", "S", -4.0), ("F", "W", -1.0), ("R2", "N", 3.5), ("R1", "N", -2.5), ("LD", "E", 0.0), ("E4", "S", -2.0), ("V", "E", -5.0))
+    #   사다리 굴 동쪽 벽(조차장 남쪽 벽 석탄 — 조차장은 불 켜진 방) · 권양기 방 남쪽 벽 · 창고 칸 줄 동쪽 벽(동벽 석탄이 서벽 틈에서 길로 27 m — map4play_exits 10-03. 남쪽 칸막이가 방 쪽 3 m 까지 나와 있어 -5 m 에 내면 칸막이 뒤에 숨는다 → -3 m). 아래 석탄 자리 고르기가 25 m 를 잰다 (CHECK map4 exits)
+    CRACK_WANT += (("N2", "S", -4.0), ("F", "W", -1.0), ("R2", "N", 3.5), ("R1", "N", -2.5), ("LD", "E", 0.0), ("E4", "S", -2.0), ("V", "E", -3.0))
     assert not any(N[r_].get("lit") for r_, _, _ in CRACK_WANT), "monster crack in a lit room"
     CRACKS = []
     def crack_path(w0, f, bend):                                                              # 틈 가운데 줄 (벽 점에서 바위 속으로): 입 1.7 m → 28° 꺾어 2.6 m → 55° 꺾어 3 m
@@ -2504,6 +2504,15 @@ def map4():
         for o2, L2, rock_ok in ((p_ + out * 0.08, 0.92, False), (Vector((p_.x, p_.y, fz + 0.45)) + out * 0.3, 0.7, True), (Vector((p_.x, p_.y, fz + 1.7)) + out * 0.3, 0.7, True)):   # 앞 1 m: 그 높이 · 무릎 · 머리
             hb = sc.ray_cast(dg, o2, out, distance=L2)
             if hb[0] and not (rock_ok and hb[4].name.startswith("SHELL")): return None, "blocked in front"
+        for k_ in (-0.4, 0.0, 0.4):                                                            # 앞 1.5 m 에 설 자리: 무릎 · 허리 높이로 벽에서 나가며 바위 말고 걸리는 것 없음 (곁굴 서벽은 동발 기둥이 벽 0.5 m 앞에 줄지어 섰다 — 10-03 W5)
+            for hz in (0.45, 1.0):
+                o3 = p_ + out * 0.3 + side_(out) * k_; o3.z = fz + hz; hb = sc.ray_cast(dg, o3, out, distance=1.5)
+                if hb[0] and not hb[4].name.startswith("SHELL"): return None, "prop where you stand"
+        for dist_ in (1.6, 2.2):                                                               # 앞 1.6 · 2.2 m 에 선 눈(바닥 + 1.6, 옆으로 0.5 m 씩)에서 석탄까지 — 동발 기둥이 가리면 안 된다 (10-03 캡처: 곁굴 둘이 기둥 뒤)
+            for k_ in (-0.5, 0.0, 0.5):
+                e_ = p_ + out * dist_ + side_(out) * k_; e_.z = fz + 1.6; v_ = p_ - e_
+                hv = sc.ray_cast(dg, e_, v_.normalized(), distance=v_.length + 0.3)
+                if not hv[0] or not hv[4].name.startswith("SHELL") or (hv[1] - p_).length > 0.35: return None, "prop between the eye and the coal"
         return (p_, out, h, fz), ""
     def find(wp, d, half, taken):
         why = {}

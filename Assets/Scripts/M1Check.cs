@@ -82,6 +82,7 @@ public partial class M1Check : MonoBehaviour
         InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;   // 포커스를 잃어도 가상 장치 입력을 막지 않게
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = -1;
+        if (Array.IndexOf(args, "-fastforward") >= 0) Time.captureFramerate = 60;   // 빨리 감기(quick.sh FF=1): 한 장면 = 늘 1/60 s 로 계산하고 실제 시간은 안 기다린다 — 60 fps 사람과 같은 걸음, 그리는 만큼 빨리. fps · 소리 검사엔 쓰지 않는다
         var hud = GetComponent<DevHud>();
         if (hud != null && only != "map4human" && only != "map4play" && only != "map4meet") hud.enabled = false;   // 글자가 밝기·구조 값에 섞이지 않게 (map4human: 사람 길 — DevHud.Start 가 새 맵을 놓고 스스로 꺼진다)
 

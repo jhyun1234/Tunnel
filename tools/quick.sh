@@ -7,6 +7,7 @@
 # 전체를 구간별로 나눠 동시에 돌리는 것은 뺐다 (09-24 두 번 재 봄: 창 셋 522 · 496 s vs 한 창 507 s — 무거운 구간 intro·booth·anim 이
 #   같이 돌면 서로 2~3 배 느려진다). 구간 따로 돌리면 실패하는 검사가 있다: stalker_searches_2to3_spots_then_wanders(-only stalker 에서만, 옛 동작으로도 FAIL)
 #   NOBUILD=1 bash tools/quick.sh ...              빌드 없이 지금 exe 로 (사보타주만 다시 돌릴 때)
+#   FF=1 bash tools/quick.sh map4play             빨리 감기 (-fastforward: 장면마다 1/60 s 고정, 실제 시간 안 기다림). 논리 · 걷기 검사만 — fps · 소리 · 밝기 검사엔 쓰지 않는다
 # 사용자가 실행 파일로 판정(F5)하는 동안에는 돌리지 않는다 — 같은 GPU 를 나눠 쓰면 상관없는 구간이 FAIL 한다.
 set -u
 cd "$(dirname "$0")/.."
@@ -34,7 +35,7 @@ else for st in $stages; do runs+=("$st -only $st"); done; fi
 job() {                                                   # $1 = 이름, 나머지 = exe 인자
   local name=$1 t=$SECONDS log="build/quick_$1.log" pid i; shift
   rm -f "$log"
-  ./build/Tunnel/Tunnel.exe -check "$@" -screen-width 1920 -screen-height 1080 -screen-fullscreen 0 -logFile "$ROOT/$log" >/dev/null 2>&1 &
+  ./build/Tunnel/Tunnel.exe -check "$@" ${FF:+-fastforward} -screen-width 1920 -screen-height 1080 -screen-fullscreen 0 -logFile "$ROOT/$log" >/dev/null 2>&1 &
   pid=$!
   while kill -0 $pid 2>/dev/null && ! grep -qE "CHECK ALL PASS|CHECK FAILED" "$log" 2>/dev/null; do sleep 1; done
   echo $((SECONDS - t)) > "build/quick_$name.sec"

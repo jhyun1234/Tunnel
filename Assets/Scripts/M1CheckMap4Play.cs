@@ -11,12 +11,12 @@ using UnityEngine.SceneManagement;
 // GAME-1 검사 (-only map4play, 제안서 docs/제안서_GAME1_MAP4에서_놀기.md 5절). 사람 길(인트로 → 아무 키 → "시작")로 들어와 DevHud 가 놓은 MAP4 게임을 그대로 탄다 — 맵 · 괴물 · 감독을 검사가 따로 놓지 않는다.
 //   map4play_start   플래그 없이 MAP4 승강장 · 감독 · 괴물 (옛 부스 맵은 켜 둔다 — 판정 받은 -map4 모습과 같게)                                 (사보타주 startbooth)
 //   map4play_nav     괴물 바닥(Map4_NavMesh) 넓이 · 승강장에서 석탄 28 · 출구 · 집 셋까지 길                    (nonav)
-//   map4play_ore     씨앗 12 개: 좋은 광맥 5 + 나머지 1 씩 = 8 · 좋은 구역이 바뀐다 · 지금 판 8 곳 · 닫힌 조각 숨김 · 28 곳 모두 앞 바닥에서 곡괭이가 닿는다 · 하나 캐면 덩이   (noore · sameseed)
-//   map4play_exits   석탄 자리마다 굴 길이 25 m 안 출구 · 불 켜진 방 안 출구 0                                      (farexit · homeexit)
+//   map4play_ore     씨앗 12 개: 좋은 광맥 5 + 나머지 1 씩 = 8 · 좋은 구역이 바뀐다 · 지금 판 8 곳 · 닫힌 조각 숨김 · 28 곳 모두 앞 바닥에서 곡괭이가 닿고 눈에서 안 가린다 · 하나 캐면 덩이   (noore · sameseed · propblock)
+//   map4play_exits   석탄 자리마다 굴 길이 25 m 안 출구 · 불 켜진 방 안 출구 0 · 벽 틈이 그 방 가운데서 보인다        (farexit · homeexit · propblock)
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
 //   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
 //   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있으면 안 나옴 · 보일 때 나온 수 0   (chaseplayer · noshake · seenexit)
-//   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 ↔ 가까운/먼 구역 왕복 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
+//   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 → 가까운 구역(셋) · 먼 구역(끊어 달리기) 가는 길 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
 public partial class M1Check
 {
@@ -37,6 +37,14 @@ public partial class M1Check
         stalker.returnToIntro = false; stalker.enabled = false;               // 괴물은 나오기 검사에서만 켠다 (감독은 괴물이 꺼져 있으면 쉰다)
         if (sabotageName == "fastrun") player.runMul = 2f;
         Vector3 spawn = OnNav(player.transform.position);
+        if (sabotageName == "propblock")                                                      // 사보타주: 석탄 하나 앞 · 벽 틈 하나 앞에 판 하나씩 (동발 기둥 · 칸막이가 가린 것처럼)
+        {
+            var c0 = m.coal[0]; Vector3 o0 = c0.outT.position - c0.slot.position; o0.y = 0f; o0.Normalize();
+            var e0 = d.exits.First(e => e.name.StartsWith("MGAP_") && m.Area(e.name.Substring(5)) != null); Vector3 oe = OnNav(m.Area(e0.name.Substring(5)).position, 3f) + Vector3.up * 1.6f - e0.mouth; oe.Normalize();   // 그 방 가운데에서 틈을 보는 줄 위
+            foreach (var (at, f) in new[] { (c0.slot.position + o0 * 0.9f + Vector3.up * 0.3f, o0), (e0.mouth + oe * 1.5f, oe) })
+            { var b = GameObject.CreatePrimitive(PrimitiveType.Cube); b.transform.SetPositionAndRotation(at, Quaternion.LookRotation(f)); b.transform.localScale = new Vector3(1.4f, 1.6f, 0.15f); }
+            Physics.SyncTransforms();
+        }
 
         // ---- 바닥
         var tri = NavMesh.CalculateTriangulation(); double area = 0; int n4 = 0;
@@ -61,7 +69,7 @@ public partial class M1Check
         var live = m.coal.Where(c => c.open && c.pocket != null).ToList();
         int closedShown = m.coal.Count(c => !c.open && ((c.loose != null && c.loose.gameObject.activeInHierarchy) || (c.face != null && c.face.gameObject.activeInHierarchy)));
         // 28 곳 전부(이번 판에 닫힌 곳도): 석탄 앞 1.6 m 바닥(1.5 m 안)에 선 눈(1.6 m)에서 곡괭이가 닿나 — 판마다 8 곳만 보면 운으로 갈린다
-        var reachRows = new List<string>(); var cantMine = new List<string>();
+        var reachRows = new List<string>(); var cantMine = new List<string>(); var hiddenCoal = new List<string>();
         foreach (var c in m.coal.Where(c => c.outT != null))
         {
             Vector3 o = c.outT.position - c.slot.position; o.y = 0f; o.Normalize();
@@ -69,6 +77,9 @@ public partial class M1Check
             float reach = onFloor ? Vector3.Distance(sh.position + Vector3.up * 1.6f, c.slot.position) : 99f;
             float nav = NavMesh.SamplePosition(c.slot.position, out var nh, 6f, NavMesh.AllAreas) ? Vector3.Distance(nh.position, c.slot.position) : 99f;
             reachRows.Add($"{c.name.Replace("SLOT_Pocket_", "")} {reach:0.0} (floor {nav:0.0})");
+            if (onFloor)                                                                       // 눈 셋(가운데 · 옆으로 0.5 m 씩) 다 보여야 — 가운데만 보면 기둥 사이로 석탄 한가운데가 보여 통과했다(10-03 W5)
+                foreach (float k in new[] { -0.5f, 0f, 0.5f })
+                    if (Hidden(sh.position + Vector3.up * 1.6f + Vector3.Cross(Vector3.up, o) * k, c.slot.position, 0.4f, out string by)) { hiddenCoal.Add($"{c.name} by {by}"); break; }
             if (reach > Tuning.MINE_RANGE - 0.5f)                                                 // 앞에 선 몸 자리를 무엇이 차지했나
             {
                 Vector3 b0 = c.slot.position + o * 1.6f; b0.y = c.slot.position.y - 0.7f;
@@ -77,7 +88,7 @@ public partial class M1Check
             }
         }
         Debug.Log("MAP4PLAY coal reach (eye → coal from 1.6 m in front): " + string.Join(", ", reachRows));
-        int offNav = cantMine.Count;
+        int offNav = cantMine.Count + hiddenCoal.Count;
         int noParts = m.coal.Count(c => c.face == null || c.loose == null || c.gap == null || c.outT == null);
         var kb = InputSystem.AddDevice<Keyboard>("Map4PlayKeyboard"); var mouse = InputSystem.AddDevice<Mouse>("Map4PlayMouse");
         if (!pickaxe.hasPick) pickaxe.Return();
@@ -87,7 +98,7 @@ public partial class M1Check
         if (first != null) yield return MineOne(cc, kb, mouse, first.pocket, false, (p, t) => { popped = p; mineT = t; });
         yield return new WaitForSeconds(1.5f);
         Check("map4play_ore", counts && riches.Count >= 3 && sets.Count >= 6 && live.Count == 8 && closedShown == 0 && offNav == 0 && noParts == 0 && popped && player.ore > ore0,
-            $"12 seeds: 8 open each with 5 in the good seam {counts} · good seams seen {string.Join("", riches.OrderBy(x => x))} ({riches.Count}, want ≥ 3) · different sets {sets.Count} · this round: seed {m.seed} good {m.rich} open {live.Count} (want 8) closed chunks shown {closedShown} · of 28 spots can't be mined from the floor in front (reach {Tuning.MINE_RANGE - 0.5f:0.0} m) {offNav} {string.Join(", ", cantMine)} · spots missing face/loose/gap/out {noParts} · mined {(first != null ? first.name : "-")} popped {popped} in {mineT:0.0} s · ore {ore0} → {player.ore}");
+            $"12 seeds: 8 open each with 5 in the good seam {counts} · good seams seen {string.Join("", riches.OrderBy(x => x))} ({riches.Count}, want ≥ 3) · different sets {sets.Count} · this round: seed {m.seed} good {m.rich} open {live.Count} (want 8) closed chunks shown {closedShown} · of 28 spots can't be mined from the floor in front (reach {Tuning.MINE_RANGE - 0.5f:0.0} m) {cantMine.Count} {string.Join(", ", cantMine)} · hidden from the eye 1.6 m in front {hiddenCoal.Count} {string.Join(", ", hiddenCoal)} · spots missing face/loose/gap/out {noParts} · mined {(first != null ? first.name : "-")} popped {popped} in {mineT:0.0} s · ore {ore0} → {player.ore}");
 
         // ---- 출구
         var far = new List<string>(); float worst = 0f; string worstName = "-";
@@ -98,8 +109,17 @@ public partial class M1Check
             if (best > Tuning.EXIT_NEAR_SPOT_M) far.Add($"{c.name} {best:0}");
         }
         var inLit = d.exits.Where(e => Map4.LitRooms.Any(r => m.InArea(r, e.stand, 0.5f) || m.InArea(r, e.mouth, 0.5f))).Select(e => e.name).ToList();
-        Check("map4play_exits", far.Count == 0 && inLit.Count == 0,
-            $"exits {d.exits.Count} ({string.Join(" ", d.exits.Select(e => e.name))}) · coal spots farther than {Tuning.EXIT_NEAR_SPOT_M:0} m by path from any exit: {far.Count} {string.Join(", ", far.Take(6))} · worst {worstName} {worst:0} m · exits inside lit rooms {inLit.Count} {string.Join(" ", inLit)}");
+        var hiddenExits = new List<string>();                                                 // 벽 틈은 그 방 가운데 눈높이에서 보여야 한다 (칸막이 · 쌓은 것 뒤 금지 — 사용자 "방마다 괴물 나올 자리가 보이게"). 틈 바로 앞에서 재면 칸막이 칸 안 틈이 '좁은 굴'로 빠졌다(10-03 V2)
+        foreach (var e in d.exits.Where(e => !e.ceiling && e.name.StartsWith("MGAP_")))
+        {
+            string key = e.name.Substring(5); var room = m.Area(key) ?? (key.EndsWith("2") ? m.Area(key.Substring(0, key.Length - 1)) : null);
+            if (room == null) { hiddenExits.Add($"{e.name} (no room node)"); continue; }
+            Vector3 c0 = OnNav(room.position, 3f), half = OnNav(Vector3.Lerp(c0, e.mouth, 0.5f), 2f);   // 방 가운데가 물건 바로 옆이면(선로 끝 방: 덮개 천 0.6 m) 틈 쪽 반 거리에서 한 번 더
+            string by = "";
+            if (new[] { c0, half }.All(q => Hidden(q + Vector3.up * 1.6f, e.mouth, 0.5f, out by))) hiddenExits.Add($"{e.name} by {by}");
+        }
+        Check("map4play_exits", far.Count == 0 && inLit.Count == 0 && hiddenExits.Count == 0,
+            $"exits {d.exits.Count} ({string.Join(" ", d.exits.Select(e => e.name))}) · coal spots farther than {Tuning.EXIT_NEAR_SPOT_M:0} m by path from any exit: {far.Count} {string.Join(", ", far.Take(6))} · worst {worstName} {worst:0} m · exits inside lit rooms {inLit.Count} {string.Join(" ", inLit)} · wall exits hidden from the middle of their room {hiddenExits.Count} {string.Join(", ", hiddenExits)}");
 
         // ---- 게이지: 같은 덩이를 세 방식으로 (실제 곡괭이 · 실제 소리)
         var pk = live.Where(c => c != first && c.pocket != null).Select(c => c.pocket).Where(p => p.transform.position.y - OnNav(p.transform.position + p.outDir * 1.6f, 1.5f).y >= Tuning.MINE_LOW_M + 0.1f).Take(3).ToList();
@@ -193,26 +213,37 @@ public partial class M1Check
         var areaNear = Tuning.COAL_AREAS.Select(a => (a, c: m.coal.Where(c => c.area == a).OrderBy(c => PathLen(spawn, stand[c.name])).First())).Select(x => (x.a, x.c, L: PathLen(spawn, stand[x.c.name]))).OrderBy(x => x.L).ToList();
         var legs = new[] { areaNear.First(), areaNear.Last() };
         var rows = new List<string>(); float fastest = 1e6f; string fastestNote = "";
+        // 가는 길만 잰다: 돌아오는 길은 같은 길 · 같은 시간(10-03 왕복 여섯 번: 15.2/15.0 · 12.3/12.2 · 42.6/42.1 · 35.4/35.1 s) — 왕복이 검사 시간의 85 % 였다.
+        //   먼 구역은 Shift 끊어 달리기만 (사용자 방식 · 그 판 몫 길이를 적으려고). 가장 빠른 어림(몫 기준)은 가까운 구역 세 방식에서 나온다
         foreach (var (a, c, L) in legs)
-            foreach (var style in new[] { "walk", "burst", "sprint" })
+            foreach (var style in a == legs[0].a ? new[] { "walk", "burst", "sprint" } : new[] { "burst" })
             {
                 Teleport(cc, spawn + Vector3.up * 0.1f, 0f); player.stamina = Tuning.STAMINA_MAX; player.exhausted = false; yield return new WaitForSeconds(0.3f);
-                float go = -1f, back = -1f, gl = 0f;
+                float go = -1f, gl = 0f;
                 yield return BotWalk(kb, stand[c.name], style, (t, len) => { go = t; gl = len; });
                 bool there = Flat(player.transform.position - stand[c.name]) < 1.5f;
-                yield return new WaitForSeconds(0.5f);                              // 캐는 시간은 어림에 숫자로 더한다 (아래)
-                player.stamina = Mathf.Min(Tuning.STAMINA_MAX, player.stamina + Tuning.STAMINA_IDLE * 2f * Tuning.MINE_TIME_REF);   // 두 덩이 캐는 동안 쉬며 찬 기력
-                yield return BotWalk(kb, spawn, style, (t, len) => back = t);
-                bool home = Flat(player.transform.position - spawn) < 1.5f;
                 int trips = Mathf.CeilToInt(Tuning.BOOTH_QUOTA / 2f);
-                float quota = there && home ? trips * (go + back / 0.9f + 2f * Tuning.MINE_TIME_REF + 2f) : -1f;   // 돌아올 땐 들고 0.9 배 (BOOTH-2) · 덩이 둘 캐기 · 싣기 2 s
-                rows.Add($"{a} {style}: go {go:0.0} s back {back:0.0} s over {gl:0} m{(there && home ? "" : " (DID NOT ARRIVE)")} → quota ≈ {quota:0} s");
+                float quota = there ? trips * (go + go / 0.9f + 2f * Tuning.MINE_TIME_REF + 2f) : -1f;   // 돌아올 땐 같은 길을 들고 0.9 배 (BOOTH-2) · 덩이 둘 캐기 · 싣기 2 s
+                rows.Add($"{a} {style}: go {go:0.0} s over {gl:0} m{(there ? "" : " (DID NOT ARRIVE)")} → quota ≈ {quota:0} s");
                 if (quota > 0f && quota < fastest) { fastest = quota; fastestNote = $"{a} {style}"; }
             }
         Check("map4play_move", fastest < 1e5f && fastest >= Tuning.QUOTA_FLOOR_S,
             $"fastest quota estimate {fastest:0} s ({fastestNote}) — want ≥ {Tuning.QUOTA_FLOOR_S:0} s, else raise BOOTH_QUOTA (now {Tuning.BOOTH_QUOTA}) · {string.Join(" | ", rows)}");
         InputSystem.RemoveDevice(kb); InputSystem.RemoveDevice(mouse);
         player.runMul = 1f;
+    }
+
+    // eye → target 사이에 다른 것이 먼저 걸리나 (target 앞 tol m 안은 벽 자체). 석탄 덩이 구 · 내 몸 · 괴물은 건너뛴다
+    bool Hidden(Vector3 eye, Vector3 target, float tol, out string by)
+    {
+        Vector3 v = target - eye; by = "";
+        foreach (var h in Physics.RaycastAll(eye, v.normalized, v.magnitude + 0.3f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore).OrderBy(h => h.distance))
+        {
+            if (h.collider.GetComponent<OrePocket>() != null || h.collider.transform.IsChildOf(player.transform) || h.collider.GetComponentInParent<Stalker>() != null) continue;
+            if (h.distance < v.magnitude - tol) { by = $"{h.collider.name} {h.distance:0.0} m"; return true; }
+            return false;
+        }
+        return false;
     }
 
     // 석탄 하나: 1.6 m 앞에 서서 겨누고 좌클릭을 누르고 있다 (crouch = Ctrl 을 누른 채). 빠지면 true
@@ -230,7 +261,7 @@ public partial class M1Check
         yield return null;
         InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
         float t = 0f;
-        for (; pk != null && t < 15f; t += Time.deltaTime) yield return null;
+        for (; pk != null && t < 15f; t += Time.deltaTime) { kb.MakeCurrent(); mouse.MakeCurrent(); yield return null; }   // 검사 중 진짜 마우스 · 키보드가 움직이면 Mouse.current 가 그쪽으로 넘어가 누르기가 끊긴다(10-04: 두 번 치고 멈춤)
         if (pk != null)                                                                       // 안 빠졌다: 어디에 섰고 겨눈 줄에 무엇이 걸렸나
         {
             var want = pk.transform.position + pk.outDir * 1.6f; var hits = Physics.RaycastAll(pickaxe.cam.position, pickaxe.cam.forward, 6f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore).OrderBy(h => h.distance).Take(5);
@@ -262,7 +293,7 @@ public partial class M1Check
                 if (shift && (bt > 2f || player.stamina < 40f)) { shift = false; bt = 0f; }
                 else if (!shift && bt > 1.5f && player.stamina >= 60f) { shift = true; bt = 0f; }
             }
-            InputSystem.QueueStateEvent(kb, shift ? new KeyboardState(Key.W, Key.LeftShift) : new KeyboardState(Key.W));
+            InputSystem.QueueStateEvent(kb, shift ? new KeyboardState(Key.W, Key.LeftShift) : new KeyboardState(Key.W)); kb.MakeCurrent();
             yield return null; t += Time.deltaTime;
         }
         InputSystem.QueueStateEvent(kb, new KeyboardState());
@@ -293,7 +324,7 @@ public partial class M1Check
             Vector3 aim = c.pocket.transform.position - pickaxe.cam.position;
             player.transform.rotation = Quaternion.LookRotation(Flat3(aim)); player.Pitch = -Mathf.Atan2(aim.y, Flat(aim)) * Mathf.Rad2Deg;
             InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
-            for (float t = 0f; c.pocket != null && t < 15f && met < 0f; t += Time.deltaTime) yield return null;
+            for (float t = 0f; c.pocket != null && t < 15f && met < 0f; t += Time.deltaTime) { kb.MakeCurrent(); mouse.MakeCurrent(); yield return null; }
             InputSystem.QueueStateEvent(mouse, new MouseState()); player.Pitch = 0f;
             if (c.pocket == null) mined++;
             yield return new WaitForSeconds(0.8f);
