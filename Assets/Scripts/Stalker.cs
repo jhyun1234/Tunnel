@@ -550,7 +550,8 @@ public class Stalker : MonoBehaviour
     }
 
     // 감독이 보낸 자리를 살피러 간다 — 소리를 들은 것과 같은 길 (조사 → 수색 → 배회)
-    public void SendTo(Vector3 at, float speed) => StartInvestigate(at, speed, false);
+    // 조사 중 머리는 noisePos 를 본다 — 안 넣으면 옛 소리 자리(못 들었으면 (0,0,0) = MAP4 200 m 위)를 보며 걷는다 (10-04 판정 1 "두리번")
+    public void SendTo(Vector3 at, float speed) { if (!Map4.Sab("stalehead")) noisePos = at; StartInvestigate(at, speed, false); }
 
     void SetTarget(Vector3 t)
     {

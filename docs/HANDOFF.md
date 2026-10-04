@@ -8,11 +8,19 @@
 - 3D-P 의 `PlayerBody` 는 "내 몸(1인칭: 팔만) / 남의 몸(3인칭: 전체)" 스위치 하나로 만든다 — NET-1 에서 다른 플레이어 몸에 그대로 쓴다(제안서 3D-P 3절).
 
 **▶ 다음 세션 시작 (10-03 71차 끝 — 맵 판정은 멈춤):** 사용자 10-03 "고친 데까지 검사하고 커밋한 뒤 멈춰라. 이제 지스타에 3~5분 정도의 플레이가 가능한 기능을 넣어야 한다." → **지금 차례는 지스타 1차 플레이 빌드(10/17)** — 다른 세션이 `docs/제안서_GAME1_MAP4에서_놀기.md`(10-03 18:19, 이 세션 것 아님 · 커밋 안 함)를 쓰는 중이다. 맵 꾸밈 판정 ④ · 남은 물음(`docs/판정_MAP4_남은물음.md` A1 · A4 · A6 · F1 · F2 · F3) · 전화 · WATER-1 · 발전기 제안서는 그 뒤로 미룬다.
+**10-04 (GAME-1 판정 세션) — 판정 중.** 받은 말과 고친 것은 `docs/제안서_GAME1_MAP4에서_놀기.md` 맨 끝 "판정 (10-04)" 에 적는다(Alt 키가 감독의 무엇을 바꾸는지는 "구현" 절).
+- 판정 1(Alt+9: "옆에서 갑자기 두리번거리면서 온다")을 고쳤다. 사용자가 고른 대로다.
+  - 나오는 출구를 화면 조건 없이 고르고, 보고 있어도 돌가루 4 초 뒤 나온다.
+  - 나와서는 5.0 m/s 로 캔 자리를 보며 곧장 간다. 2.5 m/s 와 옛 소리 자리를 보는 머리가 "두리번"이었다.
+  - 기어 나오는 동작은 없다(물을 것).
+  - `map4meet` 는 다시 안 쟀다.
+- 사용자가 탐색기로 켠 판(17:53)은 `Player.log` 가 안 남았다. 판정 때는 `-logFile build/judge_1004.log` 로 켜 달라고 했다(감독 줄 `DIRECTOR out … in view` 를 읽으려고).
+
 **10-04 (GAME-1 구현 세션, 작업 폴더 `Opus5_채굴게임`) — GAME-1 구현 끝, 사용자 판정 대기.** 시작하면 MAP4 승강장 · 감독이 괴물을 부른다. 자세한 것 · 제안서와 다르게 한 것은 `docs/제안서_GAME1_MAP4에서_놀기.md` "구현 (10-03 ~ 10-04)".
 - **판정 방법**: `build/Tunnel/Tunnel.exe` → 인트로 → 시작(플래그 없음). F1 = 감독 줄(단계 · 게이지 · 다음 부르기까지). **Alt+1/2 부르는 간격 · Alt+3/4 출구 거리 · Alt+5/6 소리 배율 · Alt+7/8 숨은 굴 빠르기 · Alt+9 지금 부르기 · Alt+0 단계 +1**. 옛 판정 모습은 `-map4`.
 - **판정 거리**: ① 첫 마주침이 언제 · 어떤 느낌인지 — 봇(Shift 끊어 달리기, 좋은 광맥부터 다 캐고 다음 구역으로 바로)은 6 판 중 2 판만 4 분 안에 마주쳤다(165 · 235 s). 괴물은 단계 2~3 에 마지막으로 일한 자리 근처로 나오는데 봇은 이미 다른 구역(70~200 m)에 있다 — 규칙("사람이 아니라 장소")대로다. 마주침이 너무 늦으면 Alt 키로 맞춰 보고 숫자를 알려 달라 ② 나오기 전 돌가루 4 초가 보이는지 ③ 괴물 몸 0.45 m(벽 파고듦) ④ 석탄 모양(ORE-1 그대로 — MAP4 벽에선 검은 조각 원판처럼) ⑤ 서쪽 석탄이 옛 채굴 빈터(괴물 집)에 여섯 ⑥ 판마다 길이 차이(동쪽이 좋은 판은 끊어 달리기로도 몫까지 약 6 분).
 - **잰 값**: 몫 8(남쪽 끊어 달리기 어림 164 s · 걷기 189 · 끝까지 달리기 185 — 탈진해서 느리다) · 괴물 바닥 7,367 m² · 출구 16(틈 14 + 천장 2) · 석탄 28 모두 25 m 안 출구 · 불 켜진 방 출구 0.
-- **검사**: `map4play` 9 ALL PASS(1 분 반, 빨리 감기) · 사보타주 15 다 FAIL(startbooth nonav noore sameseed farexit homeexit flatnoise steppile jumpgauge nostage seenexit noshake chaseplayer fastrun propblock) · `map4geo` 13 · `map4human` 2 · `map4` 13/14(`map4_seam_no_shift` 2.5 % — GAME-1 전부터) · 전체 build.sh 한 번: `booth_walk_route` 3/4(알려진 흔들림) 말고 PASS · `map4meet` 는 숫자를 재는 것(기준 90~150 s 는 Claude 가 정한 것, FAIL 이 맞다 — 판정 뒤 다시 정한다). 석탄 28 · 틈 14 캡처를 눈으로 봤다.
+- **검사**: `map4play` 9 ALL PASS(1 분 반, 빨리 감기) · 사보타주 17 다 FAIL(startbooth nonav noore sameseed farexit homeexit flatnoise steppile jumpgauge nostage noshake chaseplayer fastrun propblock + 10-04 판정 1: hideexit stalehead slowsend — seenexit 는 지움) · `map4geo` 13 · `map4human` 2 · `map4` 13/14(`map4_seam_no_shift` 2.5 % — GAME-1 전부터) · 전체 build.sh 한 번: `booth_walk_route` 3/4(알려진 흔들림) 말고 PASS · `map4meet` 는 숫자를 재는 것(기준 90~150 s 는 Claude 가 정한 것, FAIL 이 맞다 — 판정 뒤 다시 정한다). 석탄 28 · 틈 14 캡처를 눈으로 봤다.
 - **검사 방법 바뀐 것**: `quick.sh` 의 `map4play` · `map4meet` 는 빨리 감기(`-fastforward` = 장면마다 1/60 s, 실제 시간 안 기다림 — 걷기 · 캐기 숫자 같음, 133 → 79 s). 이동 검사는 가는 길만. 검사 중 진짜 마우스 · 키보드를 써도 된다(봇 장치를 붙잡는다). 봇 걷기는 괴물 길(턱 0.75 m)을 따라가다 사람(턱 0.3 m)이 못 넘는 곳에서 2 초 막히면 그 자리를 길에서 지우고 돌아간다 — 무너진 돌무더기 plan (−59, −28) 에서 매번.
 - **맵 다시 굽기**: `SCENE=m EXPORT_GLB=Assets/Fab/Resources/Map4.glb "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup -P blender/map/scene_mock.py`(약 5 분) → 괴물 바닥 `"C:/Program Files/Unity/Hub/Editor/6000.4.7f1/Editor/Unity.exe" -batchmode -nographics -projectPath . -executeMethod BuildMap4.Bake -logFile build/map4nav.log -quit` → `bash tools/quick.sh map4play`.
 - **다음**: 사용자 판정 → 숫자 반영 → BOOTH-1(시작 · 끝, 입갱표) → BOOTH-2(2 덩이 나르기 · 광차 · 몫) → 속도(전등 그림자) → 처음 하는 사람 시험 → 10/17 제출. 푸시 안 함.

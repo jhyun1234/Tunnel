@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 //   map4play_exits   석탄 자리마다 굴 길이 25 m 안 출구 · 불 켜진 방 안 출구 0 · 벽 틈이 그 방 가운데서 보인다        (farexit · homeexit · propblock)
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
 //   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
-//   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있으면 안 나옴 · 보일 때 나온 수 0   (chaseplayer · noshake · seenexit)
+//   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로   (chaseplayer · noshake · hideexit · stalehead · slowsend)
 //   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 → 가까운 구역(셋) · 먼 구역(끊어 달리기) 가는 길 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
 public partial class M1Check
@@ -161,7 +161,7 @@ public partial class M1Check
         Check("map4play_stage", stages.Last() == 4 && tableOk && stages.Zip(stages.Skip(1), (a, b) => b >= a).All(x => x),
             $"clean quota {Tuning.BOOTH_QUOTA} lumps → stage after each lump {string.Join(" ", stages)} (want ends at 4) · gauge {keep:0.0} · table {string.Join(" ", table)} {(tableOk ? "as Tuning" : "NOT as Tuning")}");
 
-        // ---- 나오기: ① 마지막 일한 자리 기준 · 돌가루 · 사람에서 8 m 밖  ② 보고 있으면 안 나온다
+        // ---- 나오기: ① 마지막 일한 자리 기준 · 돌가루 · 사람에서 8 m 밖 · 나와서 일한 자리를 보며 곧장  ② 보고 있어도 나온다 (10-04 판정 1)
         stalker.enabled = true; d.tunnelSpeed = 60f;                            // 숨은 굴 시간은 이 검사의 대상이 아니다 — 빨리
         var spotA = m.coal.OrderByDescending(c => PathLen(spawn, stand[c.name])).FirstOrDefault();   // 일한 자리 = 승강장에서 가장 먼 석탄 자리 · 사람은 승강장 (석탄 자리가 없는 옛 맵이면 옛 채굴 빈터)
         d.gauge = 3 * Tuning.GAUGE_STEP + 1f; d.lastWork = spotA != null ? stand[spotA.name] : d.homes[1];
@@ -173,8 +173,15 @@ public partial class M1Check
         float nearestFromWork = d.exits.Select(e => PathLen(d.lastWork, e.stand)).Where(L => L >= 0f).DefaultIfEmpty(-1f).Min();
         bool rule1 = called && d.phase == Director.Phase.Out && fromWork >= 0f && (fromWork <= Tuning.STAGE_EXIT_M[3] + 0.5f || Mathf.Abs(fromWork - nearestFromWork) < 0.5f) && toPlayer >= Tuning.EXIT_MIN_PLAYER_M;
         float warn1 = d.warnFor; int b1 = d.warnBursts - bursts0;
+        // 나와서: 조사 머리(mode 4)가 보는 자리 = 일한 자리 · 걸음 = 소리 들었을 때 (2.5 살피는 걸음 + 옛 소리 자리 머리 = 사용자 "두리번")
+        var sa = stalker.GetComponentInChildren<StalkerAnim>();
+        float headOff = Flat(stalker.noisePos - d.lastWork), walked = 0f, el = 0f; Vector3 prev = stalker.transform.position; int fr = 0, fr4 = 0;
+        for (; el < 2f && stalker.state == Stalker.State.Investigate; el += Time.deltaTime)
+        { yield return null; walked += Flat(stalker.transform.position - prev); prev = stalker.transform.position; fr++; if (sa != null && sa.HeadMode == 4) fr4++; }
+        float walkV = el > 0.3f ? walked / el : -1f;
+        bool goes = headOff < 1f && fr > 0 && fr4 == fr && walkV >= 0.8f * Tuning.STALKER_SPEED_INVESTIGATE;
         stalker.enabled = false; yield return null;
-        // ② 출구 하나 앞 10~14 m(그 입이 보이는 자리)에 서서 등을 돌리고, 돌가루가 나는 동안 돌아서서 본다
+        // ② 출구 하나 앞 10~14 m(그 입이 보이는 자리)에 서서 그 입을 본다 — 보고 있어도 그 출구를 고르고, 돌가루 뒤 보는 앞에서 나온다
         Director.Exit stareAt = null; Vector3 stareFrom = default;
         foreach (var e in d.exits.Where(e => !e.ceiling))
             for (float L = 10f; L <= 14f && stareAt == null; L += 2f)
@@ -187,25 +194,22 @@ public partial class M1Check
         if (stareAt != null)
         {
             d.gauge = 4 * Tuning.GAUGE_STEP + 1f; d.lastWork = stareAt.stand;                       // 4 단계 = 가장 가까운 출구 = 그 출구
-            Teleport(cc, stareFrom + Vector3.up * 0.1f, Quaternion.LookRotation(stareAt.face).eulerAngles.y);   // 등을 돌림 (출구가 뒤)
-            player.Pitch = 0f;
+            Vector3 look = stareAt.mouth - (stareFrom + Vector3.up * Tuning.EYE_HEIGHT);
+            Teleport(cc, stareFrom + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(look)).eulerAngles.y);   // 그 입을 본다
+            player.Pitch = -Mathf.Atan2(look.y, Flat(look)) * Mathf.Rad2Deg;
             yield return null; stalker.enabled = true;
             d.ForceHome(); yield return null;
-            int seen0 = d.emergedSeen; d.Call(true);
-            for (float w = 0f; w < 20f && d.phase != Director.Phase.Warn; w += Time.deltaTime) yield return null;
+            int seen0 = d.emergedSeen; bool seenAtCall = d.Seen(stareAt.mouth); d.Call(true);
             bool same = d.target == stareAt;
-            Vector3 look = stareAt.mouth - pickaxe.cam.position;
-            player.transform.rotation = Quaternion.LookRotation(Flat3(look)); player.Pitch = -Mathf.Atan2(look.y, Flat(look)) * Mathf.Rad2Deg;
-            yield return new WaitForSeconds(Tuning.EMERGE_WARN_S + 3f);
-            bool held = d.phase == Director.Phase.Warn && d.Seen(stareAt.mouth);
-            player.transform.rotation = Quaternion.LookRotation(Flat3(-look)); player.Pitch = 0f;
-            float tOut = 0f; for (; tOut < 5f && d.phase == Director.Phase.Warn; tOut += Time.deltaTime) yield return null;
-            stareOk = same && held && d.phase == Director.Phase.Out && d.emergedSeen == seen0;
-            stareNote = $"stared at {stareAt.name} from {Flat(stareFrom - stareAt.stand):0} m: chosen {same} · still in the wall {Tuning.EMERGE_WARN_S + 3f:0} s while looked at {held} · came out {tOut:0.0} s after looking away · came out while seen {d.emergedSeen - seen0}";
+            for (float w = 0f; w < 20f && d.phase != Director.Phase.Warn && d.phase != Director.Phase.Out; w += Time.deltaTime) yield return null;
+            float tOut = 0f; for (; tOut < Tuning.EMERGE_WARN_S + 3f && d.phase == Director.Phase.Warn; tOut += Time.deltaTime) yield return null;
+            bool outSeen = d.phase == Director.Phase.Out && d.target == stareAt && d.emergedSeen == seen0 + 1;
+            stareOk = seenAtCall && same && outSeen && tOut <= Tuning.EMERGE_WARN_S + 0.5f;
+            stareNote = $"looked at {stareAt.name} from {Flat(stareFrom - stareAt.stand):0} m (in view {seenAtCall}): chosen {same} · came out {tOut:0.0} s after the dust began (want ≤ {Tuning.EMERGE_WARN_S + 0.5f:0.0}) at {(d.target != null ? d.target.name : "-")} · came out in view {d.emergedSeen - seen0} (want 1)";
             stalker.enabled = false;
         }
-        Check("map4play_emerge", rule1 && warn1 >= Tuning.EMERGE_WARN_S - 0.05f && b1 >= 6 && stareOk && d.emergedSeen == 0,
-            $"① worked at {(spotA != null ? spotA.name : "M (no coal spots)")}, player at the cage: came out at {(tgt != null ? tgt.name : "-")} {fromWork:0} m from the work spot by path (stage 3 max {Tuning.STAGE_EXIT_M[3]:0}, nearest {nearestFromWork:0}) · {toPlayer:0} m from the player (want ≥ {Tuning.EXIT_MIN_PLAYER_M:0}) · dust {warn1:0.0} s in {b1} bursts · ② {stareNote}");
+        Check("map4play_emerge", rule1 && warn1 >= Tuning.EMERGE_WARN_S - 0.05f && b1 >= 6 && goes && stareOk,
+            $"① worked at {(spotA != null ? spotA.name : "M (no coal spots)")}, player at the cage: came out at {(tgt != null ? tgt.name : "-")} {fromWork:0} m from the work spot by path (stage 3 max {Tuning.STAGE_EXIT_M[3]:0}, nearest {nearestFromWork:0}) · {toPlayer:0} m from the player (want ≥ {Tuning.EXIT_MIN_PLAYER_M:0}) · dust {warn1:0.0} s in {b1} bursts · then head looks {headOff:0.0} m from the work spot (want < 1) in head mode 4 {fr4}/{fr} frames · walks {walkV:0.0} m/s over {el:0.0} s (want ≥ {0.8f * Tuning.STALKER_SPEED_INVESTIGATE:0.0}) · ② {stareNote}");
         d.tunnelSpeed = Tuning.TUNNEL_SPEED;
 
         // ---- 이동: 실제 W · Shift 로 승강장 ↔ 가까운 구역 · 먼 구역의 가장 가까운 석탄 자리 (괴물 끔)

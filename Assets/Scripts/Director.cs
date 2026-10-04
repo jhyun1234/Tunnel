@@ -7,9 +7,9 @@ using UnityEngine.InputSystem;
 // GAME-1 감독 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md 3절, 사용자 승인 10-03 "출발값으로"). 괴물(그것)을 판 진행에 맞춰 숨은 굴로 데려온다.
 //   단계 게이지 = 일하며 낸 소리 (팀에 하나 — 사람이 아니라 자리 · 몫 기준): 콱 · '쨍' = 덩이 값 × 반경 ÷ 18 · 던진 곡괭이 착지 = 덩이 반 개 · 발소리 0.
 //   깔끔하게 몫을 다 채우면 100, 25 마다 한 단계 (덩이 값 = 100 ÷ BOOTH_QUOTA). 콱 한 번마다 조금씩 오른다.
-//   단계 ≥ 1: 간격(STAGE_EVERY_S)마다 마지막으로 게이지가 오른 자리에서 굴 길이로 단계 거리(STAGE_EXIT_M) 안의 출구 — 그 순간 아무 화면에도 안 보이고 사람에게서 8 m 넘게 —
-//   로 숨은 굴을 지나(초당 TUNNEL_SPEED) 와서, EMERGE_WARN_S 동안 그 출구에서 돌가루가 떨어진 뒤 나온다(그때도 안 보여야 — 보고 있으면 눈을 뗄 때까지 안 나온다).
-//   나와서는 그 자리를 살피고(판정 통과 감각 그대로) LINGER_S 동안 못 찾으면 아무도 못 볼 때 숨은 굴로 들어가 가장 가까운 집(붕락 방 · 옛 채굴 빈터 · 괴물의 굴)으로.
+//   단계 ≥ 1: 간격(STAGE_EVERY_S)마다 마지막으로 게이지가 오른 자리에서 굴 길이로 단계 거리(STAGE_EXIT_M) 안의 출구 — 사람에게서 8 m 넘게 —
+//   로 숨은 굴을 지나(초당 TUNNEL_SPEED) 와서, EMERGE_WARN_S 동안 그 출구에서 돌가루가 떨어진 뒤 나온다. 보고 있어도 나온다(10-04 판정 1 "나오는 게 보이게" — 그 전엔 안 보이는 출구만 · 눈을 뗄 때까지 기다림).
+//   나와서는 그 자리를 소리 들었을 때 걸음(STALKER_SPEED_INVESTIGATE)으로 보러 가고(판정 통과 감각 그대로) LINGER_S 동안 못 찾으면 아무도 못 볼 때 숨은 굴로 들어가 가장 가까운 집(붕락 방 · 옛 채굴 빈터 · 괴물의 굴)으로.
 //   철수(곡괭이 열네 대)는 괴물 스스로 — 90 초 뒤 사람에게서 가장 먼 집에서 나온다(Stalker.cracks = 집 셋).
 // 판정 키 (숫자패드 안 씀 · F1 줄에 값): Alt+1 2 간격 배율 · Alt+3 4 출구 거리 배율 · Alt+5 6 소리 배율 · Alt+7 8 숨은 굴 빠르기 · Alt+9 지금 부르기 · Alt+0 한 단계 올리기
 public class Director : MonoBehaviour
@@ -28,7 +28,7 @@ public class Director : MonoBehaviour
     [System.NonSerialized] public float targetPath, rest, warnFor, phaseT;
     [System.NonSerialized] public int approaches, emergedSeen, warnBursts;   // 검사가 본다
     static bool SabFlatNoise => Map4.Sab("flatnoise"); static bool SabStepPile => Map4.Sab("steppile"); static bool SabJumpGauge => Map4.Sab("jumpgauge"); static bool SabNoStage => Map4.Sab("nostage");   // 검사 사보타주
-    static bool SabSeenExit => Map4.Sab("seenexit"); static bool SabNoShake => Map4.Sab("noshake"); static bool SabChasePlayer => Map4.Sab("chaseplayer"); static bool SabFarExit => Map4.Sab("farexit"); static bool SabHomeExit => Map4.Sab("homeexit");
+    static bool SabHideExit => Map4.Sab("hideexit"); static bool SabSlowSend => Map4.Sab("slowsend"); static bool SabNoShake => Map4.Sab("noshake"); static bool SabChasePlayer => Map4.Sab("chaseplayer"); static bool SabFarExit => Map4.Sab("farexit"); static bool SabHomeExit => Map4.Sab("homeexit");
     public static float Lump => 100f / Tuning.BOOTH_QUOTA;
     public int Stage => SabNoStage ? 0 : Mathf.Min(Tuning.STAGE_EVERY_S.Length - 1, Mathf.FloorToInt(gauge / Tuning.GAUGE_STEP + 1e-4f));
     public float Every => Tuning.STAGE_EVERY_S[Stage] * everyMul;
@@ -112,17 +112,17 @@ public class Director : MonoBehaviour
                     phase = Phase.Warn; t = SabNoShake ? 0f : Tuning.EMERGE_WARN_S; warnFor = 0f; dustT = 0f;
                 }
                 break;
-            case Phase.Warn:                                     // 돌가루 → 아무도 그 출구를 안 볼 때 나온다
+            case Phase.Warn:                                     // 돌가루 → 나온다 (보고 있어도)
                 t -= dt; warnFor += dt; Dust(dt);
                 if (t > 0f) break;
                 bool seen = Seen(target.stand + Vector3.up * 1.2f) || Seen(target.mouth);
-                if (seen && !SabSeenExit) break;
+                if (seen && SabHideExit) break;                  // 검사: 옛 규칙 (보고 있으면 눈을 뗄 때까지 안 나옴)
                 if (seen) emergedSeen++;
                 Vector3 look = target.ceiling ? Flat(lastWork - target.stand) : target.face;
                 s.Release(target.stand, look.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(look).eulerAngles.y : 0f);
-                s.hasAnchor = true; s.anchor = lastWork; s.SendTo(lastWork, Tuning.STALKER_SPEED_SEARCH);
+                s.hasAnchor = true; s.anchor = lastWork; s.SendTo(lastWork, SabSlowSend ? Tuning.STALKER_SPEED_SEARCH : Tuning.STALKER_SPEED_INVESTIGATE);   // 소리 들었을 때와 같은 걸음 (10-04 판정 1: 살피는 걸음 2.5 는 "두리번")
                 phase = Phase.Out; phaseT = 0f; approaches++;
-                Debug.Log($"DIRECTOR out #{approaches} at {target.name} · stage {st} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s");
+                Debug.Log($"DIRECTOR out #{approaches} at {target.name} · stage {st} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s · in view {seen}");
                 break;
             case Phase.Out:                                      // 판정 통과 감각으로 찾는다 — 놓치고 배회로 LINGER_S 지나면 돌아간다
                 phaseT = idle ? phaseT + dt : 0f;
@@ -156,7 +156,7 @@ public class Director : MonoBehaviour
     {
         if (phase != Phase.Home || s == null || s.state != Stalker.State.Wander) return false;
         target = Choose(out targetPath);
-        if (target == null) { rest = force ? 0f : Every * 0.5f; Debug.Log("DIRECTOR no exit to use (all seen or too near)"); return false; }
+        if (target == null) { rest = force ? 0f : Every * 0.5f; Debug.Log("DIRECTOR no exit to use (all unreachable or within 8 m)"); return false; }
         phase = Phase.Hiding; rest = 0f;
         return true;
     }
@@ -166,7 +166,7 @@ public class Director : MonoBehaviour
     {
         Vector3 from = SabChasePlayer ? player.transform.position : lastWork;
         float max = ExitMax; len = -1f;
-        var c = exits.Where(e => (SabSeenExit || !Seen(e.mouth) && !Seen(e.stand + Vector3.up * 1.2f)) && Flat(e.stand - player.transform.position).magnitude >= Tuning.EXIT_MIN_PLAYER_M)
+        var c = exits.Where(e => (!SabHideExit || !Seen(e.mouth) && !Seen(e.stand + Vector3.up * 1.2f)) && Flat(e.stand - player.transform.position).magnitude >= Tuning.EXIT_MIN_PLAYER_M)
             .Select(e => (e, d: PathLen(from, e.stand))).Where(x => x.d >= 0f).OrderBy(x => x.d).ToList();
         if (c.Count == 0) return null;
         var pick = max > 0f && c.Any(x => x.d <= max) ? c.Last(x => x.d <= max) : c[0];
