@@ -16,7 +16,7 @@ using UnityEngine.SceneManagement;
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
 //   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
 //   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로 · 입에서 돌가루 · 긁힘 · 와르르 소리   (chaseplayer · noshake · hideexit · stalehead · slowsend · muteemerge)
-//   map4play_call    첫 곡괭이질 전엔 안 부름 · 25 를 넘긴 콱에 바로 부름 · 숨은 굴 TUNNEL_S · 25 를 안 넘으면 안 부름 · 쉬는 최소 시간 · 집에서 먼 밖에서 바로 벽 속으로   (nowork · slowtunnel · clockcall · norest · homeonly)
+//   map4play_call    첫 곡괭이질 전엔 안 부름 · 25 를 넘긴 콱에 바로 부름 · 숨은 굴 TUNNEL_S · 25 를 안 넘으면 안 부름 · 쉬는 최소 시간 · 집에서 먼 밖에서 바로 벽 속으로 · 판정 키 Alt+9 = 내 자리 둘레 가장 가까운 틈   (nowork · slowtunnel · clockcall · norest · homeonly · farhere)
 //   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 → 가까운 구역(셋) · 먼 구역(끊어 달리기) 가는 길 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
 public partial class M1Check
@@ -252,9 +252,24 @@ public partial class M1Check
             int ap2 = d.approaches; for (float w = 0f; w < 20f && d.approaches == ap2; w += Time.deltaTime) yield return null;
             float fromB = d.target != null && d.approaches > ap2 ? PathLen(workB.slot.position, d.target.stand) : -1f;
             bool nearB = fromB >= 0f && fromB <= Mathf.Max(d.ExitMax, Tuning.EXIT_NEAR_SPOT_M) + 0.5f;
-            callOk = noWork && calledA && tunnelOk && noStepNoCall && restHolds && fromOut && nearB;
-            callNote = $"㉮ past 25 with no strike yet: waiting {noWork} · ㉢ first strike at {workA.name}: into the wall after {tCall:0.0} s (want < 1) · ㉠ tunnel {tTun:0.0} s from the lair (want {Tuning.TUNNEL_S:0} ± 0.5) · out and rested, no new 25: called {!noStepNoCall} (want no) · new 25 at {workB.name} just after a call: called {!restHolds} (want no, rest {d.Every:0} s) · rested: into the wall {tC2:0.0} s later, {heldHome:0} m from the nearest home (want > {Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f:0} — out, not home) · came out at {(d.target != null ? d.target.name : "-")} {fromB:0} m from {workB.name}";
             stalker.enabled = false; yield return null;
+            // 판정 키 Alt+9 (10-05 판정 9): 벽 틈 3 m 앞에 서서 누르면 그 틈(8 m 규칙 · 단계 상한 없이)으로 나와 내 자리로 온다 — 2 단계(상한 40 m 의 가장 먼 틈)여도
+            var hereAt = d.exits.Where(e => !e.ceiling).OrderBy(e => PathLen(spawn, e.stand)).FirstOrDefault(e => PathLen(spawn, e.stand) >= 0f);
+            bool hereOk = false; string hereNote = "no wall exit";
+            if (hereAt != null)
+            {
+                Vector3 hp = OnNav(hereAt.stand + hereAt.face * 3f, 1.5f); Vector3 toMouth = hereAt.mouth - hp;
+                Teleport(cc, hp + Vector3.up * 0.1f, Quaternion.LookRotation(Flat3(toMouth)).eulerAngles.y); player.Pitch = 0f;
+                d.gauge = 2 * Tuning.GAUGE_STEP + 1f; yield return null; stalker.enabled = true; d.ForceHome(); yield return null;
+                bool hereCalled = d.CallHere(); bool hereSame = d.target == hereAt; int ap3 = d.approaches;
+                float tHere = 0f; for (; tHere < 20f && d.approaches == ap3; tHere += Time.deltaTime) yield return null;
+                float toMe = d.approaches > ap3 ? Flat(stalker.noisePos - player.transform.position) : -1f;
+                hereOk = hereCalled && hereSame && d.approaches > ap3 && toMe >= 0f && toMe < 1.5f && tHere <= Tuning.TUNNEL_S + Tuning.EMERGE_WARN_S + 1f;
+                hereNote = $"Alt+9 standing {Flat(hp - hereAt.stand):0} m in front of {hereAt.name} at stage 2: called {hereCalled} · that exit {hereSame} ({(d.target != null ? d.target.name : "-")}) · came out {tHere:0.0} s later (want ≤ {Tuning.TUNNEL_S + Tuning.EMERGE_WARN_S + 1f:0}) · heads {toMe:0.0} m from me (want < 1.5)";
+                stalker.enabled = false; yield return null;
+            }
+            callOk = noWork && calledA && tunnelOk && noStepNoCall && restHolds && fromOut && nearB && hereOk;
+            callNote = $"{hereNote} · ㉮ past 25 with no strike yet: waiting {noWork} · ㉢ first strike at {workA.name}: into the wall after {tCall:0.0} s (want < 1) · ㉠ tunnel {tTun:0.0} s from the lair (want {Tuning.TUNNEL_S:0} ± 0.5) · out and rested, no new 25: called {!noStepNoCall} (want no) · new 25 at {workB.name} just after a call: called {!restHolds} (want no, rest {d.Every:0} s) · rested: into the wall {tC2:0.0} s later, {heldHome:0} m from the nearest home (want > {Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f:0} — out, not home) · came out at {(d.target != null ? d.target.name : "-")} {fromB:0} m from {workB.name}";
         }
         Check("map4play_call", callOk, callNote);
 

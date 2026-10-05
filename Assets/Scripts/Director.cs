@@ -13,7 +13,7 @@ using UnityEngine.InputSystem;
 //   숨은 굴 ㉠: 거리와 상관없이 TUNNEL_S. 나오기 직전에 '지금' 마지막으로 일한 자리에서 굴 길이로 단계 거리(STAGE_EXIT_M) 안의 출구(사람에게서 8 m 넘게)를 고른다.
 //   EMERGE_WARN_S 동안 그 출구에서 돌가루가 떨어진 뒤 나온다. 보고 있어도 나온다(10-04 판정 1). 나와서는 그 자리를 소리 들었을 때 걸음(STALKER_SPEED_INVESTIGATE)으로 보러 간다.
 //   철수(곡괭이 열네 대)는 괴물 스스로 — 90 초 뒤 사람에게서 가장 먼 집에서 나온다(Stalker.cracks = 집 셋).
-// 판정 키 (숫자패드 안 씀 · F1 줄에 값): Alt+1 2 쉬는 최소 시간 배율 · Alt+3 4 출구 거리 배율 · Alt+5 6 소리 배율 · Alt+7 8 숨은 굴 시간 −1 +1 s · Alt+9 지금 부르기 · Alt+0 한 단계 올리기
+// 판정 키 (숫자패드 안 씀 · F1 줄에 값): Alt+1 2 쉬는 최소 시간 배율 · Alt+3 4 출구 거리 배율 · Alt+5 6 소리 배율 · Alt+7 8 숨은 굴 시간 −1 +1 s · Alt+9 지금 내 자리로 부르기 · Alt+0 한 단계 올리기
 public class Director : MonoBehaviour
 {
     public enum Phase { Free, Hiding, Tunnel, Warn }
@@ -28,12 +28,13 @@ public class Director : MonoBehaviour
     [System.NonSerialized] public Vector3 lastWork;
     [System.NonSerialized] public Exit target;
     [System.NonSerialized] public float targetPath, rest = 1e6f, warnFor;   // rest = 지난번 벽 속에 들어간 뒤 괴물이 어슬렁거린 시간 (첫 부름은 바로)
-    [System.NonSerialized] public bool pending, worked;                     // pending = 25 를 넘었는데 아직 못 불렀다 · worked = 곡괭이질을 한 번이라도 했다
+    [System.NonSerialized] public bool pending, worked, hereCall;           // pending = 25 를 넘었는데 아직 못 불렀다 · worked = 곡괭이질을 한 번이라도 했다 · hereCall = Alt+9 로 내 자리에 부르는 중
     [System.NonSerialized] public int approaches, calls, emergedSeen, warnBursts;   // 검사가 본다 (calls = 벽 속으로 들어간 수 · approaches = 나온 수)
     static bool SabFlatNoise => Map4.Sab("flatnoise"); static bool SabStepPile => Map4.Sab("steppile"); static bool SabJumpGauge => Map4.Sab("jumpgauge"); static bool SabNoStage => Map4.Sab("nostage");   // 검사 사보타주
     static bool SabHideExit => Map4.Sab("hideexit"); static bool SabSlowSend => Map4.Sab("slowsend"); static bool SabNoShake => Map4.Sab("noshake"); static bool SabChasePlayer => Map4.Sab("chaseplayer"); static bool SabFarExit => Map4.Sab("farexit"); static bool SabHomeExit => Map4.Sab("homeexit");
     static bool SabClockCall => Map4.Sab("clockcall"); static bool SabSlowTunnel => Map4.Sab("slowtunnel"); static bool SabHomeOnly => Map4.Sab("homeonly"); static bool SabNoRest => Map4.Sab("norest"); static bool SabNoWork => Map4.Sab("nowork");   // 10-05 판정 3 의 옛 규칙들
     static bool SabMuteEmerge => Map4.Sab("muteemerge");   // 검사: 나오는 소리 없음 (10-05 판정 7 전)
+    static bool SabFarHere => Map4.Sab("farhere");         // 검사: 옛 Alt+9 (마지막 곡괭이 자리 기준 · 8 m 규칙 그대로)
     public static float Lump => 100f / Tuning.BOOTH_QUOTA;
     public int Stage => SabNoStage ? 0 : Mathf.Min(Tuning.STAGE_EVERY_S.Length - 1, Steps);
     public int Steps => Mathf.FloorToInt(gauge / Tuning.GAUGE_STEP + 1e-4f);   // 25 마다 하나 — 단계(최대 5)와 달리 끝이 없다
@@ -142,7 +143,7 @@ public class Director : MonoBehaviour
                 s.Release(target.stand, look.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(look).eulerAngles.y : 0f);
                 Sound("emerge_burst_000", ref burstClip, Tuning.EMERGE_BURST_VOLUME);
                 s.hasAnchor = true; s.anchor = lastWork; s.SendTo(lastWork, SabSlowSend ? Tuning.STALKER_SPEED_SEARCH : Tuning.STALKER_SPEED_INVESTIGATE);   // 소리 들었을 때와 같은 걸음 (10-04 판정 1: 살피는 걸음 2.5 는 "두리번")
-                phase = Phase.Free; approaches++; sentFrame = Time.frameCount;
+                phase = Phase.Free; approaches++; sentFrame = Time.frameCount; hereCall = false;
                 Debug.Log($"DIRECTOR {T} · out #{approaches} at {target.name} · stage {st} · last work {WorkAt} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s · in view {seen}");
                 break;
         }
@@ -153,7 +154,7 @@ public class Director : MonoBehaviour
     {
         if (s == null) return;
         s.Hold(); s.Release(homes[2], 0f); s.hasAnchor = true; s.anchor = homes[2];
-        phase = Phase.Free; rest = 1e6f; pending = false; lastSteps = Steps; target = null;
+        phase = Phase.Free; rest = 1e6f; pending = false; lastSteps = Steps; target = null; hereCall = false;
     }
 
     // 지금 부른다 (부를 일이 있고 다 쉬었다 · Alt+9 · 검사). 출구가 없으면 쉬는 시간 반 뒤 다시
@@ -164,16 +165,28 @@ public class Director : MonoBehaviour
         target = Choose(out targetPath);
         if (target == null) { if (!force) rest = Every * 0.5f; Debug.Log($"DIRECTOR {T} · no exit to use (all unreachable or within 8 m)"); return false; }
         phase = Phase.Hiding;
-        Debug.Log($"DIRECTOR {T} · call{(force ? " (forced)" : "")} · stage {Stage} · exit {target.name} {targetPath:0} m from last work ({WorkAt}) · player {Vector3.Distance(player.transform.position, lastWork):0} m from last work · monster {Vector3.Distance(s.transform.position, player.transform.position):0} m from the player");
+        Debug.Log($"DIRECTOR {T} · call{(hereCall ? " (Alt+9 here)" : force ? " (forced)" : "")} · stage {Stage} · exit {target.name} {targetPath:0} m from last work ({WorkAt}) · player {Vector3.Distance(player.transform.position, lastWork):0} m from last work · monster {Vector3.Distance(s.transform.position, player.transform.position):0} m from the player");
         return true;
+    }
+
+    // 판정 키 Alt+9: 지금 내가 선 자리에서 곡괭이질한 것처럼 부른다 — 8 m 규칙 · 단계 거리 상한 없이 나에게서 가장 가까운 틈, 나와서 내 자리로
+    //   (10-05 판정 9 "괴물의 굴 앞에서 Alt+9 를 눌렀는데 곧바로 나오지 않는다" — 옛 Alt+9 는 마지막 곡괭이 자리 = 시작 자리 기준이었다)
+    public bool CallHere()
+    {
+        if (phase != Phase.Free) return false;
+        Vector3 keep = lastWork;
+        if (!SabFarHere) { lastWork = player.transform.position; hereCall = true; }
+        if (Call(true)) return true;
+        lastWork = keep; hereCall = false;
+        return false;
     }
 
     // 마지막으로 일한 자리에서 굴 길이로 단계 거리 안의 출구 가운데 가장 먼 것(단계가 오를수록 가까워진다) — 없으면 가장 가까운 것
     public Exit Choose(out float len)
     {
         Vector3 from = SabChasePlayer ? player.transform.position : lastWork;
-        float max = ExitMax; len = -1f;
-        var c = exits.Where(e => (!SabHideExit || !Seen(e.mouth) && !Seen(e.stand + Vector3.up * 1.2f)) && Flat(e.stand - player.transform.position).magnitude >= Tuning.EXIT_MIN_PLAYER_M)
+        float max = hereCall ? 0f : ExitMax, near = hereCall ? 0f : Tuning.EXIT_MIN_PLAYER_M; len = -1f;
+        var c = exits.Where(e => (!SabHideExit || !Seen(e.mouth) && !Seen(e.stand + Vector3.up * 1.2f)) && Flat(e.stand - player.transform.position).magnitude >= near)
             .Select(e => (e, d: PathLen(from, e.stand))).Where(x => x.d >= 0f).OrderBy(x => x.d).ToList();
         if (c.Count == 0) return null;
         var pick = max > 0f && c.Any(x => x.d <= max) ? c.Last(x => x.d <= max) : c[0];
@@ -246,7 +259,7 @@ public class Director : MonoBehaviour
         else if (kb.digit6Key.wasPressedThisFrame) noiseMul = R(noiseMul * 1.25f);
         else if (kb.digit7Key.wasPressedThisFrame) tunnelS = Mathf.Max(1f, tunnelS - 1f);
         else if (kb.digit8Key.wasPressedThisFrame) tunnelS += 1f;
-        else if (kb.digit9Key.wasPressedThisFrame) Call(true);
+        else if (kb.digit9Key.wasPressedThisFrame) CallHere();
         else if (kb.digit0Key.wasPressedThisFrame) gauge = (Stage + 1) * Tuning.GAUGE_STEP;
     }
 
