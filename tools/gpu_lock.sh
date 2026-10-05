@@ -16,3 +16,15 @@ gpu_lock() {
   [ $waited -gt 0 ] && echo "== gpu lock: ${waited} s 기다렸다"
   return 0
 }
+
+# 판정 지키기 — 사용자가 이 폴더의 실행 파일로 판정 중이면(-check 없이 켜져 있으면) 빌드 · 검사를 멈춘다.
+# 10-05: 판정 중인 게임이 켜진 채 다시 빌드해 그 게임의 데이터 파일이 바뀌었고, 검사가 그래픽카드를 같이 썼다(사용자 승인 "그것도 같이 넣어라").
+judge_guard() {
+  local exe n
+  exe="$(cygpath -w "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/build/Tunnel/Tunnel.exe")"
+  n=$(powershell -NoProfile -Command "@(Get-CimInstance Win32_Process -Filter \"Name='Tunnel.exe'\" | Where-Object { \$_.ExecutablePath -eq '$exe' -and \$_.CommandLine -notmatch ' -check( |\$)' }).Count" 2>/dev/null | tr -d '\r')
+  if [ "${n:-0}" != "0" ]; then
+    echo "== 판정 중: build/Tunnel/Tunnel.exe 가 -check 없이 켜져 있다($n 개). 게임을 끄고 다시 돌려라 — 빌드 · 검사를 하지 않는다"
+    exit 3
+  fi
+}

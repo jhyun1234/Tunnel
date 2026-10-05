@@ -682,8 +682,6 @@ public static class Tuning
     public const float GAUGE_STRIKE_REF_M = 18f;              // 깔끔한 덩이 하나 = 콱 3번 × 6 m. 소리 하나 = 덩이 값 × 반경 ÷ 이것 (숙여서 콱 5번 = 1.67배 · '쨍' 25 m = +1.39)
     public const float GAUGE_LAND_LUMPS = 0.5f;               // 던진 곡괭이 착지 = 덩이 반 개
     public static readonly float[] STAGE_EVERY_S = { 0f, 60f, 45f, 30f, 20f, 15f };    // 단계별 쉬는 최소 시간 — 벽 속에 들어간 뒤 괴물이 이만큼 어슬렁거려야 다음에 부른다 (10-05 판정 3 ㉢: 시계 대신 게이지 25 마다 부름. 옛 "오는 간격" 120 · 90 · 60 · 45 · 30 의 절반. 0 단계 = 안 부름, 5 = "하나만 더")
-    public static readonly float[] STAGE_EXIT_M = { 0f, 60f, 40f, 25f, 0f, 0f };       // 마지막으로 일한 자리에서 나오는 출구까지 굴 길이 상한 (0 = 가장 가까운 출구)
-    public const float EXIT_MIN_PLAYER_M = 8f;                // 사람에게서 이보다 가까운 출구로는 안 나온다 (눈앞에서 튀어나오지 않게)
     public const float EXIT_SEEN_M = 60f;                     // 이 안에서 화면에 들고 가리는 것이 없으면 "보인다"
     public const float TUNNEL_S = 5f;                         // s, 숨은 굴 시간 — 거리와 상관없이 (10-05 판정 3 ㉠: 옛 5 m/s 는 괴물의 굴에서 북 · 서쪽 출구까지 41~50 s)
     public const float EMERGE_SOUND_M = 25f;                  // m, 나오는 소리(돌가루 · 긁힘 · 와르르)가 들리는 거리 (10-05 판정 7 "나와도 소리가 없어 모른다")

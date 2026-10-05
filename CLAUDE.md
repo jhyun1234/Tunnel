@@ -48,7 +48,7 @@ Godot 4.7.2 프로토타입을 Unity로 다시 만드는 프로젝트다.
 ## 병렬 세션 (작업 폴더 여럿, 사용자 09-27)
 
 - **main = `Tunnel/unity`(이 폴더), 합치기 담당.** 옆 가지는 작업 폴더를 따로 만든다: `cd C:\Users\anjyo\Tunnel\unity; git worktree add ..\unity-<이름> -b <가지>` → 그 폴더에서 세션 하나. 같은 폴더를 두 세션이 쓰지 않는다(Unity 가 폴더마다 하나만 연다). 새 폴더는 처음 Unity 임포트가 오래 걸린다.
-- **배포물 검사는 한 번에 하나** — `tools/quick.sh` · `tools/build.sh` 가 `tools/gpu_lock.sh`(잠금 = `Tunnel/.gpu_check_lock`)로 다른 폴더의 검사가 끝날 때까지 기다린다. 그래픽카드가 하나라 fps·밝기 검사가 서로를 떨어뜨린다. 자기 검사 `bash tools/test_gpu_lock.sh`. 사용자가 판정 중이면 어느 폴더도 검사를 안 돌린다(그대로).
+- **배포물 검사는 한 번에 하나** — `tools/quick.sh` · `tools/build.sh` 가 `tools/gpu_lock.sh`(잠금 = `Tunnel/.gpu_check_lock`)로 다른 폴더의 검사가 끝날 때까지 기다린다. 그래픽카드가 하나라 fps·밝기 검사가 서로를 떨어뜨린다. 자기 검사 `bash tools/test_gpu_lock.sh`. 사용자가 판정 중이면 어느 폴더도 검사를 안 돌린다(그대로). 이 폴더의 `quick.sh` · `build.sh` 는 판정용 실행 파일(`-check` 없이 켜진 `build/Tunnel/Tunnel.exe`)이 보이면 빌드 전에 멈춘다(`judge_guard`, 10-05 — 판정 중인 게임 밑에서 빌드해 그 게임의 파일이 바뀐 일 뒤).
 - **옆 가지는 되도록 안 고치는 파일**: `BuildM1.cs` · `M1Check.cs` · `Tuning.cs` · `DevHud.cs` · 씬 — Unity 에 붙이는 일은 합칠 때 main 에서. 고쳐야 하면 고친 곳을 옆 가지 HANDOFF 절에 적는다(합칠 때 부딪힘 줄이기).
 - **HANDOFF**: 옆 가지는 자기 절 `## 0. 옆 가지 <가지>`에만 쓴다(09-20 m2-body 전례). 맨 위 요약·다음 세션 프롬프트는 main 세션만.
 - **검사 (사용자 09-29)**: 옆 가지 안에서는 **개발한 기능의 구간만** 돌린다(`quick.sh <구간>` + 새 검사의 사보타주 FAIL 확인). 전체 build.sh 는 옆 가지에서 돌리지 않는다 — 09-29 인트로 가지가 커밋마다 전체(15 분)를 4 번 돌렸다.

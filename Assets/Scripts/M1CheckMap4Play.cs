@@ -14,9 +14,9 @@ using UnityEngine.SceneManagement;
 //   map4play_ore     씨앗 12 개: 좋은 광맥 5 + 나머지 1 씩 = 8 · 좋은 구역이 바뀐다 · 지금 판 8 곳 · 닫힌 조각 숨김 · 28 곳 모두 앞 바닥에서 곡괭이가 닿고 눈에서 안 가린다 · 하나 캐면 덩이   (noore · sameseed · propblock)
 //   map4play_exits   석탄 자리마다 굴 길이 25 m 안 출구 · 불 켜진 방 안 출구 0 · 벽 틈이 그 방 가운데서 보인다        (farexit · homeexit · propblock)
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
-//   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
-//   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로 · 입에서 돌가루 · 긁힘 · 와르르 소리   (chaseplayer · noshake · hideexit · stalehead · slowsend · muteemerge)
-//   map4play_call    첫 곡괭이질 전엔 안 부름 · 25 를 넘긴 콱에 바로 부름 · 숨은 굴 TUNNEL_S · 25 를 안 넘으면 안 부름 · 쉬는 최소 시간 · 집에서 먼 밖에서 바로 벽 속으로 · 판정 키 Alt+9 = 내 자리 둘레 가장 가까운 틈   (nowork · slowtunnel · clockcall · norest · homeonly · farhere)
+//   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 쉬는 최소 시간이 표대로                               (nostage)
+//   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로 · 입에서 돌가루 · 긁힘 · 와르르 소리 · 일한 자리에서 가장 가까운 틈   (chaseplayer · noshake · hideexit · stalehead · slowsend · muteemerge · stagecap)
+//   map4play_call    첫 곡괭이질 전엔 안 부름 · 25 를 넘긴 콱에 바로 부름 · 숨은 굴 TUNNEL_S · 25 를 안 넘으면 안 부름 · 쉬는 최소 시간 · 집에서 먼 밖에서 바로 벽 속으로 · 판정 키 Alt+9 = 내 자리 둘레 가장 가까운 틈 · 캐는 자리 바로 옆 틈에서도   (nowork · slowtunnel · clockcall · norest · homeonly · farhere · keep8m · stagecap)
 //   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 → 가까운 구역(셋) · 먼 구역(끊어 달리기) 가는 길 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
 public partial class M1Check
@@ -159,24 +159,24 @@ public partial class M1Check
         var table = new List<string>(); bool tableOk = true; float keep = d.gauge;
         for (int st = 0; st < Tuning.STAGE_EVERY_S.Length; st++)
         {
-            d.gauge = st * Tuning.GAUGE_STEP; table.Add($"{d.Stage}:{d.Every:0}s/{(d.ExitMax > 0f ? d.ExitMax.ToString("0") + "m" : "near")}");
-            tableOk &= d.Stage == st && Mathf.Approximately(d.Every, Tuning.STAGE_EVERY_S[st]) && Mathf.Approximately(d.ExitMax, Tuning.STAGE_EXIT_M[st]);
+            d.gauge = st * Tuning.GAUGE_STEP; table.Add($"{d.Stage}:{d.Every:0}s");
+            tableOk &= d.Stage == st && Mathf.Approximately(d.Every, Tuning.STAGE_EVERY_S[st]);
         }
         d.gauge = keep;
         Check("map4play_stage", stages.Last() == 4 && tableOk && stages.Zip(stages.Skip(1), (a, b) => b >= a).All(x => x),
             $"clean quota {Tuning.BOOTH_QUOTA} lumps → stage after each lump {string.Join(" ", stages)} (want ends at 4) · gauge {keep:0.0} · table {string.Join(" ", table)} {(tableOk ? "as Tuning" : "NOT as Tuning")}");
 
-        // ---- 나오기: ① 마지막 일한 자리 기준 · 돌가루 · 사람에서 8 m 밖 · 나와서 일한 자리를 보며 곧장  ② 보고 있어도 나온다 (10-04 판정 1)
+        // ---- 나오기: ① 마지막 일한 자리에서 가장 가까운 틈(1 단계 — 옛 규칙이면 60 m 안 가장 먼 틈) · 돌가루 · 나와서 일한 자리를 보며 곧장  ② 보고 있어도 나온다 (10-04 판정 1 · 10-05 판정 10)
         stalker.enabled = true; d.tunnelS = 1f;                                 // 숨은 굴 시간은 이 검사의 대상이 아니다 — 빨리 (map4play_call 이 잰다)
         var spotA = m.coal.OrderByDescending(c => PathLen(spawn, stand[c.name])).FirstOrDefault();   // 일한 자리 = 승강장에서 가장 먼 석탄 자리 · 사람은 승강장 (석탄 자리가 없는 옛 맵이면 옛 채굴 빈터)
-        d.gauge = 3 * Tuning.GAUGE_STEP + 1f; d.lastWork = spotA != null ? stand[spotA.name] : d.homes[1];
+        d.gauge = 1 * Tuning.GAUGE_STEP + 1f; d.lastWork = spotA != null ? stand[spotA.name] : d.homes[1];
         Teleport(cc, spawn + Vector3.up * 0.1f, 0f);
         d.ForceHome(); yield return null;
         int ap0 = d.approaches; bool called = d.Call(true); var tgt = d.target; int bursts0 = d.warnBursts;
         float tw = 0f; for (; tw < 60f && d.approaches == ap0; tw += Time.deltaTime) yield return null;
         float fromWork = tgt != null ? PathLen(d.lastWork, tgt.stand) : -1f, toPlayer = tgt != null ? Flat(tgt.stand - player.transform.position) : -1f;
         float nearestFromWork = d.exits.Select(e => PathLen(d.lastWork, e.stand)).Where(L => L >= 0f).DefaultIfEmpty(-1f).Min();
-        bool rule1 = called && d.approaches > ap0 && fromWork >= 0f && (fromWork <= Tuning.STAGE_EXIT_M[3] + 0.5f || Mathf.Abs(fromWork - nearestFromWork) < 0.5f) && toPlayer >= Tuning.EXIT_MIN_PLAYER_M;
+        bool rule1 = called && d.approaches > ap0 && fromWork >= 0f && Mathf.Abs(fromWork - nearestFromWork) < 0.5f;
         float warn1 = d.warnFor; int b1 = d.warnBursts - bursts0;
         // 나와서: 조사 머리(mode 4)가 보는 자리 = 일한 자리 · 걸음 = 소리 들었을 때 (2.5 살피는 걸음 + 옛 소리 자리 머리 = 사용자 "두리번")
         var sa = stalker.GetComponentInChildren<StalkerAnim>();
@@ -217,7 +217,7 @@ public partial class M1Check
             stalker.enabled = false;
         }
         Check("map4play_emerge", rule1 && warn1 >= Tuning.EMERGE_WARN_S - 0.05f && b1 >= 6 && goes && stareOk,
-            $"① worked at {(spotA != null ? spotA.name : "M (no coal spots)")}, player at the cage: came out at {(tgt != null ? tgt.name : "-")} {fromWork:0} m from the work spot by path (stage 3 max {Tuning.STAGE_EXIT_M[3]:0}, nearest {nearestFromWork:0}) · {toPlayer:0} m from the player (want ≥ {Tuning.EXIT_MIN_PLAYER_M:0}) · dust {warn1:0.0} s in {b1} bursts · then head looks {headOff:0.0} m from the work spot (want < 1) in head mode 4 {fr4}/{fr} frames · walks {walkV:0.0} m/s over {el:0.0} s (want ≥ {0.8f * Tuning.STALKER_SPEED_INVESTIGATE:0.0}) · ② {stareNote}");
+            $"① worked at {(spotA != null ? spotA.name : "M (no coal spots)")}, player at the cage: came out at {(tgt != null ? tgt.name : "-")} {fromWork:0} m from the work spot by path at stage 1 (want the nearest, {nearestFromWork:0}) · {toPlayer:0} m from the player · dust {warn1:0.0} s in {b1} bursts · then head looks {headOff:0.0} m from the work spot (want < 1) in head mode 4 {fr4}/{fr} frames · walks {walkV:0.0} m/s over {el:0.0} s (want ≥ {0.8f * Tuning.STALKER_SPEED_INVESTIGATE:0.0}) · ② {stareNote}");
         d.tunnelS = Tuning.TUNNEL_S;
 
         // ---- 부르기 (10-05 판정 3): ㉮ 첫 곡괭이질 전엔 안 부름 · ㉢ 25 를 넘긴 콱에 바로 부름 · ㉠ 숨은 굴 TUNNEL_S(괴물의 굴에서 멀어도) · 25 를 안 넘으면 다 쉬었어도 안 부름
@@ -251,11 +251,12 @@ public partial class M1Check
             bool fromOut = d.calls == calls1 + 1 && heldHome > Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f;
             int ap2 = d.approaches; for (float w = 0f; w < 20f && d.approaches == ap2; w += Time.deltaTime) yield return null;
             float fromB = d.target != null && d.approaches > ap2 ? PathLen(workB.slot.position, d.target.stand) : -1f;
-            bool nearB = fromB >= 0f && fromB <= Mathf.Max(d.ExitMax, Tuning.EXIT_NEAR_SPOT_M) + 0.5f;
+            float nearestB = d.exits.Select(e => PathLen(workB.slot.position, e.stand)).Where(L => L >= 0f).DefaultIfEmpty(-1f).Min();
+            bool nearB = fromB >= 0f && Mathf.Abs(fromB - nearestB) < 0.5f;
             stalker.enabled = false; yield return null;
-            // 판정 키 Alt+9 (10-05 판정 9): 벽 틈 3 m 앞에 서서 누르면 그 틈(8 m 규칙 · 단계 상한 없이)으로 나와 내 자리로 온다 — 2 단계(상한 40 m 의 가장 먼 틈)여도
+            // 판정 키 Alt+9 (10-05 판정 9): 벽 틈 3 m 앞에 서서 누르면 그 틈으로 나와 내 자리로 온다
             var hereAt = d.exits.Where(e => !e.ceiling).OrderBy(e => PathLen(spawn, e.stand)).FirstOrDefault(e => PathLen(spawn, e.stand) >= 0f);
-            bool hereOk = false; string hereNote = "no wall exit";
+            bool hereOk = false, gameOk = false; string hereNote = "no wall exit", gameNote = "";
             if (hereAt != null)
             {
                 Vector3 hp = OnNav(hereAt.stand + hereAt.face * 3f, 1.5f); Vector3 toMouth = hereAt.mouth - hp;
@@ -267,9 +268,16 @@ public partial class M1Check
                 hereOk = hereCalled && hereSame && d.approaches > ap3 && toMe >= 0f && toMe < 1.5f && tHere <= Tuning.TUNNEL_S + Tuning.EMERGE_WARN_S + 1f;
                 hereNote = $"Alt+9 standing {Flat(hp - hereAt.stand):0} m in front of {hereAt.name} at stage 2: called {hereCalled} · that exit {hereSame} ({(d.target != null ? d.target.name : "-")}) · came out {tHere:0.0} s later (want ≤ {Tuning.TUNNEL_S + Tuning.EMERGE_WARN_S + 1f:0}) · heads {toMe:0.0} m from me (want < 1.5)";
                 stalker.enabled = false; yield return null;
+                // 게임 규칙 (10-05 판정 10): 그 자리(틈 3 m 앞)의 곡괭이 콱이 25 를 넘기면 바로 옆 그 틈으로 — 사람 8 m 안이어도, 단계 거리 상한 없이
+                d.gauge = 2 * Tuning.GAUGE_STEP - 0.5f; yield return null; stalker.enabled = true; d.ForceHome(); yield return null;
+                int calls3 = d.calls; NoiseBus.Make(hp, Tuning.MINE_NOISE_SOFT, "pick", player);
+                float tG = 0f; for (; tG < 1f && d.calls == calls3; tG += Time.deltaTime) yield return null;
+                gameOk = d.calls == calls3 + 1 && d.target == hereAt;
+                gameNote = $" · game: a strike {Flat(hp - hereAt.stand):0} m in front of {hereAt.name} at stage {d.Stage} → into the wall {tG:0.0} s later for {(d.target != null ? d.target.name : "-")} (want that exit)";
+                stalker.enabled = false; yield return null;
             }
-            callOk = noWork && calledA && tunnelOk && noStepNoCall && restHolds && fromOut && nearB && hereOk;
-            callNote = $"{hereNote} · ㉮ past 25 with no strike yet: waiting {noWork} · ㉢ first strike at {workA.name}: into the wall after {tCall:0.0} s (want < 1) · ㉠ tunnel {tTun:0.0} s from the lair (want {Tuning.TUNNEL_S:0} ± 0.5) · out and rested, no new 25: called {!noStepNoCall} (want no) · new 25 at {workB.name} just after a call: called {!restHolds} (want no, rest {d.Every:0} s) · rested: into the wall {tC2:0.0} s later, {heldHome:0} m from the nearest home (want > {Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f:0} — out, not home) · came out at {(d.target != null ? d.target.name : "-")} {fromB:0} m from {workB.name}";
+            callOk = noWork && calledA && tunnelOk && noStepNoCall && restHolds && fromOut && nearB && hereOk && gameOk;
+            callNote = $"{hereNote}{gameNote} · ㉮ past 25 with no strike yet: waiting {noWork} · ㉢ first strike at {workA.name}: into the wall after {tCall:0.0} s (want < 1) · ㉠ tunnel {tTun:0.0} s from the lair (want {Tuning.TUNNEL_S:0} ± 0.5) · out and rested, no new 25: called {!noStepNoCall} (want no) · new 25 at {workB.name} just after a call: called {!restHolds} (want no, rest {d.Every:0} s) · rested: into the wall {tC2:0.0} s later, {heldHome:0} m from the nearest home (want > {Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f:0} — out, not home) · came out at {(d.target != null ? d.target.name : "-")} {fromB:0} m from {workB.name} (want the nearest, {nearestB:0})";
         }
         Check("map4play_call", callOk, callNote);
 

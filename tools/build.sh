@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 UNITY="/c/Program Files/Unity/Hub/Editor/6000.4.7f1/Editor/Unity.exe"
 ROOT="$(pwd -W)"
 mkdir -p build
+source tools/gpu_lock.sh; judge_guard              # 판정 중인 게임이 켜져 있으면 멈춘다 (빌드가 그 게임의 파일을 바꾼다 — 10-05)
 
 echo "== build"
 "$UNITY" -batchmode -nographics -projectPath "$ROOT" -executeMethod BuildM1.BuildWindows -logFile "$ROOT/build/unity.log"
