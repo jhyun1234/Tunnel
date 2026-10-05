@@ -16,6 +16,7 @@ using UnityEngine.SceneManagement;
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
 //   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
 //   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로   (chaseplayer · noshake · hideexit · stalehead · slowsend)
+//   map4play_call    첫 곡괭이질 전엔 안 부름 · 25 를 넘긴 콱에 바로 부름 · 숨은 굴 TUNNEL_S · 25 를 안 넘으면 안 부름 · 쉬는 최소 시간 · 집에서 먼 밖에서 바로 벽 속으로   (nowork · slowtunnel · clockcall · norest · homeonly)
 //   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 → 가까운 구역(셋) · 먼 구역(끊어 달리기) 가는 길 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
 public partial class M1Check
@@ -162,16 +163,16 @@ public partial class M1Check
             $"clean quota {Tuning.BOOTH_QUOTA} lumps → stage after each lump {string.Join(" ", stages)} (want ends at 4) · gauge {keep:0.0} · table {string.Join(" ", table)} {(tableOk ? "as Tuning" : "NOT as Tuning")}");
 
         // ---- 나오기: ① 마지막 일한 자리 기준 · 돌가루 · 사람에서 8 m 밖 · 나와서 일한 자리를 보며 곧장  ② 보고 있어도 나온다 (10-04 판정 1)
-        stalker.enabled = true; d.tunnelSpeed = 60f;                            // 숨은 굴 시간은 이 검사의 대상이 아니다 — 빨리
+        stalker.enabled = true; d.tunnelS = 1f;                                 // 숨은 굴 시간은 이 검사의 대상이 아니다 — 빨리 (map4play_call 이 잰다)
         var spotA = m.coal.OrderByDescending(c => PathLen(spawn, stand[c.name])).FirstOrDefault();   // 일한 자리 = 승강장에서 가장 먼 석탄 자리 · 사람은 승강장 (석탄 자리가 없는 옛 맵이면 옛 채굴 빈터)
         d.gauge = 3 * Tuning.GAUGE_STEP + 1f; d.lastWork = spotA != null ? stand[spotA.name] : d.homes[1];
         Teleport(cc, spawn + Vector3.up * 0.1f, 0f);
         d.ForceHome(); yield return null;
-        bool called = d.Call(true); var tgt = d.target; int bursts0 = d.warnBursts;
-        float tw = 0f; for (; tw < 40f && d.phase != Director.Phase.Out; tw += Time.deltaTime) yield return null;
+        int ap0 = d.approaches; bool called = d.Call(true); var tgt = d.target; int bursts0 = d.warnBursts;
+        float tw = 0f; for (; tw < 60f && d.approaches == ap0; tw += Time.deltaTime) yield return null;
         float fromWork = tgt != null ? PathLen(d.lastWork, tgt.stand) : -1f, toPlayer = tgt != null ? Flat(tgt.stand - player.transform.position) : -1f;
         float nearestFromWork = d.exits.Select(e => PathLen(d.lastWork, e.stand)).Where(L => L >= 0f).DefaultIfEmpty(-1f).Min();
-        bool rule1 = called && d.phase == Director.Phase.Out && fromWork >= 0f && (fromWork <= Tuning.STAGE_EXIT_M[3] + 0.5f || Mathf.Abs(fromWork - nearestFromWork) < 0.5f) && toPlayer >= Tuning.EXIT_MIN_PLAYER_M;
+        bool rule1 = called && d.approaches > ap0 && fromWork >= 0f && (fromWork <= Tuning.STAGE_EXIT_M[3] + 0.5f || Mathf.Abs(fromWork - nearestFromWork) < 0.5f) && toPlayer >= Tuning.EXIT_MIN_PLAYER_M;
         float warn1 = d.warnFor; int b1 = d.warnBursts - bursts0;
         // 나와서: 조사 머리(mode 4)가 보는 자리 = 일한 자리 · 걸음 = 소리 들었을 때 (2.5 살피는 걸음 + 옛 소리 자리 머리 = 사용자 "두리번")
         var sa = stalker.GetComponentInChildren<StalkerAnim>();
@@ -199,18 +200,56 @@ public partial class M1Check
             player.Pitch = -Mathf.Atan2(look.y, Flat(look)) * Mathf.Rad2Deg;
             yield return null; stalker.enabled = true;
             d.ForceHome(); yield return null;
-            int seen0 = d.emergedSeen; bool seenAtCall = d.Seen(stareAt.mouth); d.Call(true);
+            int seen0 = d.emergedSeen, ap1 = d.approaches; bool seenAtCall = d.Seen(stareAt.mouth); d.Call(true);
             bool same = d.target == stareAt;
-            for (float w = 0f; w < 20f && d.phase != Director.Phase.Warn && d.phase != Director.Phase.Out; w += Time.deltaTime) yield return null;
+            for (float w = 0f; w < 60f && d.phase != Director.Phase.Warn && d.approaches == ap1; w += Time.deltaTime) yield return null;
             float tOut = 0f; for (; tOut < Tuning.EMERGE_WARN_S + 3f && d.phase == Director.Phase.Warn; tOut += Time.deltaTime) yield return null;
-            bool outSeen = d.phase == Director.Phase.Out && d.target == stareAt && d.emergedSeen == seen0 + 1;
+            bool outSeen = d.approaches > ap1 && d.target == stareAt && d.emergedSeen == seen0 + 1;
             stareOk = seenAtCall && same && outSeen && tOut <= Tuning.EMERGE_WARN_S + 0.5f;
             stareNote = $"looked at {stareAt.name} from {Flat(stareFrom - stareAt.stand):0} m (in view {seenAtCall}): chosen {same} · came out {tOut:0.0} s after the dust began (want ≤ {Tuning.EMERGE_WARN_S + 0.5f:0.0}) at {(d.target != null ? d.target.name : "-")} · came out in view {d.emergedSeen - seen0} (want 1)";
             stalker.enabled = false;
         }
         Check("map4play_emerge", rule1 && warn1 >= Tuning.EMERGE_WARN_S - 0.05f && b1 >= 6 && goes && stareOk,
             $"① worked at {(spotA != null ? spotA.name : "M (no coal spots)")}, player at the cage: came out at {(tgt != null ? tgt.name : "-")} {fromWork:0} m from the work spot by path (stage 3 max {Tuning.STAGE_EXIT_M[3]:0}, nearest {nearestFromWork:0}) · {toPlayer:0} m from the player (want ≥ {Tuning.EXIT_MIN_PLAYER_M:0}) · dust {warn1:0.0} s in {b1} bursts · then head looks {headOff:0.0} m from the work spot (want < 1) in head mode 4 {fr4}/{fr} frames · walks {walkV:0.0} m/s over {el:0.0} s (want ≥ {0.8f * Tuning.STALKER_SPEED_INVESTIGATE:0.0}) · ② {stareNote}");
-        d.tunnelSpeed = Tuning.TUNNEL_SPEED;
+        d.tunnelS = Tuning.TUNNEL_S;
+
+        // ---- 부르기 (10-05 판정 3): ㉮ 첫 곡괭이질 전엔 안 부름 · ㉢ 25 를 넘긴 콱에 바로 부름 · ㉠ 숨은 굴 TUNNEL_S(괴물의 굴에서 멀어도) · 25 를 안 넘으면 다 쉬었어도 안 부름
+        //   · 쉬는 최소 시간 전엔 안 부름 · ㉡ 집에서 먼 밖에서 바로 그 자리 벽 속으로 → 새 일한 자리 둘레로 나옴. 사람은 승강장 (괴물이 못 보고 못 듣는 곳)
+        var farHome = m.coal.Select(c => (c, h: d.homes.Min(hm => Flat(hm - stand[c.name])))).OrderByDescending(x => x.h).Select(x => x.c).ToList();
+        var workA = farHome.FirstOrDefault(); var workB = farHome.FirstOrDefault(c => workA != null && Flat(stand[c.name] - stand[workA.name]) > 80f);
+        bool callOk = false; string callNote = "no two coal spots 80 m apart";
+        if (workA != null && workB != null)
+        {
+            Teleport(cc, spawn + Vector3.up * 0.1f, 0f); player.Pitch = 0f;
+            d.gauge = 0f; stalker.enabled = true; d.ForceHome(); d.worked = false; d.gauge = Tuning.GAUGE_STEP + 1f;   // Alt+0 처럼 곡괭이질 없이 1 단계
+            int calls0 = d.calls;
+            yield return new WaitForSeconds(1.5f);
+            bool noWork = d.pending && d.calls == calls0;                                                      // ㉮ 부를 일은 있지만 첫 곡괭이질 전
+            NoiseBus.Make(workA.slot.position, Tuning.MINE_NOISE_SOFT, "pick", player);                       // 첫 콱 → 바로 부른다
+            float tCall = 0f; for (; tCall < 1f && d.calls == calls0; tCall += Time.deltaTime) yield return null;
+            bool calledA = d.calls == calls0 + 1;
+            float tTun = 0f; for (; tTun < 30f && d.phase == Director.Phase.Tunnel; tTun += Time.deltaTime) yield return null;
+            bool tunnelOk = calledA && Mathf.Abs(tTun - Tuning.TUNNEL_S) < 0.5f;
+            for (float w = 0f; w < 10f && d.phase != Director.Phase.Free; w += Time.deltaTime) yield return null;
+            stalker.Teleport(stand[workA.name], 0f); d.rest = 1e6f; int calls1 = d.calls;                     // 밖(집에서 먼 일한 자리)에서 어슬렁거리고 다 쉬었다
+            yield return new WaitForSeconds(1.5f);
+            bool noStepNoCall = d.calls == calls1;                                                             // 25 를 안 넘었다 — 안 부른다 (옛 시계라면 부른다)
+            d.rest = 0f; d.gauge = (d.Steps + 1) * Tuning.GAUGE_STEP - 0.5f;
+            NoiseBus.Make(workB.slot.position, Tuning.MINE_NOISE_SOFT, "pick", player);                       // 다른 구역 콱이 25 를 넘긴다
+            yield return new WaitForSeconds(1.5f);
+            bool restHolds = d.pending && d.calls == calls1;                                                   // 쉬는 최소 시간 전 — 안 부른다
+            d.rest = 1e6f;
+            float tC2 = 0f; for (; tC2 < 1f && d.calls == calls1; tC2 += Time.deltaTime) yield return null;
+            float heldHome = d.homes.Min(hm => Flat(hm - stalker.transform.position));
+            bool fromOut = d.calls == calls1 + 1 && heldHome > Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f;
+            int ap2 = d.approaches; for (float w = 0f; w < 20f && d.approaches == ap2; w += Time.deltaTime) yield return null;
+            float fromB = d.target != null && d.approaches > ap2 ? PathLen(workB.slot.position, d.target.stand) : -1f;
+            bool nearB = fromB >= 0f && fromB <= Mathf.Max(d.ExitMax, Tuning.EXIT_NEAR_SPOT_M) + 0.5f;
+            callOk = noWork && calledA && tunnelOk && noStepNoCall && restHolds && fromOut && nearB;
+            callNote = $"㉮ past 25 with no strike yet: waiting {noWork} · ㉢ first strike at {workA.name}: into the wall after {tCall:0.0} s (want < 1) · ㉠ tunnel {tTun:0.0} s from the lair (want {Tuning.TUNNEL_S:0} ± 0.5) · out and rested, no new 25: called {!noStepNoCall} (want no) · new 25 at {workB.name} just after a call: called {!restHolds} (want no, rest {d.Every:0} s) · rested: into the wall {tC2:0.0} s later, {heldHome:0} m from the nearest home (want > {Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f:0} — out, not home) · came out at {(d.target != null ? d.target.name : "-")} {fromB:0} m from {workB.name}";
+            stalker.enabled = false; yield return null;
+        }
+        Check("map4play_call", callOk, callNote);
 
         // ---- 이동: 실제 W · Shift 로 승강장 ↔ 가까운 구역 · 먼 구역의 가장 가까운 석탄 자리 (괴물 끔)
         if (m.coal.Count == 0) { Check("map4play_move", false, "no coal spots in this map file"); InputSystem.RemoveDevice(kb); InputSystem.RemoveDevice(mouse); yield break; }

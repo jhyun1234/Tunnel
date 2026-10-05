@@ -681,13 +681,12 @@ public static class Tuning
     public const float GAUGE_STEP = 25f;                      // 게이지 100 = 몫을 깔끔하게 다 채움. 이만큼마다 한 단계
     public const float GAUGE_STRIKE_REF_M = 18f;              // 깔끔한 덩이 하나 = 콱 3번 × 6 m. 소리 하나 = 덩이 값 × 반경 ÷ 이것 (숙여서 콱 5번 = 1.67배 · '쨍' 25 m = +1.39)
     public const float GAUGE_LAND_LUMPS = 0.5f;               // 던진 곡괭이 착지 = 덩이 반 개
-    public static readonly float[] STAGE_EVERY_S = { 0f, 120f, 90f, 60f, 45f, 30f };   // 단계별 괴물이 오는 간격 (0 단계 = 안 온다, 5 = "하나만 더")
+    public static readonly float[] STAGE_EVERY_S = { 0f, 60f, 45f, 30f, 20f, 15f };    // 단계별 쉬는 최소 시간 — 벽 속에 들어간 뒤 괴물이 이만큼 어슬렁거려야 다음에 부른다 (10-05 판정 3 ㉢: 시계 대신 게이지 25 마다 부름. 옛 "오는 간격" 120 · 90 · 60 · 45 · 30 의 절반. 0 단계 = 안 부름, 5 = "하나만 더")
     public static readonly float[] STAGE_EXIT_M = { 0f, 60f, 40f, 25f, 0f, 0f };       // 마지막으로 일한 자리에서 나오는 출구까지 굴 길이 상한 (0 = 가장 가까운 출구)
     public const float EXIT_MIN_PLAYER_M = 8f;                // 사람에게서 이보다 가까운 출구로는 안 나온다 (눈앞에서 튀어나오지 않게)
     public const float EXIT_SEEN_M = 60f;                     // 이 안에서 화면에 들고 가리는 것이 없으면 "보인다"
-    public const float TUNNEL_SPEED = 5f;                     // m/s, 숨은 굴 (아무도 못 보는 동안) 빠르기 — 걷기 1.85 보다 빠르고 추격 6.5 보다 느리다
+    public const float TUNNEL_S = 5f;                         // s, 숨은 굴 시간 — 거리와 상관없이 (10-05 판정 3 ㉠: 옛 5 m/s 는 괴물의 굴에서 북 · 서쪽 출구까지 41~50 s)
     public const float EMERGE_WARN_S = 4f;                    // s, 나오기 전 그 출구에서 돌가루가 떨어지는 시간
-    public const float LINGER_S = 20f;                        // s, 나와서 못 찾은 채 이만큼 지나면 가까운 출구로 돌아 들어간다
     public const float EXIT_NEAR_SPOT_M = 25f;                // 석탄 자리마다 굴 길이로 이 안에 출구 (검사 map4play_exits)
     public const float MAP4_STALKER_R = 0.45f;                // m, MAP4 괴물 부딪힘 둘레 반지름 = 길찾기 바닥 몸 (BuildMap4). 0.6(부스)이면 동발 틀 · 바람문 · 광차 사이를 못 지나 승강장에서 방 14곳에 길이 없었다 (10-03 진단: 0.45 = 굴진 막장 끝 6 m 만 빼고 다 이어짐). 사람 몸 0.4
     public const float QUOTA_FLOOR_S = 150f;                  // 가장 빠른 이동 방식으로도 몫이 이보다 빨리 끝나면 몫을 올린다 (검사 map4play_move)

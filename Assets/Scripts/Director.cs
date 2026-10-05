@@ -4,37 +4,42 @@ using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.InputSystem;
 
-// GAME-1 감독 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md 3절, 사용자 승인 10-03 "출발값으로"). 괴물(그것)을 판 진행에 맞춰 숨은 굴로 데려온다.
+// GAME-1 감독 (제안서 docs/제안서_GAME1_MAP4에서_놀기.md 3절, 사용자 승인 10-03 "출발값으로" · 10-05 판정 3 ㉠ ㉡ ㉢). 괴물(그것)을 일하는 소리에 맞춰 숨은 굴로 데려온다.
 //   단계 게이지 = 일하며 낸 소리 (팀에 하나 — 사람이 아니라 자리 · 몫 기준): 콱 · '쨍' = 덩이 값 × 반경 ÷ 18 · 던진 곡괭이 착지 = 덩이 반 개 · 발소리 0.
 //   깔끔하게 몫을 다 채우면 100, 25 마다 한 단계 (덩이 값 = 100 ÷ BOOTH_QUOTA). 콱 한 번마다 조금씩 오른다.
-//   단계 ≥ 1: 간격(STAGE_EVERY_S)마다 마지막으로 게이지가 오른 자리에서 굴 길이로 단계 거리(STAGE_EXIT_M) 안의 출구 — 사람에게서 8 m 넘게 —
-//   로 숨은 굴을 지나(초당 TUNNEL_SPEED) 와서, EMERGE_WARN_S 동안 그 출구에서 돌가루가 떨어진 뒤 나온다. 보고 있어도 나온다(10-04 판정 1 "나오는 게 보이게" — 그 전엔 안 보이는 출구만 · 눈을 뗄 때까지 기다림).
-//   나와서는 그 자리를 소리 들었을 때 걸음(STALKER_SPEED_INVESTIGATE)으로 보러 가고(판정 통과 감각 그대로) LINGER_S 동안 못 찾으면 아무도 못 볼 때 숨은 굴로 들어가 가장 가까운 집(붕락 방 · 옛 채굴 빈터 · 괴물의 굴)으로.
+//   부르기 ㉢: 게이지가 25 를 넘을 때마다(단계 5 뒤에도) 부를 일이 생긴다. 괴물이 어슬렁거리는 중(배회)이고 지난번 벽 속에 들어간 뒤 STAGE_EVERY_S(단계별 쉬는 최소 시간)만큼
+//     어슬렁거렸으면 바로 부른다. 첫 곡괭이질 전에는 안 부른다(Alt+0 만 누른 판).
+//   어디서든 ㉡: 괴물이 집에 있든 밖에 있든 아무도 못 볼 때 그 자리에서 벽 속으로 들어간다. 나온 뒤 집으로 돌아가지 않고 일한 자리 둘레를 돈다.
+//   숨은 굴 ㉠: 거리와 상관없이 TUNNEL_S. 나오기 직전에 '지금' 마지막으로 일한 자리에서 굴 길이로 단계 거리(STAGE_EXIT_M) 안의 출구(사람에게서 8 m 넘게)를 고른다.
+//   EMERGE_WARN_S 동안 그 출구에서 돌가루가 떨어진 뒤 나온다. 보고 있어도 나온다(10-04 판정 1). 나와서는 그 자리를 소리 들었을 때 걸음(STALKER_SPEED_INVESTIGATE)으로 보러 간다.
 //   철수(곡괭이 열네 대)는 괴물 스스로 — 90 초 뒤 사람에게서 가장 먼 집에서 나온다(Stalker.cracks = 집 셋).
-// 판정 키 (숫자패드 안 씀 · F1 줄에 값): Alt+1 2 간격 배율 · Alt+3 4 출구 거리 배율 · Alt+5 6 소리 배율 · Alt+7 8 숨은 굴 빠르기 · Alt+9 지금 부르기 · Alt+0 한 단계 올리기
+// 판정 키 (숫자패드 안 씀 · F1 줄에 값): Alt+1 2 쉬는 최소 시간 배율 · Alt+3 4 출구 거리 배율 · Alt+5 6 소리 배율 · Alt+7 8 숨은 굴 시간 −1 +1 s · Alt+9 지금 부르기 · Alt+0 한 단계 올리기
 public class Director : MonoBehaviour
 {
-    public enum Phase { Home, Hiding, Tunnel, Warn, Out, Return, Back }
+    public enum Phase { Free, Hiding, Tunnel, Warn }
     public class Exit { public string name; public Vector3 mouth, stand, face; public bool ceiling; }
 
     public static Director I;
     public Map4 map; public Stalker s; public Player player; public Camera cam;
     public readonly List<Exit> exits = new List<Exit>();
     public Vector3[] homes = new Vector3[0];
-    [System.NonSerialized] public float gauge, everyMul = 1f, exitMul = 1f, noiseMul = 1f, tunnelSpeed = Tuning.TUNNEL_SPEED;
-    [System.NonSerialized] public Phase phase = Phase.Home;
+    [System.NonSerialized] public float gauge, everyMul = 1f, exitMul = 1f, noiseMul = 1f, tunnelS = Tuning.TUNNEL_S;
+    [System.NonSerialized] public Phase phase = Phase.Free;
     [System.NonSerialized] public Vector3 lastWork;
     [System.NonSerialized] public Exit target;
-    [System.NonSerialized] public float targetPath, rest, warnFor, phaseT;
-    [System.NonSerialized] public int approaches, emergedSeen, warnBursts;   // 검사가 본다
+    [System.NonSerialized] public float targetPath, rest = 1e6f, warnFor;   // rest = 지난번 벽 속에 들어간 뒤 괴물이 어슬렁거린 시간 (첫 부름은 바로)
+    [System.NonSerialized] public bool pending, worked;                     // pending = 25 를 넘었는데 아직 못 불렀다 · worked = 곡괭이질을 한 번이라도 했다
+    [System.NonSerialized] public int approaches, calls, emergedSeen, warnBursts;   // 검사가 본다 (calls = 벽 속으로 들어간 수 · approaches = 나온 수)
     static bool SabFlatNoise => Map4.Sab("flatnoise"); static bool SabStepPile => Map4.Sab("steppile"); static bool SabJumpGauge => Map4.Sab("jumpgauge"); static bool SabNoStage => Map4.Sab("nostage");   // 검사 사보타주
     static bool SabHideExit => Map4.Sab("hideexit"); static bool SabSlowSend => Map4.Sab("slowsend"); static bool SabNoShake => Map4.Sab("noshake"); static bool SabChasePlayer => Map4.Sab("chaseplayer"); static bool SabFarExit => Map4.Sab("farexit"); static bool SabHomeExit => Map4.Sab("homeexit");
+    static bool SabClockCall => Map4.Sab("clockcall"); static bool SabSlowTunnel => Map4.Sab("slowtunnel"); static bool SabHomeOnly => Map4.Sab("homeonly"); static bool SabNoRest => Map4.Sab("norest"); static bool SabNoWork => Map4.Sab("nowork");   // 10-05 판정 3 의 옛 규칙들
     public static float Lump => 100f / Tuning.BOOTH_QUOTA;
-    public int Stage => SabNoStage ? 0 : Mathf.Min(Tuning.STAGE_EVERY_S.Length - 1, Mathf.FloorToInt(gauge / Tuning.GAUGE_STEP + 1e-4f));
+    public int Stage => SabNoStage ? 0 : Mathf.Min(Tuning.STAGE_EVERY_S.Length - 1, Steps);
+    public int Steps => Mathf.FloorToInt(gauge / Tuning.GAUGE_STEP + 1e-4f);   // 25 마다 하나 — 단계(최대 5)와 달리 끝이 없다
     public float Every => Tuning.STAGE_EVERY_S[Stage] * everyMul;
     public float ExitMax => Tuning.STAGE_EXIT_M[Stage] * exitMul;
 
-    Vector3 home; float t, dustT, jumpAcc; int lastStage, lastOre, sentFrame = -9; bool worked; Stalker.State lastSt;
+    float t, dustT, jumpAcc; int lastStage, lastSteps, lastOre, sentFrame = -9; Stalker.State lastSt;
     static readonly RaycastHit[] buf = new RaycastHit[16];
     const int SeeMask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));   // 자갈 · 광석(Ignore Raycast) · 곡괭이 뷰모델은 시선을 안 막는다
 
@@ -59,12 +64,11 @@ public class Director : MonoBehaviour
         }
         if (SabFarExit) exits.RemoveAll(e => !e.name.EndsWith("_K") && !e.name.EndsWith("_M"));   // 검사: 집 둘레 출구만 (석탄 자리에서 멀다)
         if (SabHomeExit) { var z6 = m.Area("z6"); Vector3 c0 = z6 != null ? z6.position : p.transform.position; exits.Add(new Exit { name = "MGAP_SABHOME", mouth = c0 + Vector3.up * 1.2f, stand = OnNav(c0, 3f), face = Vector3.forward }); }   // 검사: 승강장 안 출구
-        home = homes[2];
         if (s != null)
         {
-            s.zMin = s.zMax = 0f; s.cracks = homes; s.homePos = home; s.restartPos = p.transform.position;
+            s.zMin = s.zMax = 0f; s.cracks = homes; s.homePos = homes[2]; s.restartPos = p.transform.position;
             s.GetComponent<CharacterController>().radius = Tuning.MAP4_STALKER_R;   // 길찾기 바닥과 같은 몸 (BuildMap4)
-            s.Teleport(home, 0f); s.hasAnchor = true; s.anchor = home;
+            s.Teleport(homes[2], 0f); s.hasAnchor = true; s.anchor = homes[2];      // 판 시작 = 괴물의 굴 둘레
         }
         Debug.Log($"DIRECTOR begin · exits {exits.Count} ({string.Join(" ", exits.Select(e => e.name))}) · homes {string.Join(" ", homes.Select(h => h.ToString("F0")))} · lump {Lump:0.0} · seed {m.seed} rich {m.rich}");
     }
@@ -91,30 +95,36 @@ public class Director : MonoBehaviour
         if (s == null || !s.isActiveAndEnabled) return;
         float dt = Time.deltaTime; int st = Stage;
         if (st != lastStage) { Debug.Log($"DIRECTOR {T} · stage {lastStage} -> {st} (gauge {gauge:0.0})"); lastStage = st; }
+        if (Steps > lastSteps) pending = true;                                                                       // ㉢ 25 를 넘었다 — 부를 일
+        lastSteps = Steps;
         if (player.ore != lastOre) { Debug.Log($"DIRECTOR {T} · ore {player.ore}/{Tuning.BOOTH_QUOTA} near {Near(player.transform.position)}"); lastOre = player.ore; }   // 판정 로그(-logFile): 언제 · 어디서 캤나
         if (s.state != lastSt)                                                                                        // 판정 로그: 괴물이 듣고 · 보고 · 쫓고 · 잡은 때
         {
             string why = s.state == Stalker.State.Investigate ? (Time.frameCount - sentFrame <= 1 ? " (sent)" : s.LightChase ? " (saw the lamp)" : $" (heard {s.lastHeard})") : s.state == Stalker.State.Alert ? $" (sense {s.sense})" : "";
             Debug.Log($"DIRECTOR {T} · monster {lastSt} -> {s.state}{why} · {Vector3.Distance(s.transform.position, player.transform.position):0} m from the player");
+            if (lastSt == Stalker.State.Hidden && s.state == Stalker.State.Wander) s.anchor = s.transform.position;   // 철수 뒤 먼 집에서 다시 나왔다 — 그 둘레를 돈다
             lastSt = s.state;
         }
-        if (s.state == Stalker.State.Hidden && !s.held) { phase = Phase.Home; rest = 0f; return; }   // 철수 중 — 괴물 스스로 90 초 뒤 먼 집에서
+        if (s.state == Stalker.State.Hidden && !s.held) { phase = Phase.Free; rest = 0f; return; }   // 철수 중 — 괴물 스스로 90 초 뒤 먼 집에서
         bool idle = s.state == Stalker.State.Wander;
+        if (idle) rest += dt;                                                                                         // 쫓기 · 살피기 중엔 안 센다
         switch (phase)
         {
-            case Phase.Home:
-                if (idle) { rest += dt; s.hasAnchor = true; s.anchor = NearestHome(s.transform.position); }   // 쫓기 · 살피기 중엔 안 센다
-                if (st >= 1 && rest >= Every) Call(false);
+            case Phase.Free:                                     // 집이든 밖이든 어슬렁거리는 중 — 부를 일이 있고 다 쉬었으면 부른다
+                if (idle && (SabClockCall ? st >= 1 : pending) && (worked || SabNoWork) && (rest >= Every || SabNoRest)) Call(false);
                 break;
-            case Phase.Hiding:                                   // 아무도 못 볼 때 벽 속으로
-                if (!idle) { phase = Phase.Out; phaseT = 0f; break; }   // 기다리는 사이 무엇을 듣거나 봤다 — 그대로 둔다
-                if (!SeenBody()) { s.Hold(); t = Mathf.Max(1.5f, Vector3.Distance(s.transform.position, target.mouth) / tunnelSpeed); phase = Phase.Tunnel; Debug.Log($"DIRECTOR {T} · into the wall -> {target.name}, tunnel {t:0} s"); }
+            case Phase.Hiding:                                   // 아무도 못 볼 때 그 자리 벽 속으로
+                if (!idle) { phase = Phase.Free; Debug.Log($"DIRECTOR {T} · call put off — the monster is busy ({s.state})"); break; }   // 기다리는 사이 무엇을 듣거나 봤다 — 부를 일은 남는다
+                if (SeenBody()) break;
+                s.Hold(); t = SabSlowTunnel ? Mathf.Max(1.5f, Vector3.Distance(s.transform.position, target.mouth) / 5f) : tunnelS;   // 검사 slowtunnel: 옛 5 m/s
+                phase = Phase.Tunnel; rest = 0f; pending = false; calls++;
+                Debug.Log($"DIRECTOR {T} · into the wall -> {target.name}, tunnel {t:0} s");
                 break;
             case Phase.Tunnel:
                 t -= dt;
                 if (t <= 0f)
                 {
-                    var again = Choose(out float len2);                                           // 굴을 지나는 20~40 초 사이 사람은 다른 구역으로 간다 — 나오기 직전에 '지금' 마지막으로 일한 자리로 다시 고른다 (10-04 map4meet: 나왔을 때 사람과 71~181 m)
+                    var again = Choose(out float len2);                                           // 나오기 직전에 '지금' 마지막으로 일한 자리로 다시 고른다
                     if (again != null && again != target) Debug.Log($"DIRECTOR {T} · re-pick {target.name} -> {again.name} (last work {WorkAt})");
                     if (again != null) { target = again; targetPath = len2; }
                     phase = Phase.Warn; t = SabNoShake ? 0f : Tuning.EMERGE_WARN_S; warnFor = 0f; dustT = 0f;
@@ -129,46 +139,29 @@ public class Director : MonoBehaviour
                 Vector3 look = target.ceiling ? Flat(lastWork - target.stand) : target.face;
                 s.Release(target.stand, look.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(look).eulerAngles.y : 0f);
                 s.hasAnchor = true; s.anchor = lastWork; s.SendTo(lastWork, SabSlowSend ? Tuning.STALKER_SPEED_SEARCH : Tuning.STALKER_SPEED_INVESTIGATE);   // 소리 들었을 때와 같은 걸음 (10-04 판정 1: 살피는 걸음 2.5 는 "두리번")
-                phase = Phase.Out; phaseT = 0f; approaches++; sentFrame = Time.frameCount;
+                phase = Phase.Free; approaches++; sentFrame = Time.frameCount;
                 Debug.Log($"DIRECTOR {T} · out #{approaches} at {target.name} · stage {st} · last work {WorkAt} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s · in view {seen}");
-                break;
-            case Phase.Out:                                      // 판정 통과 감각으로 찾는다 — 놓치고 배회로 LINGER_S 지나면 돌아간다
-                phaseT = idle ? phaseT + dt : 0f;
-                if (phaseT >= Tuning.LINGER_S) phase = Phase.Return;
-                break;
-            case Phase.Return:
-                if (!idle) { phase = Phase.Out; phaseT = 0f; break; }
-                if (SeenBody()) break;
-                home = NearestHome(s.transform.position); t = Mathf.Max(1.5f, Vector3.Distance(s.transform.position, home) / tunnelSpeed);
-                s.Hold(); phase = Phase.Back;
-                Debug.Log($"DIRECTOR {T} · found nobody for {Tuning.LINGER_S:0} s -> into the wall, home {HomeName(home)}");
-                break;
-            case Phase.Back:
-                t -= dt;
-                if (t > 0f || Seen(home + Vector3.up * 1.2f)) break;
-                s.Release(home, 0f); s.hasAnchor = true; s.anchor = home;
-                phase = Phase.Home; rest = 0f;
-                Debug.Log($"DIRECTOR {T} · back home {HomeName(home)} · next call in {(Stage >= 1 ? Every.ToString("0") + " s" : "- (stage 0)")}");
                 break;
         }
     }
 
-    // 검사: 괴물을 집(괴물의 굴)에 쉬는 상태로 되돌린다 (아무 단계 · 아무 자리에서)
+    // 검사: 괴물을 괴물의 굴에 다 쉰 상태로 되돌린다 (부를 일 없음 · 아무 단계 · 아무 자리에서)
     public void ForceHome()
     {
         if (s == null) return;
-        s.Hold(); home = homes[2]; s.Release(home, 0f); s.hasAnchor = true; s.anchor = home;
-        phase = Phase.Home; rest = 0f; target = null;
+        s.Hold(); s.Release(homes[2], 0f); s.hasAnchor = true; s.anchor = homes[2];
+        phase = Phase.Free; rest = 1e6f; pending = false; lastSteps = Steps; target = null;
     }
 
-    // 지금 부른다 (간격이 됐다 · Alt+9 · 검사). 출구가 없으면 반 간격 뒤 다시
+    // 지금 부른다 (부를 일이 있고 다 쉬었다 · Alt+9 · 검사). 출구가 없으면 쉬는 시간 반 뒤 다시
     public bool Call(bool force)
     {
-        if (phase != Phase.Home || s == null || s.state != Stalker.State.Wander) return false;
+        if (phase != Phase.Free || s == null || s.state != Stalker.State.Wander) return false;
+        if (SabHomeOnly && !homes.Any(h => Flat(h - s.transform.position).magnitude < Tuning.STALKER_WANDER_CELLS * Tuning.GRID_CELL + 3f)) return false;   // 검사: 옛 규칙 (집에서 쉴 때만)
         target = Choose(out targetPath);
-        if (target == null) { rest = force ? 0f : Every * 0.5f; Debug.Log($"DIRECTOR {T} · no exit to use (all unreachable or within 8 m)"); return false; }
-        phase = Phase.Hiding; rest = 0f;
-        Debug.Log($"DIRECTOR {T} · call{(force ? " (forced)" : "")} · stage {Stage} · exit {target.name} {targetPath:0} m from last work ({WorkAt}) · player {Vector3.Distance(player.transform.position, lastWork):0} m from last work");
+        if (target == null) { if (!force) rest = Every * 0.5f; Debug.Log($"DIRECTOR {T} · no exit to use (all unreachable or within 8 m)"); return false; }
+        phase = Phase.Hiding;
+        Debug.Log($"DIRECTOR {T} · call{(force ? " (forced)" : "")} · stage {Stage} · exit {target.name} {targetPath:0} m from last work ({WorkAt}) · player {Vector3.Distance(player.transform.position, lastWork):0} m from last work · monster {Vector3.Distance(s.transform.position, player.transform.position):0} m from the player");
         return true;
     }
 
@@ -213,13 +206,10 @@ public class Director : MonoBehaviour
     }
     bool SeenBody() => Seen(s.transform.position + Vector3.up) || Seen(s.transform.position + Vector3.up * 2f);
 
-    Vector3 NearestHome(Vector3 p) => homes.OrderBy(h => (h - p).sqrMagnitude).First();
-
-    // 판정 로그(-logFile) 글: 판 시작부터 초 · 가장 가까운 석탄 자리 · 집 이름
+    // 판정 로그(-logFile) 글: 판 시작부터 초 · 가장 가까운 석탄 자리
     static string T => $"t {Time.timeSinceLevelLoad:0}s";
     string WorkAt => worked ? Near(lastWork) : "start, no work yet";
     string Near(Vector3 p) { var c = map.coal.OrderBy(k => (k.slot.position - p).sqrMagnitude).FirstOrDefault(); return c == null ? "-" : $"{c.name.Replace("SLOT_Pocket_", "")} {Vector3.Distance(c.slot.position, p):0} m"; }
-    string HomeName(Vector3 h) { int i = System.Array.IndexOf(homes, h); return i == 0 ? "K" : i == 1 ? "M" : i == 2 ? "z9" : "?"; }
 
     public static float PathLen(Vector3 a, Vector3 b)
     {
@@ -242,13 +232,14 @@ public class Director : MonoBehaviour
         else if (kb.digit4Key.wasPressedThisFrame) exitMul = R(exitMul * 1.25f);
         else if (kb.digit5Key.wasPressedThisFrame) noiseMul = R(noiseMul / 1.25f);
         else if (kb.digit6Key.wasPressedThisFrame) noiseMul = R(noiseMul * 1.25f);
-        else if (kb.digit7Key.wasPressedThisFrame) tunnelSpeed = Mathf.Max(1f, tunnelSpeed - 1f);
-        else if (kb.digit8Key.wasPressedThisFrame) tunnelSpeed += 1f;
+        else if (kb.digit7Key.wasPressedThisFrame) tunnelS = Mathf.Max(1f, tunnelS - 1f);
+        else if (kb.digit8Key.wasPressedThisFrame) tunnelS += 1f;
         else if (kb.digit9Key.wasPressedThisFrame) Call(true);
         else if (kb.digit0Key.wasPressedThisFrame) gauge = (Stage + 1) * Tuning.GAUGE_STEP;
     }
 
+    string CallState => phase != Phase.Free ? "on the way" : !pending ? $"at gauge {(Steps + 1) * Tuning.GAUGE_STEP:0}" : !worked ? "after the first strike" : rest < Every ? $"after {Every - rest:0} s more wandering" : "when it wanders";
     public string Line() =>
-        $"\ndirector stage {Stage} (gauge {gauge:0}, {Tuning.GAUGE_STEP:0} a stage) · {phase} · next in {(Stage >= 1 && phase == Phase.Home ? Mathf.Max(0f, Every - rest).ToString("0") + " s" : "-")} (every {Every:0} s) · exit {(ExitMax > 0f ? "<= " + ExitMax.ToString("0") + " m" : "nearest")} · came {approaches} · good seam {map.rich} · ore {player.ore}/{Tuning.BOOTH_QUOTA}" +
-        $"\n  [Alt+1 2] every x{everyMul:0.00}  [Alt+3 4] exit x{exitMul:0.00}  [Alt+5 6] noise x{noiseMul:0.00}  [Alt+7 8] tunnel {tunnelSpeed:0} m/s  [Alt+9] call now  [Alt+0] +1 stage";
+        $"\ndirector stage {Stage} (gauge {gauge:0}, {Tuning.GAUGE_STEP:0} a stage) · {phase} · next call {CallState} · exit {(ExitMax > 0f ? "<= " + ExitMax.ToString("0") + " m" : "nearest")} · came {approaches} · good seam {map.rich} · ore {player.ore}/{Tuning.BOOTH_QUOTA}" +
+        $"\n  [Alt+1 2] rest x{everyMul:0.00} ({Every:0} s)  [Alt+3 4] exit x{exitMul:0.00}  [Alt+5 6] noise x{noiseMul:0.00}  [Alt+7 8] tunnel {tunnelS:0} s  [Alt+9] call now  [Alt+0] +1 stage";
 }
