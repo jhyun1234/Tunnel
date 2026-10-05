@@ -34,7 +34,7 @@ public class Director : MonoBehaviour
     public float Every => Tuning.STAGE_EVERY_S[Stage] * everyMul;
     public float ExitMax => Tuning.STAGE_EXIT_M[Stage] * exitMul;
 
-    Vector3 home; float t, dustT, jumpAcc; int lastStage;
+    Vector3 home; float t, dustT, jumpAcc; int lastStage, lastOre, sentFrame = -9; bool worked; Stalker.State lastSt;
     static readonly RaycastHit[] buf = new RaycastHit[16];
     const int SeeMask = ~((1 << 2) | (1 << Pickaxe.ViewModelLayer));   // 자갈 · 광석(Ignore Raycast) · 곡괭이 뷰모델은 시선을 안 막는다
 
@@ -80,7 +80,7 @@ public class Director : MonoBehaviour
         else if (kind.StartsWith("pick_land")) lumps = Tuning.GAUGE_LAND_LUMPS;
         else if (kind == "step" && SabStepPile) lumps = r / Tuning.GAUGE_STRIKE_REF_M;
         else return;
-        lastWork = pos;
+        lastWork = pos; worked = true;
         if (SabJumpGauge) { jumpAcc += lumps; if (jumpAcc < 1f - 1e-3f) return; lumps = jumpAcc; jumpAcc = 0f; }   // 검사: 덩이마다 한 번에 뛴다 (옛 안)
         gauge += lumps * Lump * noiseMul;
     }
@@ -90,7 +90,14 @@ public class Director : MonoBehaviour
         Keys();
         if (s == null || !s.isActiveAndEnabled) return;
         float dt = Time.deltaTime; int st = Stage;
-        if (st != lastStage) { Debug.Log($"DIRECTOR stage {lastStage} -> {st} (gauge {gauge:0.0})"); lastStage = st; }
+        if (st != lastStage) { Debug.Log($"DIRECTOR {T} · stage {lastStage} -> {st} (gauge {gauge:0.0})"); lastStage = st; }
+        if (player.ore != lastOre) { Debug.Log($"DIRECTOR {T} · ore {player.ore}/{Tuning.BOOTH_QUOTA} near {Near(player.transform.position)}"); lastOre = player.ore; }   // 판정 로그(-logFile): 언제 · 어디서 캤나
+        if (s.state != lastSt)                                                                                        // 판정 로그: 괴물이 듣고 · 보고 · 쫓고 · 잡은 때
+        {
+            string why = s.state == Stalker.State.Investigate ? (Time.frameCount - sentFrame <= 1 ? " (sent)" : s.LightChase ? " (saw the lamp)" : $" (heard {s.lastHeard})") : s.state == Stalker.State.Alert ? $" (sense {s.sense})" : "";
+            Debug.Log($"DIRECTOR {T} · monster {lastSt} -> {s.state}{why} · {Vector3.Distance(s.transform.position, player.transform.position):0} m from the player");
+            lastSt = s.state;
+        }
         if (s.state == Stalker.State.Hidden && !s.held) { phase = Phase.Home; rest = 0f; return; }   // 철수 중 — 괴물 스스로 90 초 뒤 먼 집에서
         bool idle = s.state == Stalker.State.Wander;
         switch (phase)
@@ -101,13 +108,14 @@ public class Director : MonoBehaviour
                 break;
             case Phase.Hiding:                                   // 아무도 못 볼 때 벽 속으로
                 if (!idle) { phase = Phase.Out; phaseT = 0f; break; }   // 기다리는 사이 무엇을 듣거나 봤다 — 그대로 둔다
-                if (!SeenBody()) { s.Hold(); t = Mathf.Max(1.5f, Vector3.Distance(s.transform.position, target.mouth) / tunnelSpeed); phase = Phase.Tunnel; }
+                if (!SeenBody()) { s.Hold(); t = Mathf.Max(1.5f, Vector3.Distance(s.transform.position, target.mouth) / tunnelSpeed); phase = Phase.Tunnel; Debug.Log($"DIRECTOR {T} · into the wall -> {target.name}, tunnel {t:0} s"); }
                 break;
             case Phase.Tunnel:
                 t -= dt;
                 if (t <= 0f)
                 {
                     var again = Choose(out float len2);                                           // 굴을 지나는 20~40 초 사이 사람은 다른 구역으로 간다 — 나오기 직전에 '지금' 마지막으로 일한 자리로 다시 고른다 (10-04 map4meet: 나왔을 때 사람과 71~181 m)
+                    if (again != null && again != target) Debug.Log($"DIRECTOR {T} · re-pick {target.name} -> {again.name} (last work {WorkAt})");
                     if (again != null) { target = again; targetPath = len2; }
                     phase = Phase.Warn; t = SabNoShake ? 0f : Tuning.EMERGE_WARN_S; warnFor = 0f; dustT = 0f;
                 }
@@ -121,8 +129,8 @@ public class Director : MonoBehaviour
                 Vector3 look = target.ceiling ? Flat(lastWork - target.stand) : target.face;
                 s.Release(target.stand, look.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(look).eulerAngles.y : 0f);
                 s.hasAnchor = true; s.anchor = lastWork; s.SendTo(lastWork, SabSlowSend ? Tuning.STALKER_SPEED_SEARCH : Tuning.STALKER_SPEED_INVESTIGATE);   // 소리 들었을 때와 같은 걸음 (10-04 판정 1: 살피는 걸음 2.5 는 "두리번")
-                phase = Phase.Out; phaseT = 0f; approaches++;
-                Debug.Log($"DIRECTOR out #{approaches} at {target.name} · stage {st} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s · in view {seen}");
+                phase = Phase.Out; phaseT = 0f; approaches++; sentFrame = Time.frameCount;
+                Debug.Log($"DIRECTOR {T} · out #{approaches} at {target.name} · stage {st} · last work {WorkAt} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s · in view {seen}");
                 break;
             case Phase.Out:                                      // 판정 통과 감각으로 찾는다 — 놓치고 배회로 LINGER_S 지나면 돌아간다
                 phaseT = idle ? phaseT + dt : 0f;
@@ -133,12 +141,14 @@ public class Director : MonoBehaviour
                 if (SeenBody()) break;
                 home = NearestHome(s.transform.position); t = Mathf.Max(1.5f, Vector3.Distance(s.transform.position, home) / tunnelSpeed);
                 s.Hold(); phase = Phase.Back;
+                Debug.Log($"DIRECTOR {T} · found nobody for {Tuning.LINGER_S:0} s -> into the wall, home {HomeName(home)}");
                 break;
             case Phase.Back:
                 t -= dt;
                 if (t > 0f || Seen(home + Vector3.up * 1.2f)) break;
                 s.Release(home, 0f); s.hasAnchor = true; s.anchor = home;
                 phase = Phase.Home; rest = 0f;
+                Debug.Log($"DIRECTOR {T} · back home {HomeName(home)} · next call in {(Stage >= 1 ? Every.ToString("0") + " s" : "- (stage 0)")}");
                 break;
         }
     }
@@ -156,8 +166,9 @@ public class Director : MonoBehaviour
     {
         if (phase != Phase.Home || s == null || s.state != Stalker.State.Wander) return false;
         target = Choose(out targetPath);
-        if (target == null) { rest = force ? 0f : Every * 0.5f; Debug.Log("DIRECTOR no exit to use (all unreachable or within 8 m)"); return false; }
+        if (target == null) { rest = force ? 0f : Every * 0.5f; Debug.Log($"DIRECTOR {T} · no exit to use (all unreachable or within 8 m)"); return false; }
         phase = Phase.Hiding; rest = 0f;
+        Debug.Log($"DIRECTOR {T} · call{(force ? " (forced)" : "")} · stage {Stage} · exit {target.name} {targetPath:0} m from last work ({WorkAt}) · player {Vector3.Distance(player.transform.position, lastWork):0} m from last work");
         return true;
     }
 
@@ -203,6 +214,12 @@ public class Director : MonoBehaviour
     bool SeenBody() => Seen(s.transform.position + Vector3.up) || Seen(s.transform.position + Vector3.up * 2f);
 
     Vector3 NearestHome(Vector3 p) => homes.OrderBy(h => (h - p).sqrMagnitude).First();
+
+    // 판정 로그(-logFile) 글: 판 시작부터 초 · 가장 가까운 석탄 자리 · 집 이름
+    static string T => $"t {Time.timeSinceLevelLoad:0}s";
+    string WorkAt => worked ? Near(lastWork) : "start, no work yet";
+    string Near(Vector3 p) { var c = map.coal.OrderBy(k => (k.slot.position - p).sqrMagnitude).FirstOrDefault(); return c == null ? "-" : $"{c.name.Replace("SLOT_Pocket_", "")} {Vector3.Distance(c.slot.position, p):0} m"; }
+    string HomeName(Vector3 h) { int i = System.Array.IndexOf(homes, h); return i == 0 ? "K" : i == 1 ? "M" : i == 2 ? "z9" : "?"; }
 
     public static float PathLen(Vector3 a, Vector3 b)
     {

@@ -14,7 +14,8 @@
   - 나와서는 5.0 m/s 로 캔 자리를 보며 곧장 간다. 2.5 m/s 와 옛 소리 자리를 보는 머리가 "두리번"이었다.
   - 기어 나오는 동작은 없다(물을 것).
   - `map4meet` 는 다시 안 쟀다.
-- 사용자가 탐색기로 켠 판(17:53)은 `Player.log` 가 안 남았다. 판정 때는 `-logFile build/judge_1004.log` 로 켜 달라고 했다(감독 줄 `DIRECTOR out … in view` 를 읽으려고).
+- 사용자가 탐색기로 켠 판(17:53)은 `Player.log` 가 안 남았다. 판정 때는 `C:/Users/anjyo/Tunnel/unity/build/Tunnel/Tunnel.exe -logFile C:/Users/anjyo/Tunnel/unity/build/judge_1004.log` 로 켠다(PowerShell · Git Bash 둘 다 됨, `/c/…` 는 PowerShell 에서 안 됨). 다시 켜면 덮어쓰니 읽은 뒤 `judge_1004_runN.log` 로 사본을 뜬다.
+- 판정 2(10-05): 괴물이 한 번 사다리 굴(먼 곳)에서 나온 뒤 계속 걸어서 왔다. 까닭은 제안서 판정 2. 로그에 초 · 덩이 · 부름 · 괴물 상태를 더했다(`DIRECTOR t 83s · …`). 물을 것 ㉮ ~ ㉱ 답을 기다린다.
 
 **10-04 (GAME-1 구현 세션, 작업 폴더 `Opus5_채굴게임`) — GAME-1 구현 끝, 사용자 판정 대기.** 시작하면 MAP4 승강장 · 감독이 괴물을 부른다. 자세한 것 · 제안서와 다르게 한 것은 `docs/제안서_GAME1_MAP4에서_놀기.md` "구현 (10-03 ~ 10-04)".
 - **판정 방법**: `build/Tunnel/Tunnel.exe` → 인트로 → 시작(플래그 없음). F1 = 감독 줄(단계 · 게이지 · 다음 부르기까지). **Alt+1/2 부르는 간격 · Alt+3/4 출구 거리 · Alt+5/6 소리 배율 · Alt+7/8 숨은 굴 빠르기 · Alt+9 지금 부르기 · Alt+0 단계 +1**. 옛 판정 모습은 `-map4`.
