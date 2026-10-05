@@ -1,0 +1,19 @@
+Assets/Audio/Emerge — 괴물(그것)이 숨은 굴에서 벽 틈 · 천장 구멍으로 나오는 소리 (GAME-1 판정 7 · 8, 사용자 2026-10-05).
+사용자 판정(2026-10-05): "돌가루 소리는 5개정도 묶어서 사운드를 혼합" → 섞기 후보 A · B · C 를 들은 뒤 "B A A" (돌가루 B · 와르르 A · 긁힘 A).
+원본은 저장소에 없다 — 아래 주소에서 다시 받아 build/refs/snd/emerge/ 에 두고 `python tools/snd_emerge.py --game B A A` 로 만든다(같은 원본이면 같은 파일).
+라이선스: 전부 Creative Commons 0 (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/) — 표기 의무 없음. 받은 날짜 2026-10-05.
+Freesound 는 로그인 없이 받는 hq mp3 미리듣기, BigSoundBank 는 원본 WAV(라이선스 페이지 https://bigsoundbank.com/licenses.html "Creative Commons CC0 1.0 Universal").
+후보 목록과 고른 까닭: docs/기획서/조사/15_돌_부스러기_소리_후보.md
+
+Resources/emerge_dust_000.ogg    (4.0 s) 출구에서 돌가루가 떨어지는 동안. 섞기 B "굵게" — 여섯을 겹치고 나오기 직전으로 갈수록 커진다(-9 dB → 0)
+  "Gravel Stone Dirt Debris Falling Small 1 4"  — Sheyvan     — https://freesound.org/people/Sheyvan/sounds/569737/   -3 dB
+  "Gravel Stone Dirt Debris Falling Small 1 10" — Sheyvan     — https://freesound.org/people/Sheyvan/sounds/569743/   -6 dB
+  "Gravel Stone Dirt Debris Falling Small 1 13" — Sheyvan     — https://freesound.org/people/Sheyvan/sounds/569746/   -4 dB
+  "PiedraDesmoronandose.wav"                   — Trancox     — https://freesound.org/people/Trancox/sounds/391919/   0 dB 두 번(0.5 s · 2.5 s), 앞 2.2 s
+  "Gravel Impacts and Falls.wav"               — lolamadeus  — https://freesound.org/people/lolamadeus/sounds/179341/  -1 dB, 4.5~7.0 s
+  (섞기 B 에는 Wagna "sandfall5" https://freesound.org/people/Wagna/sounds/326304/ 를 안 썼다 — 섞기 A · C 에만)
+Resources/emerge_burst_000.ogg   (1.7 s) 나오는 순간. 섞기 A — "Stones Falling" — iwanPlays — https://freesound.org/people/iwanPlays/sounds/567251/ 앞 1.7 s
+Resources/emerge_scrape_000.ogg  (4.0 s) 돌가루 밑에 낮게. 섞기 A — "Stone Slab Door Grinding - Heavy Rock Scrape (Mono)" — NahuelMartinez — https://freesound.org/people/NahuelMartinez/sounds/844329/ 5.0~9.0 s
+
+가공: mono 44.1 kHz, 60 Hz 아래 걷어 냄, 조각 끝 페이드, 평균 크기 -20 dB(봉우리 -1 dBFS 밑)로 맞춤, OGG Vorbis q5.
+게임 속 크기 · 들리는 거리는 Tuning.EMERGE_*_VOLUME · EMERGE_SOUND_M 이 정한다(Director 가 NoiseSound.Play3D 로 출구 자리에서 낸다).

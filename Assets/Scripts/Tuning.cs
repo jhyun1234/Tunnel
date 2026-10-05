@@ -686,6 +686,8 @@ public static class Tuning
     public const float EXIT_MIN_PLAYER_M = 8f;                // 사람에게서 이보다 가까운 출구로는 안 나온다 (눈앞에서 튀어나오지 않게)
     public const float EXIT_SEEN_M = 60f;                     // 이 안에서 화면에 들고 가리는 것이 없으면 "보인다"
     public const float TUNNEL_S = 5f;                         // s, 숨은 굴 시간 — 거리와 상관없이 (10-05 판정 3 ㉠: 옛 5 m/s 는 괴물의 굴에서 북 · 서쪽 출구까지 41~50 s)
+    public const float EMERGE_SOUND_M = 25f;                  // m, 나오는 소리(돌가루 · 긁힘 · 와르르)가 들리는 거리 (10-05 판정 7 "나와도 소리가 없어 모른다")
+    public const float EMERGE_DUST_VOLUME = 0.7f, EMERGE_SCRAPE_VOLUME = 0.25f, EMERGE_BURST_VOLUME = 0.9f;   // 긁힘은 돌가루보다 -9 dB 밑에 깔기 (들어 본 섞기 그대로), 곡괭이 콱 0.65 · 착지 0.75
     public const float EMERGE_WARN_S = 4f;                    // s, 나오기 전 그 출구에서 돌가루가 떨어지는 시간
     public const float EXIT_NEAR_SPOT_M = 25f;                // 석탄 자리마다 굴 길이로 이 안에 출구 (검사 map4play_exits)
     public const float MAP4_STALKER_R = 0.45f;                // m, MAP4 괴물 부딪힘 둘레 반지름 = 길찾기 바닥 몸 (BuildMap4). 0.6(부스)이면 동발 틀 · 바람문 · 광차 사이를 못 지나 승강장에서 방 14곳에 길이 없었다 (10-03 진단: 0.45 = 굴진 막장 끝 6 m 만 빼고 다 이어짐). 사람 몸 0.4

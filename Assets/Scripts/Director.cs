@@ -33,6 +33,7 @@ public class Director : MonoBehaviour
     static bool SabFlatNoise => Map4.Sab("flatnoise"); static bool SabStepPile => Map4.Sab("steppile"); static bool SabJumpGauge => Map4.Sab("jumpgauge"); static bool SabNoStage => Map4.Sab("nostage");   // 검사 사보타주
     static bool SabHideExit => Map4.Sab("hideexit"); static bool SabSlowSend => Map4.Sab("slowsend"); static bool SabNoShake => Map4.Sab("noshake"); static bool SabChasePlayer => Map4.Sab("chaseplayer"); static bool SabFarExit => Map4.Sab("farexit"); static bool SabHomeExit => Map4.Sab("homeexit");
     static bool SabClockCall => Map4.Sab("clockcall"); static bool SabSlowTunnel => Map4.Sab("slowtunnel"); static bool SabHomeOnly => Map4.Sab("homeonly"); static bool SabNoRest => Map4.Sab("norest"); static bool SabNoWork => Map4.Sab("nowork");   // 10-05 판정 3 의 옛 규칙들
+    static bool SabMuteEmerge => Map4.Sab("muteemerge");   // 검사: 나오는 소리 없음 (10-05 판정 7 전)
     public static float Lump => 100f / Tuning.BOOTH_QUOTA;
     public int Stage => SabNoStage ? 0 : Mathf.Min(Tuning.STAGE_EVERY_S.Length - 1, Steps);
     public int Steps => Mathf.FloorToInt(gauge / Tuning.GAUGE_STEP + 1e-4f);   // 25 마다 하나 — 단계(최대 5)와 달리 끝이 없다
@@ -128,6 +129,7 @@ public class Director : MonoBehaviour
                     if (again != null && again != target) Debug.Log($"DIRECTOR {T} · re-pick {target.name} -> {again.name} (last work {WorkAt})");
                     if (again != null) { target = again; targetPath = len2; }
                     phase = Phase.Warn; t = SabNoShake ? 0f : Tuning.EMERGE_WARN_S; warnFor = 0f; dustT = 0f;
+                    Sound("emerge_dust_000", ref dustClip, Tuning.EMERGE_DUST_VOLUME); Sound("emerge_scrape_000", ref scrapeClip, Tuning.EMERGE_SCRAPE_VOLUME);   // 10-05 판정 7 · 8 (사용자 "B A A")
                 }
                 break;
             case Phase.Warn:                                     // 돌가루 → 나온다 (보고 있어도)
@@ -138,6 +140,7 @@ public class Director : MonoBehaviour
                 if (seen) emergedSeen++;
                 Vector3 look = target.ceiling ? Flat(lastWork - target.stand) : target.face;
                 s.Release(target.stand, look.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(look).eulerAngles.y : 0f);
+                Sound("emerge_burst_000", ref burstClip, Tuning.EMERGE_BURST_VOLUME);
                 s.hasAnchor = true; s.anchor = lastWork; s.SendTo(lastWork, SabSlowSend ? Tuning.STALKER_SPEED_SEARCH : Tuning.STALKER_SPEED_INVESTIGATE);   // 소리 들었을 때와 같은 걸음 (10-04 판정 1: 살피는 걸음 2.5 는 "두리번")
                 phase = Phase.Free; approaches++; sentFrame = Time.frameCount;
                 Debug.Log($"DIRECTOR {T} · out #{approaches} at {target.name} · stage {st} · last work {WorkAt} · path from last work {targetPath:0} m (max {(ExitMax > 0f ? ExitMax.ToString("0") : "nearest")}) · to player {Vector3.Distance(target.stand, player.transform.position):0} m · warned {warnFor:0.0} s · in view {seen}");
@@ -184,9 +187,18 @@ public class Director : MonoBehaviour
         dustT -= dt;
         if (dustT > 0f) return;
         dustT = 0.5f; warnBursts++;
-        Vector3 at = target.ceiling ? target.mouth + Vector3.down * 0.3f : target.mouth + target.face * 0.2f;
-        MiningFx.I.Dust(at, target.ceiling ? Vector3.down : target.face, 1.5f);
-        MiningFx.I.Chips(at, target.ceiling ? Vector3.down : target.face, 3);
+        MiningFx.I.Dust(MouthFx, target.ceiling ? Vector3.down : target.face, 1.5f);
+        MiningFx.I.Chips(MouthFx, target.ceiling ? Vector3.down : target.face, 3);
+    }
+    Vector3 MouthFx => target.ceiling ? target.mouth + Vector3.down * 0.3f : target.mouth + target.face * 0.2f;   // 돌가루 · 소리가 나는 자리 (입 바로 앞)
+
+    // 나오는 소리 — 출구 자리 3D, EMERGE_SOUND_M 안에서 들린다. 파일은 Assets/Audio/Emerge/Resources (SOURCES.txt)
+    static AudioClip dustClip, scrapeClip, burstClip;
+    void Sound(string name, ref AudioClip clip, float volume)
+    {
+        if (SabMuteEmerge) return;
+        if (clip == null) { clip = Resources.Load<AudioClip>(name); if (clip == null) Debug.LogWarning($"DIRECTOR sound {name} is not in Resources"); }
+        NoiseSound.Play3D(MouthFx, clip, volume, Tuning.EMERGE_SOUND_M);
     }
 
     // 사람(카메라) 화면에 들고, EXIT_SEEN_M 안이고, 가리는 것이 없으면 보인다

@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 //   map4play_exits   석탄 자리마다 굴 길이 25 m 안 출구 · 불 켜진 방 안 출구 0 · 벽 틈이 그 방 가운데서 보인다        (farexit · homeexit · propblock)
 //   map4play_gauge   같은 덩이를 서서 깔끔 < 숙여서 < '쨍' 섞임 · 발소리 0 · 콱 하나에 조금씩                          (flatnoise · steppile · jumpgauge)
 //   map4play_stage   깔끔한 몫(콱 3 × BOOTH_QUOTA) = 4 단계 · 단계마다 간격 · 출구 거리가 표대로                               (nostage)
-//   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로   (chaseplayer · noshake · hideexit · stalehead · slowsend)
+//   map4play_emerge  나온 출구 = 마지막 일한 자리 기준(사람 아님) · 돌가루 4 초 · 보고 있어도 그 출구에서 돌가루 뒤 나옴 · 나와서 머리는 일한 자리를 보고 소리 들었을 때 걸음으로 · 입에서 돌가루 · 긁힘 · 와르르 소리   (chaseplayer · noshake · hideexit · stalehead · slowsend · muteemerge)
 //   map4play_call    첫 곡괭이질 전엔 안 부름 · 25 를 넘긴 콱에 바로 부름 · 숨은 굴 TUNNEL_S · 25 를 안 넘으면 안 부름 · 쉬는 최소 시간 · 집에서 먼 밖에서 바로 벽 속으로   (nowork · slowtunnel · clockcall · norest · homeonly)
 //   map4play_move    이동 셋(걷기 · Shift 짧게 끊어 달리기 · 끝까지 달리기) 실제 키로 승강장 → 가까운 구역(셋) · 먼 구역(끊어 달리기) 가는 길 → 몫 시간 어림 ≥ QUOTA_FLOOR_S   (fastrun)
 // -only map4meet [-rounds N]: 첫 마주침 — 판마다 씬을 다시 불러 N 판(기본 6), Shift 끊어 달리기로 좋은 광맥을 캐다 괴물이 알아챌 때까지. 오래 걸려 따로 (중앙값 90~150 s)
@@ -23,6 +23,10 @@ public partial class M1Check
 {
     static string AreaOf(string slotName) => slotName.Split('_')[2];
     static Vector3 SpotStand(Map4.Spot c) => OnNav(c.outT != null ? c.outT.position : c.slot.position, 2f);
+    // 그 자리 1.5 m 안에서 지금 나는 나오는 소리(3D, 들리는 거리 EMERGE_SOUND_M) 이름들
+    static string EmergeSounds(Vector3 p) => string.Join(" ", FindObjectsByType<AudioSource>(FindObjectsSortMode.None)
+        .Where(a => a.isPlaying && a.clip != null && a.clip.name.StartsWith("emerge_") && a.spatialBlend > 0.99f && Mathf.Approximately(a.maxDistance, Tuning.EMERGE_SOUND_M) && Vector3.Distance(a.transform.position, p) < 1.5f)
+        .Select(a => a.clip.name).Distinct().OrderBy(n => n));
 
     IEnumerator Map4PlayStage()
     {
@@ -203,10 +207,13 @@ public partial class M1Check
             int seen0 = d.emergedSeen, ap1 = d.approaches; bool seenAtCall = d.Seen(stareAt.mouth); d.Call(true);
             bool same = d.target == stareAt;
             for (float w = 0f; w < 60f && d.phase != Director.Phase.Warn && d.approaches == ap1; w += Time.deltaTime) yield return null;
+            string warnSnd = EmergeSounds(stareAt.mouth);                                            // 돌가루가 떨어지기 시작한 때 그 입에서 나는 소리 (10-05 판정 7 · 8)
             float tOut = 0f; for (; tOut < Tuning.EMERGE_WARN_S + 3f && d.phase == Director.Phase.Warn; tOut += Time.deltaTime) yield return null;
+            string outSnd = EmergeSounds(stareAt.mouth);
             bool outSeen = d.approaches > ap1 && d.target == stareAt && d.emergedSeen == seen0 + 1;
-            stareOk = seenAtCall && same && outSeen && tOut <= Tuning.EMERGE_WARN_S + 0.5f;
-            stareNote = $"looked at {stareAt.name} from {Flat(stareFrom - stareAt.stand):0} m (in view {seenAtCall}): chosen {same} · came out {tOut:0.0} s after the dust began (want ≤ {Tuning.EMERGE_WARN_S + 0.5f:0.0}) at {(d.target != null ? d.target.name : "-")} · came out in view {d.emergedSeen - seen0} (want 1)";
+            bool sounds = warnSnd.Contains("emerge_dust_000") && warnSnd.Contains("emerge_scrape_000") && outSnd.Contains("emerge_burst_000");
+            stareOk = seenAtCall && same && outSeen && tOut <= Tuning.EMERGE_WARN_S + 0.5f && sounds;
+            stareNote = $"looked at {stareAt.name} from {Flat(stareFrom - stareAt.stand):0} m (in view {seenAtCall}): chosen {same} · came out {tOut:0.0} s after the dust began (want ≤ {Tuning.EMERGE_WARN_S + 0.5f:0.0}) at {(d.target != null ? d.target.name : "-")} · came out in view {d.emergedSeen - seen0} (want 1) · 3D sounds at the mouth ({Tuning.EMERGE_SOUND_M:0} m) when the dust began [{warnSnd}] (want dust + scrape) · when it came out [{outSnd}] (want burst)";
             stalker.enabled = false;
         }
         Check("map4play_emerge", rule1 && warn1 >= Tuning.EMERGE_WARN_S - 0.05f && b1 >= 6 && goes && stareOk,
